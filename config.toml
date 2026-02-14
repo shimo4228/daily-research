@@ -1,0 +1,48 @@
+[general]
+vault_path = "/Users/shimomoto_tatsuya/Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian Vault"
+output_dir = "daily-research"
+language = "ja"
+date_format = "%Y-%m-%d"
+
+[report]
+min_sources = 5
+
+[tracks.tech]
+name = "テックトレンド"
+focus = "開発者向けテクノロジートレンド。新しいツール、フレームワーク、AI、OSS"
+sources = [
+  "Hacker News トップ記事",
+  "GitHub Trending (直近7日)",
+  "TechCrunch AI/Apps カテゴリ",
+  "arXiv cs.AI, cs.CL, cs.SE 新着",
+]
+scoring_criteria = [
+  { name = "新規性", weight = 30, desc = "past_topics.json に類似テーマがないか" },
+  { name = "変化の兆し", weight = 25, desc = "静的知識ではなく動いている領域か" },
+  { name = "開発可能性", weight = 25, desc = "Python/Swift/TypeScriptで何か作れそうか" },
+  { name = "ウィスパートレンド度", weight = 20, desc = "まだ多くの人が気づいていない変化か" },
+]
+
+[tracks.personal]
+name = "パーソナル関心"
+focus = "身体性認知科学・仏教の最新研究や実践"
+sources = [
+  "Semantic Scholar (embodied cognition, mindfulness)",
+  "arXiv q-bio.NC 新着",
+  "Lion's Roar 最新記事",
+  "Tricycle 最新記事",
+  "Mindful Magazine 最新記事",
+]
+domains = ["身体性認知科学", "Embodied Cognition", "仏教", "瞑想", "マインドフルネス"]
+scoring_criteria = [
+  { name = "新規性", weight = 25, desc = "past_topics.json に類似テーマがないか" },
+  { name = "変化の兆し", weight = 20, desc = "静的知識ではなく動いている領域か" },
+  { name = "開発可能性", weight = 20, desc = "Python/Swift/TypeScriptで何か作れそうか" },
+  { name = "ウィスパートレンド度", weight = 15, desc = "まだ多くの人が気づいていない変化か" },
+  { name = "テック×身体性の交差点", weight = 20, desc = "テクノロジーと身体性の接点があるか" },
+]
+
+[user_profile]
+skills = ["Python", "Swift", "TypeScript", "iOS開発"]
+interests = ["AI/ML", "エージェント", "身体性認知科学", "仏教", "瞑想"]
+goal = "次に自分が作るべき開発プロジェクトのアイデアを発見する"

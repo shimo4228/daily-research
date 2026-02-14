@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "topics": [
+    {
+      "date": "2026-02-15",
+      "track": "tech",
+      "title": "LLM推論制御 - ステアリングベクトルで思考を操る新技術",
+      "slug": "llm-reasoning-behavior-control",
+      "keywords": ["LLM", "推論制御", "ステアリングベクトル", "AI", "機械学習", "Python", "DeepSeek-R1"],
+      "summary": "2026年2月、LLMの推論行動を外部から動的に制御する「ステアリングベクトル」技術が急速発展。再学習なしでモデルの内部活性化に介入し、振る舞いを精密に操作可能。オープンソースライブラリも充実。"
+    },
+    {
+      "date": "2026-02-15",
+      "track": "personal",
+      "title": "SCAN Network - 脳に組み込まれた心と身体の接続回路",
+      "slug": "scan-network-mind-body-connection",
+      "keywords": ["SCAN", "身体性認知", "脳神経科学", "バイオフィードバック", "ウェアラブル", "瞑想", "パーキンソン病"],
+      "summary": "2023年Nature論文で発見されたSCAN（Somato-Cognitive Action Network）は、運動野内の心身統合ネットワーク。2026年2月、パーキンソン病の神経基盤と判明し、TMS治療で2.5倍の改善率を達成。"
+    },
+    {
+      "date": "2026-02-14",
+      "track": "tech",
+      "title": "OpenAI Frontier - エンタープライズAIエージェント管理の新時代",
+      "slug": "openai-frontier-enterprise-ai-agent-management",
+      "keywords": ["OpenAI", "Frontier", "AIエージェント", "エンタープライズ", "統合管理", "マルチベンダー"],
+      "summary": "OpenAIが2月5日に発表したFrontierは、AIエージェントを統合管理するエンタープライズプラットフォーム。OpenAI以外のエージェント（Google、Microsoft、Anthropic）も統合可能なオープン設計が特徴。"
+    },
+    {
+      "date": "2026-02-14",
+      "track": "personal",
+      "title": "仏教僧の瞑想が明かす脳の複雑性 - MEG研究が示す新たな脳科学",
+      "slug": "meditation-brain-complexity-meg-research",
+      "keywords": ["瞑想", "MEG", "脳複雑性", "臨界状態", "神経科学", "Samatha", "Vipassana"],
+      "summary": "2026年2月発表のMEG研究により、瞑想中の脳は「休息」ではなく「高度な複雑性と臨界状態」にあることが判明。SamathaとVipassanaで異なる脳状態を生み出すことも明らかに。"
+    }
+  ]
+}

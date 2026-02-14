@@ -1,0 +1,4 @@
+logs/
+.DS_Store
+.daily-research.lock
+past_topics.json.bak
