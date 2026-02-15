@@ -109,6 +109,10 @@ scoring_criteria = [
 ]
 ```
 
+### Language
+
+The prompt files (`prompts/`) and report template are written in Japanese. Reports will be generated in Japanese by default. To change the output language, translate `prompts/research-protocol.md` and `templates/report-template.md` to your preferred language.
+
 ### Tuning Research Depth
 
 Edit `prompts/research-protocol.md` to adjust:
