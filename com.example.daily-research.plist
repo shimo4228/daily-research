@@ -4,12 +4,12 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.shimomoto.daily-research</string>
+  <string>com.yourname.daily-research</string>
 
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>/Users/shimomoto_tatsuya/MyAI_Lab/daily-research/scripts/daily-research.sh</string>
+    <string>/Users/YOUR_USERNAME/path/to/daily-research/scripts/daily-research.sh</string>
   </array>
 
   <key>StartCalendarInterval</key>
@@ -21,20 +21,20 @@
   </dict>
 
   <key>StandardOutPath</key>
-  <string>/Users/shimomoto_tatsuya/MyAI_Lab/daily-research/logs/launchd-stdout.log</string>
+  <string>/Users/YOUR_USERNAME/path/to/daily-research/logs/launchd-stdout.log</string>
 
   <key>StandardErrorPath</key>
-  <string>/Users/shimomoto_tatsuya/MyAI_Lab/daily-research/logs/launchd-stderr.log</string>
+  <string>/Users/YOUR_USERNAME/path/to/daily-research/logs/launchd-stderr.log</string>
 
   <key>WorkingDirectory</key>
-  <string>/Users/shimomoto_tatsuya/MyAI_Lab/daily-research</string>
+  <string>/Users/YOUR_USERNAME/path/to/daily-research</string>
 
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     <key>HOME</key>
-    <string>/Users/shimomoto_tatsuya</string>
+    <string>/Users/YOUR_USERNAME</string>
   </dict>
 </dict>
 </plist>

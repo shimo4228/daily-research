@@ -1,4 +1,23 @@
+# Logs
 logs/
+
+# macOS
 .DS_Store
+
+# Runtime
 .daily-research.lock
+
+# Personal data (use *.example.* as templates)
+config.toml
+past_topics.json
 past_topics.json.bak
+
+# Personal launchd plist (use com.example.daily-research.plist as template)
+com.*.daily-research.plist
+!com.example.daily-research.plist
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Analysis reports
+.reports/

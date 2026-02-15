@@ -1,0 +1,48 @@
+[general]
+vault_path = "/path/to/your/obsidian/vault"
+output_dir = "daily-research"
+language = "ja"
+date_format = "%Y-%m-%d"
+
+[report]
+min_sources = 5
+
+[tracks.tech]
+name = "Tech Trends"
+focus = "Developer technology trends. New tools, frameworks, AI, OSS"
+sources = [
+  "Hacker News top stories",
+  "GitHub Trending (past 7 days)",
+  "TechCrunch AI/Apps category",
+  "arXiv cs.AI, cs.CL, cs.SE new papers",
+]
+scoring_criteria = [
+  { name = "Novelty", weight = 30, desc = "No similar theme in past_topics.json" },
+  { name = "Momentum", weight = 25, desc = "An actively evolving area, not static knowledge" },
+  { name = "Buildability", weight = 25, desc = "Could build something with Python/Swift/TypeScript" },
+  { name = "Whisper trend", weight = 20, desc = "A change not yet widely noticed" },
+]
+
+[tracks.personal]
+name = "Personal Interests"
+focus = "Embodied cognition, Buddhist studies, and contemplative science"
+sources = [
+  "Semantic Scholar (embodied cognition, mindfulness)",
+  "arXiv q-bio.NC new papers",
+  "Lion's Roar latest",
+  "Tricycle latest",
+  "Mindful Magazine latest",
+]
+domains = ["Embodied Cognition", "Buddhism", "Meditation", "Mindfulness"]
+scoring_criteria = [
+  { name = "Novelty", weight = 25, desc = "No similar theme in past_topics.json" },
+  { name = "Momentum", weight = 20, desc = "An actively evolving area, not static knowledge" },
+  { name = "Buildability", weight = 20, desc = "Could build something with Python/Swift/TypeScript" },
+  { name = "Whisper trend", weight = 15, desc = "A change not yet widely noticed" },
+  { name = "Tech x Body intersection", weight = 20, desc = "Intersection of technology and embodiment" },
+]
+
+[user_profile]
+skills = ["Python", "Swift", "TypeScript", "iOS development"]
+interests = ["AI/ML", "Agents", "Embodied Cognition", "Buddhism", "Meditation"]
+goal = "Discover ideas for the next development project to build"
