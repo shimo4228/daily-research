@@ -25,15 +25,15 @@ scoring_criteria = [
 
 [tracks.personal]
 name = "Personal Interests"
-focus = "Embodied cognition, Buddhist studies, and contemplative science"
+focus = "Embodied cognition, Buddhist studies, Free Energy Principle, and contemplative science"
 sources = [
-  "Semantic Scholar (embodied cognition, mindfulness)",
-  "arXiv q-bio.NC new papers",
+  "Semantic Scholar (embodied cognition, mindfulness, free energy principle)",
+  "arXiv q-bio.NC, nlin.AO new papers",
   "Lion's Roar latest",
   "Tricycle latest",
   "Mindful Magazine latest",
 ]
-domains = ["Embodied Cognition", "Buddhism", "Meditation", "Mindfulness"]
+domains = ["Embodied Cognition", "Buddhism", "Meditation", "Mindfulness", "Free Energy Principle", "Predictive Processing", "Active Inference"]
 scoring_criteria = [
   { name = "Novelty", weight = 25, desc = "No similar theme in past_topics.json" },
   { name = "Momentum", weight = 20, desc = "An actively evolving area, not static knowledge" },
@@ -44,5 +44,5 @@ scoring_criteria = [
 
 [user_profile]
 skills = ["Python", "Swift", "TypeScript", "iOS development"]
-interests = ["AI/ML", "Agents", "Embodied Cognition", "Buddhism", "Meditation"]
+interests = ["AI/ML", "Agents", "Embodied Cognition", "Buddhism", "Meditation", "Free Energy Principle"]
 goal = "Discover ideas for the next development project to build"
