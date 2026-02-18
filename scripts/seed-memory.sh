@@ -178,7 +178,7 @@ for file in "${REPORT_FILES[@]}"; do
   # ループ内のエラーでスクリプト全体を止めない
   set +e
   RESULT=$(${TIMEOUT_CMD[@]+"${TIMEOUT_CMD[@]}"} claude -p "$PROMPT" \
-    --allowedTools "Read,mcp__mem0__add-memory,mcp__mem0__search-memories" \
+    --allowedTools "Read,mcp__mem0__add-memory" \
     --max-turns 10 \
     --model sonnet \
     --output-format text \
@@ -242,7 +242,7 @@ SEED_PROMPT="以下の初期データを Mem0 に登録してください。各�
 
 set +e
 SEED_RESULT=$(${TIMEOUT_CMD[@]+"${TIMEOUT_CMD[@]}"} claude -p "$SEED_PROMPT" \
-  --allowedTools "Read,mcp__mem0__add-memory,mcp__mem0__search-memories" \
+  --allowedTools "Read,mcp__mem0__add-memory" \
   --max-turns 15 \
   --model sonnet \
   --output-format text \
