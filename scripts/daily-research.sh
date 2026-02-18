@@ -98,7 +98,7 @@ else
   TIMEOUT_CMD=()
 fi
 
-"${TIMEOUT_CMD[@]}" claude -p "$TASK_PROMPT" \
+${TIMEOUT_CMD[@]+"${TIMEOUT_CMD[@]}"} claude -p "$TASK_PROMPT" \
   --append-system-prompt-file prompts/research-protocol.md \
   --allowedTools "WebSearch,WebFetch,Read,Write,Glob,Grep" \
   --max-turns 40 \

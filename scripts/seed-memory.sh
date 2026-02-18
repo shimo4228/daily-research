@@ -167,11 +167,11 @@ for file in "${REPORT_FILES[@]}"; do
    - messages: [{ \"role\": \"user\", \"content\": \"テーマ「{topic}」を調査した。{要約}\" }]
    - user_id: \"daily-research\"
    - metadata: { \"category\": \"topic_history\", \"date\": \"{date}\", \"track\": \"{category/track}\", \"slug\": \"$SLUG\" }
-5. 完了したら「OK: $file」とだけ出力する。余分な説明は不要"
+5. 完了したら「OK: ${file}」とだけ出力する。余分な説明は不要"
 
   # ループ内のエラーでスクリプト全体を止めない
   set +e
-  RESULT=$("${TIMEOUT_CMD[@]}" claude -p "$PROMPT" \
+  RESULT=$(${TIMEOUT_CMD[@]+"${TIMEOUT_CMD[@]}"} claude -p "$PROMPT" \
     --allowedTools "Read,mcp__mem0__add-memory,mcp__mem0__search-memories" \
     --max-turns 10 \
     --model sonnet \
@@ -235,7 +235,7 @@ SEED_PROMPT="以下の初期データを Mem0 に登録してください。各�
 全5件の登録が完了したら「OK: initial memory registered」とだけ出力してください。余分な説明は不要です。"
 
 set +e
-SEED_RESULT=$("${TIMEOUT_CMD[@]}" claude -p "$SEED_PROMPT" \
+SEED_RESULT=$(${TIMEOUT_CMD[@]+"${TIMEOUT_CMD[@]}"} claude -p "$SEED_PROMPT" \
   --allowedTools "Read,mcp__mem0__add-memory,mcp__mem0__search-memories" \
   --max-turns 15 \
   --model sonnet \
