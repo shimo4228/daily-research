@@ -9,6 +9,7 @@ Claude Code 非対話モード (`claude -p`) + macOS launchd で毎朝 AM 5:00 �
 - TOML — 設定ファイル (`config.toml`)
 - launchd — macOS スケジューラ
 - bats — シェルテストフレームワーク
+- Mem0 Cloud MCP — 永続メモリ層（テーマ履歴・リサーチ手法・ソース評価の蓄積）
 
 ## Directory Structure
 
@@ -21,6 +22,7 @@ daily-research/
 ├── scripts/
 │   ├── daily-research.sh       # メインエントリポイント（launchd が実行、チーム版もチェーン呼出）
 │   ├── agent-team-research.sh  # チーム版エントリポイント（Opus 司令塔 + Sonnet 実働）
+│   ├── seed-memory.sh          # Mem0 初期データ取り込み（ワンショット）
 │   └── check-auth.sh           # OAuth トークンのヘルスチェック
 ├── prompts/
 │   ├── task-prompt.md           # 既存版 claude -p に渡すタスク指示
@@ -29,6 +31,8 @@ daily-research/
 │   └── team-protocol.md        # チーム版リサーチプロトコル
 ├── templates/
 │   └── report-template.md      # レポートの Markdown テンプレート（YAML frontmatter 付き）
+├── .mcp.json                   # MCP サーバー設定（.gitignore）
+├── .mcp.example.json           # .mcp.json のテンプレート（Git 管理）
 ├── config.toml                 # リサーチトラック・スコアリング基準・出力設定（.gitignore）
 ├── config.example.toml         # config.toml のテンプレート（Git 管理）
 ├── past_topics.json            # 過去テーマの重複排除用（.gitignore）
@@ -50,6 +54,10 @@ daily-research/
 
 # チーム版のみ手動実行
 ./scripts/agent-team-research.sh
+
+# Mem0 初期データ取り込み（初回のみ）
+./scripts/seed-memory.sh --dry-run  # ドライラン（ファイル一覧のみ）
+./scripts/seed-memory.sh            # 本番実行
 
 # 認証確認
 ./scripts/check-auth.sh
@@ -76,7 +84,7 @@ tail -f logs/$(date +%Y-%m-%d)-team.log
 - **`--append-system-prompt-file`** を使用（`--system-prompt-file` ではない）。Claude Code のデフォルト能力を保持するため
 - **`--allowedTools`** で最小権限。`--dangerously-skip-permissions` は使わない
   - 既存版: WebSearch, WebFetch, Read, Write, Glob, Grep
-  - チーム版: 上記 + Task（サブエージェント委任用）
+  - チーム版: 上記 + Task, mcp__mem0__add_memory, mcp__mem0__search_memory
 - **シェルスクリプトのみ** で構成。Python や追加フレームワークは導入しない
 
 ### エージェントチーム版
@@ -84,12 +92,13 @@ tail -f logs/$(date +%Y-%m-%d)-team.log
 - **Opus 司令塔 + Sonnet 実働**: Opus がテーマ選定・委任・検証、Sonnet がリサーチ・執筆を担当
 - **チェーン実行**: 既存 Sonnet 版完了後に自動実行。チーム版の失敗は既存パイプラインに影響しない
 - **past_topics.json の整合性**: 逐次実行のため競合なし。バックアップも分離（`.bak` / `.team.bak`）
+- **Mem0 永続メモリ**: テーマの意味的重複排除、リサーチ手法・ソース評価の蓄積と再利用。Mem0 障害時は past_topics.json にフォールバック
 
 ### 設定ファイル
 
-- `config.toml` と `past_topics.json` は個人データのため `.gitignore` に含まれる
-- Git に含まれるのは `config.example.toml` と `past_topics.example.json`
-- 設定を変更する場合は `config.toml` を直接編集する（example は公開テンプレート）
+- `config.toml`、`past_topics.json`、`.mcp.json` は個人データのため `.gitignore` に含まれる
+- Git に含まれるのは `config.example.toml`、`past_topics.example.json`、`.mcp.example.json`
+- 設定を変更する場合は各ファイルを直接編集する（example は公開テンプレート）
 
 ### レポート出力
 
@@ -110,3 +119,4 @@ tail -f logs/$(date +%Y-%m-%d)-team.log
 
 - 既存版: 本番稼働中。毎朝 AM 5:00 に自動実行
 - チーム版: 実装完了、手動テスト待ち。`--agent` + `--append-system-prompt-file` の併用互換性を要検証
+- Mem0 統合: 実装完了（Phase 0-3）。PoC 検証 → `seed-memory.sh` で初期データ取り込み → 本番適用の順で展開

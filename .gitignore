@@ -14,6 +14,9 @@ past_topics.json
 past_topics.json.bak
 past_topics.json.team.bak
 
+# MCP config (use .mcp.example.json as template)
+.mcp.json
+
 # Personal launchd plist (use com.example.daily-research.plist as template)
 com.*.daily-research.plist
 !com.example.daily-research.plist

@@ -35,6 +35,10 @@
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     <key>HOME</key>
     <string>/Users/YOUR_USERNAME</string>
+    <!-- MEM0_API_KEY: Set via 'launchctl setenv MEM0_API_KEY your-key' or in the actual plist.
+         Do NOT commit real keys to Git. This file (.example) is a template only. -->
+    <key>MEM0_API_KEY</key>
+    <string>your-mem0-api-key-here</string>
   </dict>
 </dict>
 </plist>
