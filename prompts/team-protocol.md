@@ -31,17 +31,17 @@
 
 Mem0 が利用可能な場合、以下を検索して後続ステップに活用する。Mem0 が応答しない場合はスキップして Step 2 に進む。
 
-1. **テーマ履歴**: `mcp__mem0__search_memory` で以下を検索
+1. **テーマ履歴**: `mcp__mem0__search-memories` で以下を検索
    - クエリ: "最近調査したテーマの傾向"
    - user_id: "daily-research"
    - → 意味的に類似するテーマを Step 2-3 のスコアリングで減点する
 
-2. **リサーチ手法**: `mcp__mem0__search_memory` で以下を検索
+2. **リサーチ手法**: `mcp__mem0__search-memories` で以下を検索
    - クエリ: "有効だったリサーチ手法と検索クエリ"
    - user_id: "daily-research"
    - → Step 4 のリサーチ委任時に有効な手法を指示に含める
 
-3. **ソース評価**: `mcp__mem0__search_memory` で以下を検索
+3. **ソース評価**: `mcp__mem0__search-memories` で以下を検索
    - クエリ: "信頼性の高い情報ソース"
    - user_id: "daily-research"
    - → Step 4 のリサーチ委任時に優先ソースを指示に含める
@@ -166,7 +166,7 @@ config.toml の `[tracks.personal]` に従い:
 
 Mem0 が利用可能な場合、以下を記録する。各 `add_memory` 呼び出しは独立して試行し、個別に失敗しても残りを継続する。全て失敗してもパイプラインは止めない。
 
-1. **テーマ履歴** (`topic_history`): 各テーマについて `mcp__mem0__add_memory` を呼び出す
+1. **テーマ履歴** (`topic_history`): 各テーマについて `mcp__mem0__add-memory` を呼び出す
    ```
    messages: [{ role: "user", content: "テーマ「{topic}」を調査した。{テーマの2-3文の要約}。スコアリングでは{高スコアだった基準}が高かった。" }]
    user_id: "daily-research"

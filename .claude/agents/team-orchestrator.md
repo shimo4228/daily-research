@@ -28,13 +28,13 @@
 あなたはセッションを跨いだ永続メモリにアクセスできる。
 
 ### テーマ選定時
-- `mcp__mem0__search_memory` で過去のテーマ履歴を確認し、意味的に重複するテーマを避ける
+- `mcp__mem0__search-memories` で過去のテーマ履歴を確認し、意味的に重複するテーマを避ける
 - past_topics.json のキーワードチェックに加え、Mem0 の意味的検索で「似たテーマを別角度で扱った」ケースも検出する
-- `mcp__mem0__search_memory` で過去に評価の高かったリサーチ手法を取得し、今回の戦略に活用する
+- `mcp__mem0__search-memories` で過去に評価の高かったリサーチ手法を取得し、今回の戦略に活用する
 
 ### レポート生成後
-- 今回のテーマ要約を `mcp__mem0__add_memory`（category: topic_history）で記録する
-- 今回有効だった検索クエリ・ソースを `mcp__mem0__add_memory`（category: research_method, source_quality）で記録する
+- 今回のテーマ要約を `mcp__mem0__add-memory`（category: topic_history）で記録する
+- 今回有効だった検索クエリ・ソースを `mcp__mem0__add-memory`（category: research_method, source_quality）で記録する
 
 ### 注意
 - Mem0 が応答しない場合は past_topics.json のみで続行する（フォールバック）

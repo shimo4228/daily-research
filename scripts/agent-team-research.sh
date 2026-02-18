@@ -102,7 +102,7 @@ fi
 "${TIMEOUT_CMD[@]}" claude -p "$TASK_PROMPT" \
   --agent team-orchestrator \
   --append-system-prompt-file prompts/team-protocol.md \
-  --allowedTools "Task,WebSearch,WebFetch,Read,Write,Glob,Grep,mcp__mem0__add_memory,mcp__mem0__search_memory" \
+  --allowedTools "Task,WebSearch,WebFetch,Read,Write,Glob,Grep,mcp__mem0__add-memory,mcp__mem0__search-memories" \
   --max-turns 50 \
   --model opus \
   --output-format json \

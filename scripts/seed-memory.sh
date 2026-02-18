@@ -163,7 +163,7 @@ for file in "${REPORT_FILES[@]}"; do
 1. Read ツールでファイルを読む
 2. YAML frontmatter から date, category(またはtrack), tags, topic(またはtitle) を抽出する。frontmatter がない場合はファイル名とH1見出しから推測する
 3. 本文を2-3文で要約する
-4. mcp__mem0__add_memory を呼び出して以下を記録:
+4. mcp__mem0__add-memory を呼び出して以下を記録:
    - messages: [{ \"role\": \"user\", \"content\": \"テーマ「{topic}」を調査した。{要約}\" }]
    - user_id: \"daily-research\"
    - metadata: { \"category\": \"topic_history\", \"date\": \"{date}\", \"track\": \"{category/track}\", \"slug\": \"$SLUG\" }
@@ -172,7 +172,7 @@ for file in "${REPORT_FILES[@]}"; do
   # ループ内のエラーでスクリプト全体を止めない
   set +e
   RESULT=$("${TIMEOUT_CMD[@]}" claude -p "$PROMPT" \
-    --allowedTools "Read,mcp__mem0__add_memory,mcp__mem0__search_memory" \
+    --allowedTools "Read,mcp__mem0__add-memory,mcp__mem0__search-memories" \
     --max-turns 10 \
     --model sonnet \
     --output-format text \
@@ -200,7 +200,7 @@ log "=== Report processing complete: $PROCESSED processed, $ERRORS errors / $TOT
 # === 初期メモリの投入 ===
 log "=== Registering initial memory entries ==="
 
-SEED_PROMPT="以下の初期データを Mem0 に登録してください。各項目について mcp__mem0__add_memory を呼び出してください。
+SEED_PROMPT="以下の初期データを Mem0 に登録してください。各項目について mcp__mem0__add-memory を呼び出してください。
 
 ## 1. research_method カテゴリ（2件）
 
@@ -236,7 +236,7 @@ SEED_PROMPT="以下の初期データを Mem0 に登録してください。各�
 
 set +e
 SEED_RESULT=$("${TIMEOUT_CMD[@]}" claude -p "$SEED_PROMPT" \
-  --allowedTools "Read,mcp__mem0__add_memory,mcp__mem0__search_memory" \
+  --allowedTools "Read,mcp__mem0__add-memory,mcp__mem0__search-memories" \
   --max-turns 15 \
   --model sonnet \
   --output-format text \

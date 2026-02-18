@@ -84,7 +84,7 @@ tail -f logs/$(date +%Y-%m-%d)-team.log
 - **`--append-system-prompt-file`** を使用（`--system-prompt-file` ではない）。Claude Code のデフォルト能力を保持するため
 - **`--allowedTools`** で最小権限。`--dangerously-skip-permissions` は使わない
   - 既存版: WebSearch, WebFetch, Read, Write, Glob, Grep
-  - チーム版: 上記 + Task, mcp__mem0__add_memory, mcp__mem0__search_memory
+  - チーム版: 上記 + Task, mcp__mem0__add-memory, mcp__mem0__search-memories
 - **シェルスクリプトのみ** で構成。Python や追加フレームワークは導入しない
 
 ### エージェントチーム版
