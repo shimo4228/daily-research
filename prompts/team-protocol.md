@@ -123,7 +123,7 @@ config.toml の `[tracks.personal]` に従い:
 2. **past_topics.json 更新**:
    - Read で現在の内容を読み込む
    - 新しいエントリ2件を追加（日付、トラック、テーマ名、slug）
-   - Write で書き戻す
+   - **Write ツールで全文を書き戻す**（Edit ツールは使用不可。必ず Write で全体を上書きすること）
 
 3. **完了報告**:
 ```
