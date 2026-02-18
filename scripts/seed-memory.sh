@@ -83,6 +83,12 @@ log "=== Starting seed-memory ==="
 log "Report directory: $REPORT_DIR"
 log "Dry run: $DRY_RUN"
 
+# === Mem0 MCP 設定チェック ===
+if [ ! -f "$PROJECT_DIR/.mcp.json" ]; then
+  log "ERROR: .mcp.json not found. Copy .mcp.example.json and set MEM0_API_KEY."
+  exit 1
+fi
+
 # === 認証チェック ===
 if ! command -v claude &> /dev/null; then
   log "ERROR: claude command not found in PATH"

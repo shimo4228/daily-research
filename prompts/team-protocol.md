@@ -164,7 +164,7 @@ config.toml の `[tracks.personal]` に従い:
 
 ### Step 7: 学習メモリの記録（Mem0）
 
-Mem0 が利用可能な場合、以下を記録する。各 `add_memory` 呼び出しは独立して試行し、個別に失敗しても残りを継続する。全て失敗してもパイプラインは止めない。
+Mem0 が利用可能な場合、以下を記録する。各 `mcp__mem0__add-memory` 呼び出しは独立して試行し、個別に失敗しても残りを継続する。全て失敗してもパイプラインは止めない。
 
 1. **テーマ履歴** (`topic_history`): 各テーマについて `mcp__mem0__add-memory` を呼び出す
    ```
@@ -173,14 +173,14 @@ Mem0 が利用可能な場合、以下を記録する。各 `add_memory` 呼び�
    metadata: { category: "topic_history", date: "{date}", track: "{track}", slug: "{slug}" }
    ```
 
-2. **リサーチ手法** (`research_method`): 今回有効だった検索手法を記録
+2. **リサーチ手法** (`research_method`): 今回有効だった検索手法を `mcp__mem0__add-memory` で記録
    ```
    messages: [{ role: "user", content: "テーマ「{topic}」の調査で、{具体的な検索クエリや手法}が有効だった。{なぜ有効だったかの1文}" }]
    user_id: "daily-research"
    metadata: { category: "research_method", date: "{date}", track: "{track}" }
    ```
 
-3. **ソース評価** (`source_quality`): 今回のソースの有効性を記録
+3. **ソース評価** (`source_quality`): 今回のソースの有効性を `mcp__mem0__add-memory` で記録
    ```
    messages: [{ role: "user", content: "{ソースURL/名前}は{評価}。{理由の1文}" }]
    user_id: "daily-research"
