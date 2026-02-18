@@ -120,4 +120,13 @@ else
   notify "リサーチ実行に失敗しました。ログを確認してください。" "Daily Research Error"
 fi
 
+# === エージェントチーム版のチェーン実行 ===
+# チーム版スクリプトの存在自体がフィーチャーフラグ
+# チーム版の失敗は既存パイプラインの終了コードに影響しない
+TEAM_SCRIPT="$PROJECT_DIR/scripts/agent-team-research.sh"
+if [ $EXIT_CODE -eq 0 ] && [ -x "$TEAM_SCRIPT" ]; then
+  log "=== Chaining agent team research ==="
+  "$TEAM_SCRIPT" || log "WARN: Agent team research failed (exit $?), continuing"
+fi
+
 exit $EXIT_CODE

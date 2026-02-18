@@ -42,6 +42,10 @@ scoring_criteria = [
   { name = "Tech x Body intersection", weight = 20, desc = "Intersection of technology and embodiment" },
 ]
 
+[team]
+enabled = true
+filename_infix = "team"  # ファイル名に含める識別子: {date}_{track}_{infix}_{slug}.md
+
 [user_profile]
 skills = ["Python", "Swift", "TypeScript", "iOS development"]
 interests = ["AI/ML", "Agents", "Embodied Cognition", "Buddhism", "Meditation", "Free Energy Principle"]
