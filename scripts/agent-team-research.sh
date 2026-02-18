@@ -30,7 +30,9 @@ log() {
 }
 
 notify() {
-  osascript -e "display notification \"$1\" with title \"$2\"" 2>/dev/null || true
+  local body="${1//\"/}"
+  local title="${2//\"/}"
+  osascript -e "display notification \"$body\" with title \"$title\"" 2>/dev/null || true
 }
 
 # === 同時実行ガード ===
@@ -89,14 +91,15 @@ log "Executing claude -p with team-orchestrator agent (opus)..."
 
 # タイムアウト付きで実行
 if command -v gtimeout &> /dev/null; then
-  TIMEOUT_CMD="gtimeout $TIMEOUT_SECONDS"
+  TIMEOUT_CMD=(gtimeout "$TIMEOUT_SECONDS")
 elif command -v timeout &> /dev/null; then
-  TIMEOUT_CMD="timeout $TIMEOUT_SECONDS"
+  TIMEOUT_CMD=(timeout "$TIMEOUT_SECONDS")
 else
-  TIMEOUT_CMD=""
+  log "WARN: Neither gtimeout nor timeout found. Running without timeout."
+  TIMEOUT_CMD=()
 fi
 
-$TIMEOUT_CMD claude -p "$TASK_PROMPT" \
+"${TIMEOUT_CMD[@]}" claude -p "$TASK_PROMPT" \
   --agent team-orchestrator \
   --append-system-prompt-file prompts/team-protocol.md \
   --allowedTools "Task,WebSearch,WebFetch,Read,Write,Glob,Grep" \

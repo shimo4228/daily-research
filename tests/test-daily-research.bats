@@ -2,7 +2,8 @@
 # Tests for daily-research project
 # Run: bats tests/test-daily-research.bats
 
-PROJECT_DIR="/Users/shimomoto_tatsuya/MyAI_Lab/daily-research"
+# テストファイルからの相対パスでプロジェクトルートを解決
+PROJECT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 SCRIPT="$PROJECT_DIR/scripts/daily-research.sh"
 
 # === Setup / Teardown ===

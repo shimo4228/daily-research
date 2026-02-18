@@ -32,7 +32,9 @@ log() {
 
 # [HIGH-3] osascript が失敗してもスクリプトを中断しない
 notify() {
-  osascript -e "display notification \"$1\" with title \"$2\"" 2>/dev/null || true
+  local body="${1//\"/}"
+  local title="${2//\"/}"
+  osascript -e "display notification \"$body\" with title \"$title\"" 2>/dev/null || true
 }
 
 # === 同時実行ガード [HIGH-2] ===
@@ -88,14 +90,15 @@ log "Executing claude -p with sonnet model..."
 
 # [MEDIUM-2] タイムアウト付きで実行
 if command -v gtimeout &> /dev/null; then
-  TIMEOUT_CMD="gtimeout $TIMEOUT_SECONDS"
+  TIMEOUT_CMD=(gtimeout "$TIMEOUT_SECONDS")
 elif command -v timeout &> /dev/null; then
-  TIMEOUT_CMD="timeout $TIMEOUT_SECONDS"
+  TIMEOUT_CMD=(timeout "$TIMEOUT_SECONDS")
 else
-  TIMEOUT_CMD=""
+  log "WARN: Neither gtimeout nor timeout found. Running without timeout."
+  TIMEOUT_CMD=()
 fi
 
-$TIMEOUT_CMD claude -p "$TASK_PROMPT" \
+"${TIMEOUT_CMD[@]}" claude -p "$TASK_PROMPT" \
   --append-system-prompt-file prompts/research-protocol.md \
   --allowedTools "WebSearch,WebFetch,Read,Write,Glob,Grep" \
   --max-turns 40 \
