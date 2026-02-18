@@ -6,11 +6,13 @@ logs/
 
 # Runtime
 .daily-research.lock
+.agent-team-research.lock
 
 # Personal data (use *.example.* as templates)
 config.toml
 past_topics.json
 past_topics.json.bak
+past_topics.json.team.bak
 
 # Personal launchd plist (use com.example.daily-research.plist as template)
 com.*.daily-research.plist

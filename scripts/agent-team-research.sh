@@ -80,6 +80,10 @@ if [ -f "$PROJECT_DIR/past_topics.json" ]; then
 fi
 
 TASK_PROMPT=$(cat prompts/team-task-prompt.md)
+if [ -z "$TASK_PROMPT" ]; then
+  log "ERROR: prompts/team-task-prompt.md is empty"
+  exit 1
+fi
 
 log "Executing claude -p with team-orchestrator agent (opus)..."
 
