@@ -55,10 +55,10 @@ Mem0 のメモリはユーザー単位で管理される。`metadata` フィー�
 | `source_quality` | ソースの有効性評価 | レポート生成後 | `"VentureBeat の予測記事は概観に有用だが一次情報に乏しい。arxiv + GitHub が最も信頼性が高い"` |
 | `user_interest` | ユーザーの関心パターン | テーマ選定時 | `"エージェントアーキテクチャ、MCP エコシステム、身体性×テクノロジーの交差点に継続的関心"` |
 
-### メモリの構造（Mem0 add_memory 呼び出し例）
+### メモリの構造（Mem0 mcp__mem0__add-memory 呼び出し例）
 
 ```
-add_memory({
+mcp__mem0__add-memory({
   messages: [{ role: "user", content: "テーマ「AIエージェントのメモリインフラ」を調査した。..." }],
   user_id: "daily-research",
   metadata: {
@@ -99,9 +99,9 @@ add_memory({
    - 対話セッション: `.envrc` or `export` で設定
    - launchd 実行: plist の `EnvironmentVariables` に追加
 4. 手動で `claude -p` を実行し、以下を検証
-   - `mcp__mem0__add_memory` でメモリを追加できるか
-   - `mcp__mem0__search_memory` で意味的検索が機能するか
-   - `--allowedTools` に `mcp__mem0__add_memory,mcp__mem0__search_memory` を指定して自動承認されるか
+   - `mcp__mem0__add-memory` でメモリを追加できるか
+   - `mcp__mem0__search-memories` で意味的検索が機能するか
+   - `--allowedTools` に `mcp__mem0__add-memory,mcp__mem0__search-memories` を指定して自動承認されるか
 5. `.mcp.json` を `.gitignore` に追加（API キー参照を含むため）
 
 **成果物**:
@@ -130,7 +130,7 @@ add_memory({
    - `source_quality`: 初期値は手動で2〜3件登録
    - `user_interest`: config.toml の tracks 設定から初期値を生成
 3. 取り込み結果の検証
-   - `search_memory` で既知テーマを検索し、関連レポートがヒットするか確認
+   - `mcp__mem0__search-memories` で既知テーマを検索し、関連レポートがヒットするか確認
    - 意味的に近いテーマ同士が近傍に来るか確認（例: 「LLM のコンテキスト管理」と「エージェントメモリ」）
 
 **成果物**:
@@ -159,7 +159,7 @@ add_memory({
 
 ```bash
 # scripts/agent-team-research.sh（変更箇所）
---allowedTools "Task,WebSearch,WebFetch,Read,Write,Glob,Grep,mcp__mem0__add_memory,mcp__mem0__search_memory"
+--allowedTools "Task,WebSearch,WebFetch,Read,Write,Glob,Grep,mcp__mem0__add-memory,mcp__mem0__search-memories"
 ```
 
 **2-2. team-protocol.md の変更**
@@ -168,8 +168,8 @@ add_memory({
 
 ```
 Step 1.5（新規）: Mem0 メモリの参照
-  - search_memory で過去30日のテーマ傾向を取得
-  - search_memory で過去に有効だったリサーチ手法を取得
+  - mcp__mem0__search-memories で過去30日のテーマ傾向を取得
+  - mcp__mem0__search-memories で過去に有効だったリサーチ手法を取得
   - 取得した情報を以降のテーマ選定・リサーチ戦略に活用
 ```
 
@@ -192,13 +192,13 @@ Step 6.5（新規）: Mem0 メモリの更新
 あなたはセッションを跨いだ永続メモリにアクセスできる。
 
 ### テーマ選定時
-- `search_memory` で過去のテーマ履歴を確認し、意味的に重複するテーマを避ける
+- `mcp__mem0__search-memories` で過去のテーマ履歴を確認し、意味的に重複するテーマを避ける
 - past_topics.json のキーワードチェックに加え、Mem0 の意味的検索で「似たテーマを別角度で扱った」ケースも検出する
-- `search_memory` で過去に評価の高かったリサーチ手法を取得し、今回の戦略に活用する
+- `mcp__mem0__search-memories` で過去に評価の高かったリサーチ手法を取得し、今回の戦略に活用する
 
 ### レポート生成後
-- 今回のテーマ要約を `add_memory`（category: topic_history）で記録する
-- 今回有効だった検索クエリ・ソースを `add_memory`（category: research_method, source_quality）で記録する
+- 今回のテーマ要約を `mcp__mem0__add-memory`（category: topic_history）で記録する
+- 今回有効だった検索クエリ・ソースを `mcp__mem0__add-memory`（category: research_method, source_quality）で記録する
 
 ### 注意
 - Mem0 が応答しない場合は past_topics.json のみで続行する（フォールバック）
@@ -254,7 +254,7 @@ Step 7（新規）: 学習メモリの記録
   ↓
 Step 1: config.toml / past_topics.json を Read
   ↓
-Step 1.5: Mem0 search_memory
+Step 1.5: Mem0 mcp__mem0__search-memories
   ├── "最近のテーマ傾向" → テーマ選定の方向性に反映
   ├── "有効だったリサーチ手法" → 検索戦略に反映
   └── "ソース評価" → 優先的に参照するソースの選択に反映
@@ -265,7 +265,7 @@ Step 4-5: リサーチ・執筆
   ↓
 Step 6: past_topics.json 更新 + ファイル保存
   ↓
-Step 7: 学習メモリの記録（add_memory × 3カテゴリ）
+Step 7: 学習メモリの記録（mcp__mem0__add-memory × 3カテゴリ）
   ↓
 [実行終了]
 ```
