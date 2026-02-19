@@ -134,5 +134,6 @@ teardown() {
 }
 
 @test "timeout is configured" {
-  grep -q 'TIMEOUT_SECONDS=' "$SCRIPT"
+  grep -q 'TIMEOUT_PASS1=' "$SCRIPT"
+  grep -q 'TIMEOUT_PASS2=' "$SCRIPT"
 }

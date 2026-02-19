@@ -22,44 +22,9 @@
 3. Read ツールで `templates/report-template.md` を読み込む
 4. 今日の日付を確認する
 
-### Step 2: テーマ選定 — テックトレンド
+テーマ選定は事前に完了済み（タスクプロンプトに含まれている）。以下の Step 2 から開始する。
 
-config.toml の `[tracks.tech]` に従い:
-
-1. **ソース巡回**: WebSearch で以下を順に検索
-   - "Hacker News top stories today" → トップ10記事のタイトルと概要を把握
-   - "GitHub trending repositories this week" → 注目リポジトリを把握
-   - "TechCrunch AI latest" → 最新のAI関連ニュースを把握
-   - "arXiv cs.AI cs.CL latest papers" → 最新論文のトレンドを把握
-
-2. **候補リストアップ**: 上記から5つのテーマ候補を挙げる。各候補について1行の概要を記述。
-
-3. **スコアリング**: config.toml の scoring_criteria に従い各候補を採点（1-5点 × 重み）
-   - 新規性 (30%): past_topics.json の過去テーマと比較
-   - 変化の兆し (25%): 単なる発表ではなく、業界に変化を起こしそうか
-   - 開発可能性 (25%): Python/Swift/TypeScriptで何か作れそうか
-   - ウィスパートレンド度 (20%): まだ日本語圏であまり報じられていないか
-
-4. **最高スコアのテーマを選定**。スコアリング結果は後のレポートには含めないが、判断根拠として保持する。
-
-### Step 3: テーマ選定 — パーソナル関心
-
-config.toml の `[tracks.personal]` に従い:
-
-1. **ソース巡回**: WebSearch で以下を検索
-   - "embodied cognition latest research 2026"
-   - "mindfulness neuroscience new findings"
-   - "Buddhist meditation technology intersection"
-   - "body-mind connection latest studies"
-   必要に応じて WebFetch で Semantic Scholar, Lion's Roar, Tricycle の記事を確認
-
-2. **候補リストアップ**: 5つの候補。
-
-3. **スコアリング**: Step 2と同じ基準 + 「テック×身体性の交差点」ボーナス (20%)
-
-4. **最高スコアのテーマを選定**。
-
-### Step 4: リサーチプロンプト動的生成
+### Step 2: リサーチプロンプト動的生成
 
 選定した各テーマについて、以下のプロセスでリサーチの深さを確保する:
 
@@ -71,13 +36,13 @@ config.toml の `[tracks.personal]` に従い:
    - 開発者にとっての実践的な意味は？
    - 今後6ヶ月の見通しは？
 
-2. **これらの問いに基づいて次のStep 5の検索を計画する**
+2. **これらの問いに基づいて次のStep 3の検索を計画する**
 
-### Step 5: 多段階リサーチ実行
+### Step 3: 多段階リサーチ実行
 
 各テーマについて:
 
-1. Step 4で生成した問いに基づき、WebSearch を10-20回実行
+1. Step 2で生成した問いに基づき、WebSearch を10-20回実行
    - 各問いについて2-3回の異なるクエリで検索
    - 英語と日本語の両方で検索し、情報の偏りを防ぐ
 
@@ -90,7 +55,7 @@ config.toml の `[tracks.personal]` に従い:
    - 複数ソースで一致する情報を事実として採用
    - 矛盾する情報がある場合はその旨を記述
 
-### Step 6: レポート生成
+### Step 4: レポート生成
 
 templates/report-template.md のフォーマットに厳密に従い、2本のレポートを生成する。
 
@@ -104,7 +69,7 @@ templates/report-template.md のフォーマットに厳密に従い、2本の�
 - **行動可能性**: 「開発アイデアへの示唆」セクションは具体的なアプリ/ツールのアイデアを含める
 - **出典の質**: 信頼できるソースのURLを最低5件含める
 
-### Step 7: 保存
+### Step 5: 保存
 
 1. Obsidian vault にレポートを保存:
    - パス: `{vault_path}/{output_dir}/{date}_{track}_{slug}.md`
@@ -116,7 +81,7 @@ templates/report-template.md のフォーマットに厳密に従い、2本の�
    - 新しいエントリ2件を追加
    - Write で書き戻し
 
-### Step 8: 完了報告
+### Step 6: 完了報告
 
 最後に、以下の形式で完了を報告:
 
