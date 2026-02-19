@@ -6,13 +6,11 @@ logs/
 
 # Runtime
 .daily-research.lock
-.agent-team-research.lock
 
 # Personal data (use *.example.* as templates)
 config.toml
 past_topics.json
 past_topics.json.bak
-past_topics.json.team.bak
 
 # MCP config (use .mcp.example.json as template)
 .mcp.json

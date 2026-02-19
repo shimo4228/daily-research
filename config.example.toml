@@ -42,11 +42,6 @@ scoring_criteria = [
   { name = "Tech x Body intersection", weight = 20, desc = "Intersection of technology and embodiment" },
 ]
 
-# [team]
-# エージェントチーム版の有効/無効は scripts/agent-team-research.sh の存在と実行権限で制御
-# ファイル名規則: {date}_{track}_team_{slug}.md（"team" はプロンプトにハードコード）
-# 無効化: chmod -x scripts/agent-team-research.sh
-
 [user_profile]
 skills = ["Python", "Swift", "TypeScript", "iOS development"]
 interests = ["AI/ML", "Agents", "Embodied Cognition", "Buddhism", "Meditation", "Free Energy Principle"]
