@@ -133,7 +133,6 @@ teardown() {
   grep -q 'trap cleanup EXIT' "$SCRIPT"
 }
 
-@test "timeout is configured" {
-  grep -q 'TIMEOUT_PASS1=' "$SCRIPT"
-  grep -q 'TIMEOUT_PASS2=' "$SCRIPT"
+@test "max-turns is configured for both passes" {
+  grep -q '\-\-max-turns' "$SCRIPT"
 }

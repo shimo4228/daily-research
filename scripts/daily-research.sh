@@ -18,8 +18,6 @@ PROJECT_DIR="$HOME/MyAI_Lab/daily-research"
 LOG_DIR="$PROJECT_DIR/logs"
 LOG_FILE="$LOG_DIR/$DATE.log"
 LOCK_FILE="$PROJECT_DIR/.daily-research.lock"
-TIMEOUT_PASS1=600    # Pass 1: 10分（テーマ選定のみ）
-TIMEOUT_PASS2=1800   # Pass 2: 30分（リサーチ・執筆）
 
 mkdir -p "$LOG_DIR"
 chmod 700 "$LOG_DIR"
@@ -36,16 +34,11 @@ notify() {
   osascript -e "display notification \"$body\" with title \"$title\"" 2>/dev/null || true
 }
 
-# claude -p の実行ラッパー（タイムアウト有無を吸収）
+# claude -p の実行ラッパー
 # CLAUDE_CMD は認証チェック時に絶対パスへ解決済み
+# タイムアウトは --max-turns で制御（gtimeout はプロセスグループ分離で claude を停止させるため不使用）
 run_claude() {
-  local timeout_secs="$1"
-  shift
-  if [ -n "${TIMEOUT_CMD:-}" ]; then
-    "$TIMEOUT_CMD" "$timeout_secs" "$CLAUDE_CMD" "$@"
-  else
-    "$CLAUDE_CMD" "$@"
-  fi
+  "$CLAUDE_CMD" "$@"
 }
 
 # Pass 1 出力から JSON を抽出・バリデーション
@@ -147,16 +140,6 @@ if [ -f "$PROJECT_DIR/past_topics.json" ]; then
   log "Backed up past_topics.json"
 fi
 
-# タイムアウトコマンドの検出
-TIMEOUT_CMD=""
-if command -v gtimeout &> /dev/null; then
-  TIMEOUT_CMD="gtimeout"
-elif command -v timeout &> /dev/null; then
-  TIMEOUT_CMD="timeout"
-else
-  log "WARN: Neither gtimeout nor timeout found. Running without timeout."
-fi
-
 # === Pass 1: テーマ選定 (Opus) ===
 log "=== Pass 1: Theme selection (Opus) ==="
 
@@ -164,7 +147,7 @@ THEME_PROMPT=$(cat prompts/theme-selection-prompt.md)
 THEME_RAW=""
 PASS1_EXIT=0
 
-THEME_RAW=$(run_claude "$TIMEOUT_PASS1" -p "$THEME_PROMPT" \
+THEME_RAW=$(run_claude -p "$THEME_PROMPT" \
   --allowedTools "WebSearch,WebFetch,Read,Glob,Grep" \
   --max-turns 15 \
   --model opus \
@@ -222,7 +205,7 @@ fi
 log "=== Pass 2: Research & writing (Sonnet) ==="
 
 PASS2_EXIT=0
-run_claude "$TIMEOUT_PASS2" -p "$TASK_PROMPT" \
+run_claude -p "$TASK_PROMPT" \
   --append-system-prompt-file prompts/research-protocol.md \
   --allowedTools "WebSearch,WebFetch,Read,Write,Edit,Glob,Grep" \
   --max-turns 40 \
@@ -237,9 +220,6 @@ chmod 600 "$LOG_FILE" 2>/dev/null || true
 if [ $PASS2_EXIT -eq 0 ]; then
   log "=== Completed successfully ==="
   notify "今朝のリサーチレポートが完成しました" "Daily Research"
-elif [ $PASS2_EXIT -eq 124 ]; then
-  log "=== Timed out after ${TIMEOUT_PASS2}s ==="
-  notify "リサーチがタイムアウトしました (${TIMEOUT_PASS2}秒)" "Daily Research Timeout"
 else
   log "=== Failed with exit code $PASS2_EXIT ==="
   notify "リサーチ実行に失敗しました。ログを確認してください。" "Daily Research Error"

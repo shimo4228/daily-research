@@ -257,13 +257,10 @@ get_log() {
   echo "$log_content" | grep -q "DEBUG: CLAUDE_CMD=$MOCK_HOME/.claude/local/claude"
 }
 
-# === Test: gtimeout uses absolute path ===
+# === Test: No gtimeout dependency ===
 
-@test "E2E: gtimeout receives absolute claude path (no bare 'claude')" {
-  echo "normal" > "$MOCK_HOME/.mock_scenario"
-
-  # run_claude 内で "$CLAUDE_CMD" が使われていることをスクリプトで確認
-  grep -q '"$CLAUDE_CMD"' "$MOCK_PROJECT/scripts/daily-research.sh"
-  # bare 'claude' が run_claude 内で使われていないことを確認
-  ! grep -q 'timeout_secs" claude' "$MOCK_PROJECT/scripts/daily-research.sh"
+@test "E2E: script does not invoke gtimeout/timeout commands" {
+  # gtimeout/timeout はプロセスグループ分離で claude を停止させるため不使用
+  # コメント行を除外して、実行コードに gtimeout/TIMEOUT_CMD がないことを確認
+  ! grep -v '^#\|^[[:space:]]*#' "$MOCK_PROJECT/scripts/daily-research.sh" | grep -q 'gtimeout\|TIMEOUT_CMD\|timeout_secs'
 }
