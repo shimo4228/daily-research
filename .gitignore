@@ -24,3 +24,7 @@ com.*.daily-research.plist
 
 # Analysis reports
 .reports/
+
+# Personal operational logs (postmortems, session transcripts, evaluations)
+docs/progress/
+docs/archive/

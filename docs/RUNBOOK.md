@@ -48,8 +48,18 @@ Config/prompt changes (`config.toml`, `prompts/*`, `templates/*`) take effect on
 # Via launchd
 launchctl start com.daily-research
 
-# Direct execution
+# Direct execution (must be in a separate terminal from Claude Code)
 ./scripts/daily-research.sh
+```
+
+## Architecture
+
+```
+daily-research.sh
+├── Pass 1: Opus theme selection (--max-turns 15)
+│   ├── Success → Pass themes to Sonnet
+│   └── Failure → Sonnet fallback (handles theme selection + research)
+└── Pass 2: Sonnet research & writing (--max-turns 40)
 ```
 
 ## Monitoring
@@ -85,6 +95,16 @@ launchctl list | grep daily-research
 | Today's log exists | `ls logs/$(date +%Y-%m-%d).log` | File exists |
 | Log shows success | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | Match found |
 | Reports generated | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | 2 files |
+
+### Log Messages Reference
+
+| Message | Meaning |
+|---------|---------|
+| `Pass 1 completed: themes selected by Opus` | Opus theme selection succeeded |
+| `WARN: Pass 1 failed (exit code N), falling back to Sonnet` | Opus failed, Sonnet will handle everything |
+| `WARN: Pass 1 output failed JSON validation` | Opus returned invalid JSON, Sonnet fallback |
+| `Fallback: Sonnet handles theme selection + research` | Sonnet is doing all work (normal fallback behavior) |
+| `Completed successfully` | Both passes completed |
 
 ## Common Issues and Fixes
 
@@ -135,13 +155,16 @@ ps aux | grep daily-research
 rm -f .daily-research.lock
 ```
 
-### 4. Timeout (Exit Code 124)
+### 4. Pass 1 (Opus) Consistently Failing
 
-**Symptoms**: Log shows `Timed out after 1800s`.
+**Symptoms**: Log always shows `WARN: Pass 1 failed`, Sonnet fallback runs every day.
 
-**Cause**: Claude took longer than 30 minutes (likely stuck on web fetches or complex reasoning).
+**Causes**:
+- Opus rate limit hit (Claude Max plan quota)
+- Network issues during WebSearch
+- `--max-turns 15` too low for complex theme selection
 
-**Fix**: Increase `TIMEOUT_SECONDS` in `scripts/daily-research.sh` (current: 1800 = 30 min).
+**Fix**: Check the specific exit code in the log. Pass 1 failure is non-critical (Sonnet handles it). If persistent, consider increasing `--max-turns` or checking plan quota usage.
 
 ### 5. `ANTHROPIC_API_KEY` Set (Per-Token Billing)
 
@@ -217,3 +240,13 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 | AM 5:00 | `daily-research.sh` runs via launchd |
 
 If Mac was asleep at 5:00, launchd runs the job on wake (behavior of `StartCalendarInterval`).
+
+## Cost
+
+| Component | Model | Est. Cost/Run |
+|-----------|-------|---------------|
+| Pass 1: Theme selection | Opus | ~$0.30 |
+| Pass 2: Research & writing | Sonnet | ~$1.50 |
+| **Total** | | **~$1.80** |
+
+With Claude Max plan, these costs are covered by the subscription. No per-token charges.

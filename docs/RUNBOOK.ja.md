@@ -48,8 +48,18 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 # launchd 経由
 launchctl start com.daily-research
 
-# 直接実行
+# 直接実行（Claude Code セッションとは別のターミナルで実行すること）
 ./scripts/daily-research.sh
+```
+
+## アーキテクチャ
+
+```
+daily-research.sh
+├── Pass 1: Opus テーマ選定 (--max-turns 15)
+│   ├── 成功 → テーマを Sonnet に渡す
+│   └── 失敗 → Sonnet フォールバック（テーマ選定 + リサーチを一括実行）
+└── Pass 2: Sonnet リサーチ・執筆 (--max-turns 40)
 ```
 
 ## 監視
@@ -85,6 +95,16 @@ launchctl list | grep daily-research
 | 今日のログが存在 | `ls logs/$(date +%Y-%m-%d).log` | ファイルが存在 |
 | ログに成功メッセージ | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | マッチあり |
 | レポートが生成済み | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | 2ファイル |
+
+### ログメッセージ一覧
+
+| メッセージ | 意味 |
+|---------|------|
+| `Pass 1 completed: themes selected by Opus` | Opus テーマ選定が成功 |
+| `WARN: Pass 1 failed (exit code N), falling back to Sonnet` | Opus 失敗、Sonnet が全処理を担当 |
+| `WARN: Pass 1 output failed JSON validation` | Opus が不正な JSON を返した、Sonnet フォールバック |
+| `Fallback: Sonnet handles theme selection + research` | Sonnet が全作業を実行（正常なフォールバック動作） |
+| `Completed successfully` | 全パス完了 |
 
 ## よくある問題と対処法
 
@@ -135,13 +155,16 @@ ps aux | grep daily-research
 rm -f .daily-research.lock
 ```
 
-### 4. タイムアウト（終了コード 124）
+### 4. Pass 1 (Opus) が常に失敗する
 
-**症状**: ログに `Timed out after 1800s` が出力される。
+**症状**: ログに常に `WARN: Pass 1 failed` が出力され、毎回 Sonnet フォールバックが実行される。
 
-**原因**: Claude の実行が30分を超えた（Web取得やリサーチが長引いた可能性）。
+**原因**:
+- Opus レート制限（Claude Max プラン枠の消費）
+- WebSearch 中のネットワーク障害
+- `--max-turns 15` が不足
 
-**対処**: `scripts/daily-research.sh` の `TIMEOUT_SECONDS` を増やす（現在: 1800 = 30分）。
+**対処**: ログで具体的な exit code を確認する。Pass 1 の失敗は非致命的（Sonnet が代行する）。継続する場合は `--max-turns` の引き上げやプラン使用量の確認を検討する。
 
 ### 5. `ANTHROPIC_API_KEY` が設定されている（従量課金）
 
@@ -217,3 +240,13 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 | AM 5:00 | launchd が `daily-research.sh` を実行 |
 
 5:00 に Mac がスリープ中だった場合、復帰時に launchd がジョブを実行する（`StartCalendarInterval` の仕様）。
+
+## コスト
+
+| コンポーネント | モデル | 推定コスト/回 |
+|---------------|--------|-------------|
+| Pass 1: テーマ選定 | Opus | ~$0.30 |
+| Pass 2: リサーチ・執筆 | Sonnet | ~$1.50 |
+| **合計** | | **~$1.80** |
+
+Claude Max プランでは、これらのコストはサブスクリプションでカバーされる。従量課金は発生しない。

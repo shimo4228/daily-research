@@ -28,11 +28,14 @@ daily-research/
 ├── past_topics.json            # 過去テーマの重複排除用（.gitignore）
 ├── logs/                       # 実行ログ（30日でローテーション、.gitignore）
 ├── tests/
-│   └── test-daily-research.bats
+│   ├── test-daily-research.bats     # 構文・設定・セキュリティテスト
+│   └── test-e2e-mock.bats          # E2E モックテスト
 ├── docs/
-│   ├── MEM0-RESTORE.md              # Mem0 復元手順
 │   ├── RUNBOOK.md / RUNBOOK.ja.md   # 運用ガイド
-│   └── CONTRIB.md / CONTRIB.ja.md   # 開発ガイド
+│   ├── CONTRIB.md / CONTRIB.ja.md   # 開発ガイド
+│   ├── MEM0-RESTORE.md              # Mem0 復元手順
+│   ├── plans/                       # 将来の拡張プラン
+│   └── progress/                    # ポストモーテム・評価レポート
 └── com.example.daily-research.plist  # launchd plist テンプレート
 ```
 
@@ -98,4 +101,5 @@ tail -f logs/$(date +%Y-%m-%d).log
 ## Status
 
 - 本番稼働中。毎朝 AM 5:00 に launchd で自動実行
-- Opus テーマ選定 + Sonnet リサーチ・執筆の2パス方式（E2E 検証待ち）
+- Opus テーマ選定 + Sonnet リサーチ・執筆の2パス方式（E2E 検証済み、2026-02-20）
+- Pass 1 失敗時は Sonnet 一括フォールバックで継続稼働
