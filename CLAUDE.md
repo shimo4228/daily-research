@@ -27,14 +27,19 @@ daily-research/
 ├── config.example.toml         # config.toml のテンプレート（Git 管理）
 ├── past_topics.json            # 過去テーマの重複排除用（.gitignore）
 ├── logs/                       # 実行ログ（30日でローテーション、.gitignore）
+├── evals/
+│   ├── prompts/                    # LLM-as-Judge プロンプト（judge-system.md + 6次元）
+│   ├── scores.jsonl                # スコアログ（追記専用、.gitignore）
+│   └── scores.example.jsonl       # スキーマ参照用サンプル（Git 管理）
 ├── tests/
 │   ├── test-daily-research.bats     # 構文・設定・セキュリティテスト
-│   └── test-e2e-mock.bats          # E2E モックテスト
+│   ├── test-e2e-mock.bats          # E2E モックテスト
+│   └── test-eval.bats              # 評価フレームワークテスト
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md   # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md   # 開発ガイド
 │   ├── MEM0-RESTORE.md              # Mem0 復元手順
-│   ├── plans/                       # 将来の拡張プラン
+│   ├── plans/                       # 将来の拡張プラン（eval-framework-plan.md など）
 │   └── progress/                    # ポストモーテム・評価レポート
 └── com.example.daily-research.plist  # launchd plist テンプレート
 ```
@@ -92,6 +97,15 @@ tail -f logs/$(date +%Y-%m-%d).log
 - `prompts/research-protocol.md` がリサーチの質を決める中核ファイル（Pass 2）
 - `templates/report-template.md` は出力フォーマットの定義
 - プロンプトファイルは全て日本語。出力言語の変更は protocol.md を修正
+
+### 評価フレームワーク (LLM-as-Judge)
+
+- **eval-run.sh**: Pass 2 成功後に自動実行。2記事 × 6次元 = 12 Opus calls/日
+- **6次元ルーブリック**: Factual Grounding / Depth / Coherence / Specificity / Novelty / Actionability（各1-5点、30点満点）
+- **スコアログ**: `evals/scores.jsonl` に追記（.gitignore）。スキーマは `scores.example.jsonl` を参照
+- **pipeline_version**: 機能変更時に `eval-run.sh` の `PIPELINE_VERSION` 変数を手動で更新する
+- **統計規律**: n < 20 の比較は「暫定シグナル」。バージョン比較は n ≥ 20 から有効とみなす
+- 評価失敗は daily-research.sh の exit code に影響しない（non-fatal）
 
 ### 過去に試行・棚上げした機能
 

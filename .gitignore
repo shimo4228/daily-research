@@ -28,3 +28,6 @@ com.*.daily-research.plist
 # Personal operational logs (postmortems, session transcripts, evaluations)
 docs/progress/
 docs/archive/
+
+# Evaluation scores (personal data, use scores.example.jsonl as schema reference)
+evals/scores.jsonl

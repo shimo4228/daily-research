@@ -41,6 +41,61 @@ run_claude() {
   "$CLAUDE_CMD" "$@"
 }
 
+# stream-json の NDJSON を集約するパーサー（python3 -c 用コード）
+# assistant イベントの tool_use ブロックをカウントし、result イベントに tool_counts を付加して出力
+# シングルクォートなし・インデント保持のため変数に格納して python3 -c "$PARSE_STREAM_PY" で使用
+PARSE_STREAM_PY='
+import sys, json
+tool_counts = {}
+result_event = None
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        event = json.loads(line)
+    except Exception:
+        continue
+    etype = event.get("type")
+    if etype == "assistant":
+        for block in event.get("message", {}).get("content", []):
+            if block.get("type") == "tool_use":
+                name = block.get("name", "unknown")
+                tool_counts[name] = tool_counts.get(name, 0) + 1
+    elif etype == "result":
+        result_event = event
+if result_event is not None:
+    result_event["tool_counts"] = tool_counts
+    print(json.dumps(result_event, ensure_ascii=False))
+else:
+    sys.exit(1)
+'
+
+# claude -p の JSON 出力からサマリー行を生成してログに記録
+# 例: SUMMARY Pass1: cost=$0.25 turns=8 duration=162s tokens_in=5000 tokens_out=1200 searches=3
+log_summary() {
+  local json="$1"
+  local label="$2"
+  local summary
+  summary=$(python3 -c "
+import sys, json
+try:
+    d = json.loads(sys.argv[1])
+    cost = d.get('total_cost_usd', 0)
+    turns = d.get('num_turns', 0)
+    dur = round(d.get('duration_ms', 0) / 1000)
+    inp = d.get('usage', {}).get('input_tokens', 0)
+    out = d.get('usage', {}).get('output_tokens', 0)
+    tc = d.get('tool_counts', {})
+    searches = tc.get('WebSearch', 0) + tc.get('WebFetch', 0)
+    tool_str = f' searches={searches}' if searches else ''
+    print(f'SUMMARY {sys.argv[2]}: cost=\${cost:.4f} turns={turns} duration={dur}s tokens_in={inp} tokens_out={out}{tool_str}')
+except Exception as e:
+    print(f'SUMMARY {sys.argv[2]}: (parse error: {e})')
+" "$json" "$label" 2>/dev/null) || summary="SUMMARY ${label}: (parse error)"
+  log "$summary"
+}
+
 # Pass 1 出力から JSON を抽出・バリデーション
 validate_theme_json() {
   local raw="$1"
@@ -144,16 +199,30 @@ fi
 log "=== Pass 1: Theme selection (Opus) ==="
 
 THEME_PROMPT=$(cat prompts/theme-selection-prompt.md)
+PASS1_JSON=""
 THEME_RAW=""
 PASS1_EXIT=0
 
-THEME_RAW=$(run_claude -p "$THEME_PROMPT" \
+PASS1_JSON=$(run_claude -p "$THEME_PROMPT" \
   --allowedTools "WebSearch,WebFetch,Read,Glob,Grep" \
   --max-turns 15 \
   --model opus \
-  --output-format text \
+  --output-format stream-json \
+  --verbose \
   --no-session-persistence \
-  2>> "$LOG_FILE") || PASS1_EXIT=$?
+  2>> "$LOG_FILE" | python3 -c "$PARSE_STREAM_PY" 2>> "$LOG_FILE") || PASS1_EXIT=$?
+
+# Pass 1 の JSON をログに記録（使用統計・コスト含む）
+if [ -n "$PASS1_JSON" ]; then
+  echo "$PASS1_JSON" >> "$LOG_FILE"
+  log_summary "$PASS1_JSON" "Pass1"
+  # result フィールドからテーマテキストを抽出
+  THEME_RAW=$(python3 -c "
+import sys, json
+d = json.loads(sys.argv[1])
+print(d.get('result', ''))
+" "$PASS1_JSON" 2>> "$LOG_FILE") || true
+fi
 
 # Pass 1 の結果を評価し、フォールバック判定
 USE_FALLBACK=false
@@ -187,6 +256,16 @@ if [ "$USE_FALLBACK" = true ]; then
 research-protocol.md に記載されたプロトコルに厳密に従ってください。"
 else
   log "Pass 1 completed: themes selected by Opus"
+  # 選定テーマをログに記録
+  python3 -c "
+import sys, json
+d = json.loads(sys.argv[1])
+themes = d.get('themes', [])
+parts = []
+for t in themes:
+    parts.append(f'{t.get(\"track\", \"?\")}=\"{t.get(\"topic\", \"?\")}\"')
+print('Pass 1 themes: ' + ', '.join(parts))
+" "$THEME_JSON" 2>/dev/null | while IFS= read -r line; do log "$line"; done || true
   TASK_PROMPT=$(cat prompts/task-prompt.md)
 
   # テーマ JSON を Sonnet 向けプロンプトに注入
@@ -205,14 +284,38 @@ fi
 log "=== Pass 2: Research & writing (Sonnet) ==="
 
 PASS2_EXIT=0
-run_claude -p "$TASK_PROMPT" \
+PASS2_JSON=""
+PASS2_JSON=$(run_claude -p "$TASK_PROMPT" \
   --append-system-prompt-file prompts/research-protocol.md \
   --allowedTools "WebSearch,WebFetch,Read,Write,Edit,Glob,Grep" \
   --max-turns 40 \
   --model sonnet \
   --output-format json \
   --no-session-persistence \
-  >> "$LOG_FILE" 2>&1 || PASS2_EXIT=$?
+  2>> "$LOG_FILE") || PASS2_EXIT=$?
+
+# Pass 2 の JSON をログに記録
+if [ -n "$PASS2_JSON" ]; then
+  echo "$PASS2_JSON" >> "$LOG_FILE"
+  log_summary "$PASS2_JSON" "Pass2"
+fi
+
+# Total コストサマリー（Pass 1 + Pass 2）
+if [ -n "$PASS1_JSON" ] && [ -n "$PASS2_JSON" ]; then
+  python3 -c "
+import sys, json
+try:
+    d1 = json.loads(sys.argv[1])
+    d2 = json.loads(sys.argv[2])
+    cost1 = d1.get('total_cost_usd', 0)
+    cost2 = d2.get('total_cost_usd', 0)
+    dur1 = round(d1.get('duration_ms', 0) / 1000)
+    dur2 = round(d2.get('duration_ms', 0) / 1000)
+    print(f'SUMMARY Total: cost=\${cost1 + cost2:.4f} duration={dur1 + dur2}s (Pass1: \${cost1:.4f}, Pass2: \${cost2:.4f})')
+except Exception as e:
+    print(f'SUMMARY Total: (parse error: {e})')
+" "$PASS1_JSON" "$PASS2_JSON" 2>/dev/null | while IFS= read -r line; do log "$line"; done || true
+fi
 
 # ログファイルの権限を制限
 chmod 600 "$LOG_FILE" 2>/dev/null || true
@@ -220,6 +323,12 @@ chmod 600 "$LOG_FILE" 2>/dev/null || true
 if [ $PASS2_EXIT -eq 0 ]; then
   log "=== Completed successfully ==="
   notify "今朝のリサーチレポートが完成しました" "Daily Research"
+
+  # === 品質評価 (non-fatal) ===
+  log "=== Starting evaluation ==="
+  "$PROJECT_DIR/scripts/eval-run.sh" "$DATE" >> "$LOG_FILE" 2>&1 || {
+    log "WARN: Evaluation failed (non-fatal)"
+  }
 else
   log "=== Failed with exit code $PASS2_EXIT ==="
   notify "リサーチ実行に失敗しました。ログを確認してください。" "Daily Research Error"

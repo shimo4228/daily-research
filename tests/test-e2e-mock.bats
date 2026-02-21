@@ -86,25 +86,10 @@ done
 if [[ "$MODEL" == "opus" ]]; then
   case "$SCENARIO" in
     normal)
+      # --output-format stream-json --verbose の NDJSON 形式。parse-stream.py が処理する
       cat << 'JSON'
-{
-  "themes": [
-    {
-      "track": "tech",
-      "topic": "Mock Tech Topic for E2E Testing",
-      "slug": "mock-tech-topic",
-      "score": 85,
-      "rationale": "E2E test rationale"
-    },
-    {
-      "track": "personal",
-      "topic": "Mock Personal Topic for E2E Testing",
-      "slug": "mock-personal-topic",
-      "score": 80,
-      "rationale": "E2E test rationale"
-    }
-  ]
-}
+{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"tool_use","name":"WebSearch","id":"toolu_mock01","input":{"query":"mock search"}}]}}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":5000,"duration_api_ms":4500,"num_turns":5,"total_cost_usd":0.25,"usage":{"input_tokens":1000,"output_tokens":500,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"result":"{\"themes\": [{\"track\": \"tech\", \"topic\": \"Mock Tech Topic for E2E Testing\", \"slug\": \"mock-tech-topic\", \"score\": 85, \"rationale\": \"E2E test rationale\"}, {\"track\": \"personal\", \"topic\": \"Mock Personal Topic for E2E Testing\", \"slug\": \"mock-personal-topic\", \"score\": 80, \"rationale\": \"E2E test rationale\"}]}"}
 JSON
       exit 0
       ;;
@@ -113,7 +98,10 @@ JSON
       exit 1
       ;;
     pass1-bad-json)
-      echo "This is not valid JSON at all"
+      # result フィールドに不正なテーマ JSON を含む（validate_theme_json が失敗する）
+      cat << 'JSON'
+{"type":"result","subtype":"success","is_error":false,"duration_ms":1000,"result":"This is not valid theme JSON at all"}
+JSON
       exit 0
       ;;
   esac
