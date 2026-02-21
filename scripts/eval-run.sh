@@ -10,6 +10,13 @@ fi
 
 # === 変数 ===
 DATE="${1:-$(date +%Y-%m-%d)}"
+
+# DATE フォーマットを検証（パス横断防止）
+if ! [[ "$DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+  echo "ERROR: Invalid DATE format: $DATE (expected YYYY-MM-DD)" >&2
+  exit 1
+fi
+
 PROJECT_DIR="$HOME/MyAI_Lab/daily-research"
 PROMPTS_DIR="$PROJECT_DIR/evals/prompts"
 SCORES_FILE="$PROJECT_DIR/evals/scores.jsonl"
@@ -32,23 +39,24 @@ fi
 CLAUDE_CMD=$(command -v claude)
 
 # === config.toml から vault_path / output_dir を読み込む ===
+# sys.argv 経由でパスを渡す（シェル変数の直接埋め込みを避ける）
 VAULT_PATH=$(python3 -c "
-import re
-with open('$PROJECT_DIR/config.toml') as f:
+import re, sys
+with open(sys.argv[1]) as f:
     content = f.read()
 m = re.search(r'vault_path\s*=\s*\"([^\"]+)\"', content)
 if not m:
     raise ValueError('vault_path not found in config.toml')
 print(m.group(1))
-") || { log "ERROR: Failed to read vault_path from config.toml"; exit 1; }
+" "$PROJECT_DIR/config.toml") || { log "ERROR: Failed to read vault_path from config.toml"; exit 1; }
 
 OUTPUT_DIR=$(python3 -c "
-import re
-with open('$PROJECT_DIR/config.toml') as f:
+import re, sys
+with open(sys.argv[1]) as f:
     content = f.read()
 m = re.search(r'output_dir\s*=\s*\"([^\"]+)\"', content)
 print(m.group(1) if m else 'daily-research')
-")
+" "$PROJECT_DIR/config.toml")
 
 REPORT_DIR="${VAULT_PATH}/${OUTPUT_DIR}"
 
@@ -72,29 +80,31 @@ log "Found ${#REPORTS[@]} report(s)"
 DIMENSIONS=("factual" "depth" "coherence" "specificity" "novelty" "actionability")
 DIMENSION_KEYS=("factual_grounding" "depth_of_analysis" "coherence" "specificity" "novelty" "actionability")
 
+# === 一時ファイルのクリーンアップ（ループ外で一元管理） ===
+SCORES_TEMP=""
+cleanup_eval() {
+  [ -n "$SCORES_TEMP" ] && rm -f "$SCORES_TEMP"
+}
+trap cleanup_eval EXIT
+
 # === 各レポートを評価 ===
 for report_file in "${REPORTS[@]}"; do
   filename=$(basename "$report_file")
 
   # ファイル名解析: YYYY-MM-DD_track_slug.md
   # 例: 2026-02-21_tech_xcode-26-agentic-coding-mcp.md
-  TRACK_PART=$(python3 -c "
+  # 1回の python3 呼び出しで track と slug を同時に抽出
+  PARSED=$(python3 -c "
 import sys, re
 name = sys.argv[1]
 m = re.match(r'^\d{4}-\d{2}-\d{2}_([^_]+)_(.+)\.md$', name)
 if not m:
     raise ValueError(f'Unexpected filename format: {name}')
 print(m.group(1))
-" "$filename" 2>>"$LOG_FILE") || { log "ERROR: Cannot parse filename: $filename"; continue; }
-
-  SLUG_PART=$(python3 -c "
-import sys, re
-name = sys.argv[1]
-m = re.match(r'^\d{4}-\d{2}-\d{2}_([^_]+)_(.+)\.md$', name)
-if not m:
-    raise ValueError(f'Unexpected filename format: {name}')
 print(m.group(2))
 " "$filename" 2>>"$LOG_FILE") || { log "ERROR: Cannot parse filename: $filename"; continue; }
+  TRACK_PART=$(echo "$PARSED" | head -1)
+  SLUG_PART=$(echo "$PARSED" | tail -1)
 
   log "Evaluating: ${filename} (track=${TRACK_PART} slug=${SLUG_PART})"
 
@@ -103,7 +113,6 @@ print(m.group(2))
 
   # スコアを一時ファイルに蓄積
   SCORES_TEMP=$(mktemp)
-  trap 'rm -f "$SCORES_TEMP"' EXIT
 
   for i in "${!DIMENSIONS[@]}"; do
     dim="${DIMENSIONS[$i]}"
@@ -140,37 +149,50 @@ print(template.replace('{ARTICLE_CONTENT}', article))
       break
     fi
 
-    # スコア抽出（フォールバック付き）
-    SCORE=$(python3 -c "
+    # スコア抽出（stdin 経由で渡す / フォールバック付き）
+    SCORE=$(echo "$JUDGE_JSON" | python3 -c "
 import sys, json, re
-outer = json.loads(sys.argv[1])
+outer = json.loads(sys.stdin.read())
 result_text = outer.get('result', '').strip()
 
 # マークダウンコードフェンスを除去
 result_text = re.sub(r'^\`\`\`(?:json)?\s*', '', result_text)
 result_text = re.sub(r'\s*\`\`\`\s*$', '', result_text).strip()
 
-# 1. まず直接 JSON パースを試みる
 score = None
+
+# 1. まず直接 JSON パースを試みる
 try:
     inner = json.loads(result_text)
-    score = int(inner.get('score', 0))
+    v = inner.get('score')
+    if v is not None:
+        score = int(v)
 except (json.JSONDecodeError, ValueError):
     pass
 
-# 2. フォールバック: 'score' キーを正規表現で抽出（rationale に {} が含まれる場合に対応）
+# 2. フォールバック: raw_decode で先頭 JSON オブジェクトのみパース
+#    rationale 内の \"score\": N への誤マッチを防止
 if score is None:
-    m = re.search(r'\"score\"\s*:\s*(\d+)', result_text)
-    if not m:
-        print(f'Cannot extract score from: {result_text[:200]}', file=sys.stderr)
-        sys.exit(1)
-    score = int(m.group(1))
+    try:
+        decoder = json.JSONDecoder()
+        idx = result_text.find('{')
+        if idx >= 0:
+            obj, _ = decoder.raw_decode(result_text, idx)
+            v = obj.get('score')
+            if v is not None:
+                score = int(v)
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+if score is None:
+    print(f'Cannot extract score from: {result_text[:200]}', file=sys.stderr)
+    sys.exit(1)
 
 if not (1 <= score <= 5):
     print(f'Score out of range: {score}', file=sys.stderr)
     sys.exit(1)
 print(score)
-" "$JUDGE_JSON" 2>>"$LOG_FILE") || {
+" 2>>"$LOG_FILE") || {
       log "  ERROR: Score parse failed for ${dim_key}"
       EVAL_OK=false
       break
@@ -210,18 +232,19 @@ print(json.dumps(entry, ensure_ascii=False))
 " "$SCORES_TEMP" "$DATE" "$PIPELINE_VERSION" "$TRACK_PART" "$SLUG_PART" "$JUDGE_MODEL" "$EVAL_DURATION" 2>>"$LOG_FILE") || {
       log "  ERROR: Failed to build JSONL entry"
       rm -f "$SCORES_TEMP"
+      SCORES_TEMP=""
       continue
     }
 
     echo "$ENTRY" >> "$SCORES_FILE"
-    TOTAL=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print(d['total'])" "$ENTRY")
+    TOTAL=$(echo "$ENTRY" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d['total'])" 2>>"$LOG_FILE")
     log "  Saved: total=${TOTAL}/30 duration=${EVAL_DURATION}s"
   else
     log "  WARN: Evaluation incomplete for ${filename}, not saving"
   fi
 
   rm -f "$SCORES_TEMP"
-  trap - EXIT
+  SCORES_TEMP=""
 done
 
 log "=== Evaluation done ==="

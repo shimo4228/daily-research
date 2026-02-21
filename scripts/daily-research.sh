@@ -68,6 +68,7 @@ if result_event is not None:
     result_event["tool_counts"] = tool_counts
     print(json.dumps(result_event, ensure_ascii=False))
 else:
+    print("No result event found in stream", file=sys.stderr)
     sys.exit(1)
 '
 
@@ -77,10 +78,10 @@ log_summary() {
   local json="$1"
   local label="$2"
   local summary
-  summary=$(python3 -c "
+  summary=$(echo "$json" | python3 -c "
 import sys, json
 try:
-    d = json.loads(sys.argv[1])
+    d = json.loads(sys.stdin.read())
     cost = d.get('total_cost_usd', 0)
     turns = d.get('num_turns', 0)
     dur = round(d.get('duration_ms', 0) / 1000)
@@ -89,10 +90,10 @@ try:
     tc = d.get('tool_counts', {})
     searches = tc.get('WebSearch', 0) + tc.get('WebFetch', 0)
     tool_str = f' searches={searches}' if searches else ''
-    print(f'SUMMARY {sys.argv[2]}: cost=\${cost:.4f} turns={turns} duration={dur}s tokens_in={inp} tokens_out={out}{tool_str}')
+    print(f'SUMMARY {sys.argv[1]}: cost=\${cost:.4f} turns={turns} duration={dur}s tokens_in={inp} tokens_out={out}{tool_str}')
 except Exception as e:
-    print(f'SUMMARY {sys.argv[2]}: (parse error: {e})')
-" "$json" "$label" 2>/dev/null) || summary="SUMMARY ${label}: (parse error)"
+    print(f'SUMMARY {sys.argv[1]}: (parse error: {e})')
+" "$label" 2>/dev/null) || summary="SUMMARY ${label}: (parse error)"
   log "$summary"
 }
 
@@ -136,6 +137,13 @@ for i, t in enumerate(themes):
         sys.exit(1)
     if not isinstance(t['slug'], str) or not re.fullmatch(r'[a-z0-9-]+', t['slug']):
         print(f'Theme {i}: invalid slug \"{t.get(\"slug\")}\"', file=sys.stderr)
+        sys.exit(1)
+    # topic と rationale の文字数上限（プロンプトインジェクション緩和）
+    if len(str(t.get('topic', ''))) > 200:
+        print(f'Theme {i}: topic too long (max 200)', file=sys.stderr)
+        sys.exit(1)
+    if len(str(t.get('rationale', ''))) > 500:
+        print(f'Theme {i}: rationale too long (max 500)', file=sys.stderr)
         sys.exit(1)
 
 print(json.dumps(d, ensure_ascii=False))
@@ -217,11 +225,11 @@ if [ -n "$PASS1_JSON" ]; then
   echo "$PASS1_JSON" >> "$LOG_FILE"
   log_summary "$PASS1_JSON" "Pass1"
   # result フィールドからテーマテキストを抽出
-  THEME_RAW=$(python3 -c "
+  THEME_RAW=$(echo "$PASS1_JSON" | python3 -c "
 import sys, json
-d = json.loads(sys.argv[1])
+d = json.loads(sys.stdin.read())
 print(d.get('result', ''))
-" "$PASS1_JSON" 2>> "$LOG_FILE") || true
+" 2>> "$LOG_FILE") || true
 fi
 
 # Pass 1 の結果を評価し、フォールバック判定
@@ -302,11 +310,12 @@ fi
 
 # Total コストサマリー（Pass 1 + Pass 2）
 if [ -n "$PASS1_JSON" ] && [ -n "$PASS2_JSON" ]; then
-  python3 -c "
+  printf '%s\n%s\n' "$PASS1_JSON" "$PASS2_JSON" | python3 -c "
 import sys, json
 try:
-    d1 = json.loads(sys.argv[1])
-    d2 = json.loads(sys.argv[2])
+    lines = sys.stdin.read().splitlines()
+    d1 = json.loads(lines[0])
+    d2 = json.loads(lines[1])
     cost1 = d1.get('total_cost_usd', 0)
     cost2 = d2.get('total_cost_usd', 0)
     dur1 = round(d1.get('duration_ms', 0) / 1000)
@@ -314,7 +323,7 @@ try:
     print(f'SUMMARY Total: cost=\${cost1 + cost2:.4f} duration={dur1 + dur2}s (Pass1: \${cost1:.4f}, Pass2: \${cost2:.4f})')
 except Exception as e:
     print(f'SUMMARY Total: (parse error: {e})')
-" "$PASS1_JSON" "$PASS2_JSON" 2>/dev/null | while IFS= read -r line; do log "$line"; done || true
+" 2>/dev/null | while IFS= read -r line; do log "$line"; done || true
 fi
 
 # ログファイルの権限を制限
