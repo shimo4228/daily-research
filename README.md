@@ -17,10 +17,14 @@ launchd (AM 5:00)
        │     ├── WebSearch              # Latest trends
        │     └── Score & select 2 topics
        │
-       └── Pass 2: Sonnet (research & writing)
-             ├── WebSearch x 20-30      # Multi-stage research
-             ├── WebFetch (primary sources)
-             └── Write 2 reports        # → Obsidian vault
+       ├── Pass 2: Sonnet (research & writing)
+       │     ├── WebSearch x 20-30      # Multi-stage research
+       │     ├── WebFetch (primary sources)
+       │     └── Write 2 reports        # → Obsidian vault
+       │
+       └── Eval: Opus (quality scoring, non-fatal)
+             ├── 6 dimensions x 2 reports
+             └── Append to scores.jsonl
 ```
 
 **2-pass architecture**: Opus handles theme selection (deep reasoning), Sonnet handles research and writing (speed + cost efficiency). If Pass 1 fails, Sonnet handles everything as a fallback.
@@ -36,6 +40,7 @@ The key insight: Claude Code's `-p` flag turns it into a fully autonomous resear
 - **Weighted topic scoring** -- Novelty, momentum, buildability, and "whisper trend" scores
 - **Obsidian-native output** -- Reports with YAML frontmatter, ready for your vault
 - **Robust execution** -- Lock files, log rotation, auth checks, macOS notifications, automatic fallback
+- **Automated quality evaluation** -- LLM-as-Judge scores each report on 6 dimensions (30-point scale)
 
 ## Prerequisites
 
@@ -58,7 +63,7 @@ cp config.example.toml config.toml
 # Edit config.toml: set vault_path and customize tracks
 
 # 3. Make scripts executable
-chmod +x scripts/daily-research.sh scripts/check-auth.sh
+chmod +x scripts/daily-research.sh scripts/eval-run.sh scripts/check-auth.sh
 
 # 4. Verify Claude auth
 ./scripts/check-auth.sh
@@ -86,16 +91,39 @@ daily-research/
 │   └── report-template.md      # Report format with YAML frontmatter
 ├── scripts/
 │   ├── daily-research.sh       # Main entry point (launchd calls this)
+│   ├── eval-run.sh             # LLM-as-Judge evaluation (post-run)
 │   └── check-auth.sh           # OAuth token health check
+├── evals/
+│   ├── prompts/                # Judge rubrics (6 dimensions + system prompt)
+│   ├── scores.jsonl            # Score log (append-only, gitignored)
+│   └── scores.example.jsonl    # Schema reference
 ├── com.example.daily-research.plist  # launchd schedule template
 ├── tests/
 │   ├── test-daily-research.bats     # Unit tests
-│   └── test-e2e-mock.bats          # E2E mock tests
+│   ├── test-e2e-mock.bats          # E2E mock tests
+│   └── test-eval.bats              # Evaluation framework tests
 └── docs/
     ├── RUNBOOK.md / RUNBOOK.ja.md   # Operations guide
     ├── CONTRIB.md / CONTRIB.ja.md   # Development guide
     └── plans/                       # Future expansion plans
 ```
+
+## Evaluation Framework
+
+After each successful run, an automated LLM-as-Judge evaluation scores every generated report. This runs as a non-fatal hook -- evaluation failures never block the main pipeline.
+
+Each report is scored by Opus on 6 independent dimensions (1-5 scale, 30 points total):
+
+| Dimension | What It Measures |
+|-----------|-----------------|
+| Factual Grounding | Source quality and claim verification |
+| Depth of Analysis | Beyond surface-level summaries |
+| Coherence | Logical flow and structure |
+| Specificity | Concrete examples vs. abstract statements |
+| Novelty | Fresh insights beyond common knowledge |
+| Actionability | Practical development ideas |
+
+Scores are appended to `evals/scores.jsonl`. The `pipeline_version` field enables before/after comparisons when the pipeline changes. See [CONTRIB.md](docs/CONTRIB.md) for full details.
 
 ## Customization
 
@@ -157,6 +185,8 @@ Then reload: `launchctl unload ... && launchctl load ...`
 | `--max-turns` for timeout control | Process-external timeouts (gtimeout) kill claude via signal, causing data loss |
 | Shell scripts only | Zero dependencies beyond Claude Code CLI; trivial to understand and modify |
 | TOML config | Human-readable, supports nested structures for tracks/criteria |
+| LLM-as-Judge (non-fatal) | Automated quality feedback without blocking production; 6 independent dimensions reduce single-score bias |
+| `stream-json` for Pass 1 | Captures tool usage counts alongside result for cost/performance monitoring |
 
 ## Gotchas
 

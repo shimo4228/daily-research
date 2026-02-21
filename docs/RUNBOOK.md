@@ -12,6 +12,7 @@ cd /path/to/daily-research
 
 # 2. Make scripts executable
 chmod +x scripts/daily-research.sh
+chmod +x scripts/eval-run.sh
 chmod +x scripts/check-auth.sh
 
 # 3. Verify auth
@@ -56,10 +57,12 @@ launchctl start com.daily-research
 
 ```
 daily-research.sh
-├── Pass 1: Opus theme selection (--max-turns 15)
+├── Pass 1: Opus theme selection (--max-turns 15, stream-json)
 │   ├── Success → Pass themes to Sonnet
 │   └── Failure → Sonnet fallback (handles theme selection + research)
-└── Pass 2: Sonnet research & writing (--max-turns 40)
+├── Pass 2: Sonnet research & writing (--max-turns 40)
+└── Evaluation: LLM-as-Judge (non-fatal, 6 dimensions x Opus)
+    └── Scores appended to evals/scores.jsonl
 ```
 
 ## Monitoring
@@ -95,16 +98,25 @@ launchctl list | grep daily-research
 | Today's log exists | `ls logs/$(date +%Y-%m-%d).log` | File exists |
 | Log shows success | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | Match found |
 | Reports generated | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | 2 files |
+| Eval scores saved | `grep "$(date +%Y-%m-%d)" evals/scores.jsonl \| wc -l` | 2 entries |
 
 ### Log Messages Reference
 
 | Message | Meaning |
 |---------|---------|
+| `SUMMARY Pass1: cost=... turns=... duration=...` | Pass 1 execution statistics (cost, turns, duration, tokens) |
 | `Pass 1 completed: themes selected by Opus` | Opus theme selection succeeded |
+| `Pass 1 themes: tech="...", personal="..."` | Selected themes logged for reference |
 | `WARN: Pass 1 failed (exit code N), falling back to Sonnet` | Opus failed, Sonnet will handle everything |
 | `WARN: Pass 1 output failed JSON validation` | Opus returned invalid JSON, Sonnet fallback |
 | `Fallback: Sonnet handles theme selection + research` | Sonnet is doing all work (normal fallback behavior) |
+| `SUMMARY Pass2: cost=... turns=... duration=...` | Pass 2 execution statistics |
+| `SUMMARY Total: cost=... duration=...` | Combined cost/duration across both passes |
 | `Completed successfully` | Both passes completed |
+| `[eval] Evaluation start: DATE=...` | Evaluation framework started |
+| `[eval] Found N report(s)` | Number of reports found for evaluation |
+| `[eval] Saved: total=N/30 duration=Ns` | Evaluation score saved successfully |
+| `WARN: Evaluation failed (non-fatal)` | Evaluation failed but pipeline continues |
 
 ## Common Issues and Fixes
 
@@ -247,6 +259,7 @@ If Mac was asleep at 5:00, launchd runs the job on wake (behavior of `StartCalen
 |-----------|-------|---------------|
 | Pass 1: Theme selection | Opus | ~$0.30 |
 | Pass 2: Research & writing | Sonnet | ~$1.50 |
-| **Total** | | **~$1.80** |
+| Evaluation (2 reports x 6 dims) | Opus | ~$0.50 |
+| **Total** | | **~$2.30** |
 
 With Claude Max plan, these costs are covered by the subscription. No per-token charges.

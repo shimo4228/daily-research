@@ -12,6 +12,7 @@ cd /path/to/daily-research
 
 # 2. スクリプトに実行権限を付与
 chmod +x scripts/daily-research.sh
+chmod +x scripts/eval-run.sh
 chmod +x scripts/check-auth.sh
 
 # 3. 認証を確認
@@ -56,10 +57,12 @@ launchctl start com.daily-research
 
 ```
 daily-research.sh
-├── Pass 1: Opus テーマ選定 (--max-turns 15)
+├── Pass 1: Opus テーマ選定 (--max-turns 15, stream-json)
 │   ├── 成功 → テーマを Sonnet に渡す
 │   └── 失敗 → Sonnet フォールバック（テーマ選定 + リサーチを一括実行）
-└── Pass 2: Sonnet リサーチ・執筆 (--max-turns 40)
+├── Pass 2: Sonnet リサーチ・執筆 (--max-turns 40)
+└── 品質評価: LLM-as-Judge (non-fatal, 6次元 x Opus)
+    └── スコアを evals/scores.jsonl に追記
 ```
 
 ## 監視
@@ -95,16 +98,25 @@ launchctl list | grep daily-research
 | 今日のログが存在 | `ls logs/$(date +%Y-%m-%d).log` | ファイルが存在 |
 | ログに成功メッセージ | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | マッチあり |
 | レポートが生成済み | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | 2ファイル |
+| 評価スコアが保存済み | `grep "$(date +%Y-%m-%d)" evals/scores.jsonl \| wc -l` | 2エントリ |
 
 ### ログメッセージ一覧
 
 | メッセージ | 意味 |
 |---------|------|
+| `SUMMARY Pass1: cost=... turns=... duration=...` | Pass 1 の実行統計（コスト、ターン数、所要時間、トークン数） |
 | `Pass 1 completed: themes selected by Opus` | Opus テーマ選定が成功 |
+| `Pass 1 themes: tech="...", personal="..."` | 選定されたテーマの記録 |
 | `WARN: Pass 1 failed (exit code N), falling back to Sonnet` | Opus 失敗、Sonnet が全処理を担当 |
 | `WARN: Pass 1 output failed JSON validation` | Opus が不正な JSON を返した、Sonnet フォールバック |
 | `Fallback: Sonnet handles theme selection + research` | Sonnet が全作業を実行（正常なフォールバック動作） |
+| `SUMMARY Pass2: cost=... turns=... duration=...` | Pass 2 の実行統計 |
+| `SUMMARY Total: cost=... duration=...` | 両パス合計のコスト・所要時間 |
 | `Completed successfully` | 全パス完了 |
+| `[eval] Evaluation start: DATE=...` | 評価フレームワーク開始 |
+| `[eval] Found N report(s)` | 評価対象レポートの検出数 |
+| `[eval] Saved: total=N/30 duration=Ns` | 評価スコアの保存成功 |
+| `WARN: Evaluation failed (non-fatal)` | 評価失敗（パイプラインは継続） |
 
 ## よくある問題と対処法
 
@@ -247,6 +259,7 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 |---------------|--------|-------------|
 | Pass 1: テーマ選定 | Opus | ~$0.30 |
 | Pass 2: リサーチ・執筆 | Sonnet | ~$1.50 |
-| **合計** | | **~$1.80** |
+| 品質評価 (2記事 x 6次元) | Opus | ~$0.50 |
+| **合計** | | **~$2.30** |
 
 Claude Max プランでは、これらのコストはサブスクリプションでカバーされる。従量課金は発生しない。
