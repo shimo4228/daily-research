@@ -212,6 +212,7 @@ THEME_RAW=""
 PASS1_EXIT=0
 
 PASS1_JSON=$(run_claude -p "$THEME_PROMPT" \
+  --permission-mode default \
   --allowedTools "WebSearch,WebFetch,Read,Glob,Grep" \
   --max-turns 15 \
   --model opus \
@@ -294,6 +295,7 @@ log "=== Pass 2: Research & writing (Sonnet) ==="
 PASS2_EXIT=0
 PASS2_JSON=""
 PASS2_JSON=$(run_claude -p "$TASK_PROMPT" \
+  --permission-mode default \
   --append-system-prompt-file prompts/research-protocol.md \
   --allowedTools "WebSearch,WebFetch,Read,Write,Edit,Glob,Grep" \
   --max-turns 40 \
