@@ -84,7 +84,11 @@ log_summary() {
   summary=$(echo "$json" | python3 -c "
 import sys, json
 try:
-    d = json.loads(sys.stdin.read())
+    raw = json.loads(sys.stdin.read())
+    if isinstance(raw, list):
+        d = next((e for e in raw if isinstance(e, dict) and e.get('type') == 'result'), {})
+    else:
+        d = raw
     cost = d.get('total_cost_usd', 0)
     turns = d.get('num_turns', 0)
     dur = round(d.get('duration_ms', 0) / 1000)
@@ -335,10 +339,14 @@ fi
 if [ -n "$PASS1_JSON" ] && [ -n "$PASS2_JSON" ]; then
   printf '%s\n%s\n' "$PASS1_JSON" "$PASS2_JSON" | python3 -c "
 import sys, json
+def as_dict(raw):
+    if isinstance(raw, list):
+        return next((e for e in raw if isinstance(e, dict) and e.get('type') == 'result'), {})
+    return raw
 try:
     lines = sys.stdin.read().splitlines()
-    d1 = json.loads(lines[0])
-    d2 = json.loads(lines[1])
+    d1 = as_dict(json.loads(lines[0]))
+    d2 = as_dict(json.loads(lines[1]))
     cost1 = d1.get('total_cost_usd', 0)
     cost2 = d2.get('total_cost_usd', 0)
     dur1 = round(d1.get('duration_ms', 0) / 1000)

@@ -118,7 +118,8 @@ if [[ "$MODEL" == "sonnet" ]]; then
     PREV="$arg"
   done
 
-  echo '{"type":"result","subtype":"success","is_error":false,"duration_ms":100}'
+  # --output-format json は JSON array を返す場合がある
+  echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.05,"num_turns":3,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}}]'
   exit 0
 fi
 
