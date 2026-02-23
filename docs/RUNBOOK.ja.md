@@ -203,6 +203,31 @@ ls "/path/to/your/obsidian/vault/daily-research/"
 # iCloud 同期を促す: iOS のファイルアプリを開くか、しばらく待つ
 ```
 
+### 8. プラグインによる実行遅延・ハング
+
+**症状**: Pass 1 が通常の3〜5分ではなく30分以上かかる、または無限にハングする。ログに `No result event found in stream` が出力される。
+
+**原因**: Claude Code のプラグイン（pyright, swift-lsp, hookify, mgrep, claude-mem 等）がグローバルにインストールされている。`claude -p` 呼び出しごとに全プラグインの MCP サーバーが初期化され、大幅なオーバーヘッドが発生する。
+
+**対処**: プロジェクトルートに `.claude/settings.json` を作成し、プラグインを無効化する:
+```json
+{
+  "enabledPlugins": {
+    "plugin-name@marketplace": false
+  }
+}
+```
+
+`claude plugin list` でインストール済みプラグインを確認し、それぞれ `false` に設定する。この設定はこのプロジェクトにのみ影響し、他のプロジェクトやインタラクティブセッションには影響しない。
+
+**確認方法**:
+```bash
+# プラグイン無効化後、MCP サーバーが起動していないことを確認:
+ps aux | grep -E "pyright|sourcekit|claude-mem|sequential|japanese|ableton"
+```
+
+**備考**: 現時点では「全プラグイン一括無効化」の設定は存在しない。各プラグインを個別に列挙する必要がある。[追跡 Issue](https://github.com/anthropics/claude-code/issues/20873) 参照。
+
 ### 7. テーマの重複
 
 **症状**: 最近と同じテーマのレポートが生成される。

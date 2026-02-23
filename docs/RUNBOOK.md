@@ -203,6 +203,31 @@ ls "/path/to/your/obsidian/vault/daily-research/"
 # Force iCloud sync: open Files app on iOS or wait
 ```
 
+### 8. Slow Execution or Hangs Due to Plugins
+
+**Symptoms**: Pass 1 takes over 30 minutes instead of the normal 3-5 minutes, or hangs indefinitely. Log shows `No result event found in stream`.
+
+**Cause**: Claude Code plugins (pyright, swift-lsp, hookify, mgrep, claude-mem, etc.) installed globally. Each `claude -p` invocation initializes all plugin MCP servers, adding significant startup overhead.
+
+**Fix**: Create `.claude/settings.json` in the project root to disable plugins for this project:
+```json
+{
+  "enabledPlugins": {
+    "plugin-name@marketplace": false
+  }
+}
+```
+
+List your installed plugins with `claude plugin list`, then set each to `false`. This only affects this project; other projects and interactive sessions are unaffected.
+
+**Verification**:
+```bash
+# After disabling plugins, check that no plugin MCP servers start:
+ps aux | grep -E "pyright|sourcekit|claude-mem|sequential|japanese|ableton"
+```
+
+**Note**: There is no blanket "disable all plugins" option yet. Each plugin must be listed explicitly. See [tracking issue](https://github.com/anthropics/claude-code/issues/20873).
+
 ### 7. Duplicate Topics
 
 **Symptoms**: Reports cover the same theme as recent days.

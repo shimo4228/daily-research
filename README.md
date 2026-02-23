@@ -190,6 +190,15 @@ Then reload: `launchctl unload ... && launchctl load ...`
 
 ## Gotchas
 
+- **Claude Code plugins cause hangs** -- If you have Claude Code plugins installed globally, their MCP servers initialize on every `claude -p` call, adding minutes of overhead or causing hangs. Create `.claude/settings.json` in the project root to disable them:
+  ```json
+  {
+    "enabledPlugins": {
+      "plugin-name@marketplace": false
+    }
+  }
+  ```
+  List each of your installed plugins and set them to `false`. Check installed plugins with `claude plugin list`. There is currently no blanket "disable all" option ([tracking issue](https://github.com/anthropics/claude-code/issues/20873)).
 - **OAuth token expires ~4 days** -- Run `claude` interactively periodically to refresh
 - **`ANTHROPIC_API_KEY` must be unset** -- If set, Claude uses per-token billing instead of Max plan. The script handles this with `unset ANTHROPIC_API_KEY`
 - **launchd + shell profile** -- `launchd` does NOT source `.zshrc`. All PATH entries must be explicit in the script and plist
