@@ -42,31 +42,6 @@ scoring_criteria = [
   { name = "Tech x Body intersection", weight = 20, desc = "Intersection of technology and embodiment" },
 ]
 
-[tracks.points]
-name = "Points Trends"
-focus = "Japanese point economy: latest campaigns, high-return routes, policy changes"
-sources = [
-  "Poitan (poitan.net) latest news",
-  "Kakaku.com credit card comparison",
-  "X (Twitter) #ポイ活 trends",
-  "Press releases (Rakuten, NTT docomo, PayPay, Sumitomo Mitsui)",
-]
-domains = [
-  "Rakuten Points",
-  "d Points",
-  "PayPay",
-  "V Points",
-  "Ponta Points",
-  "Credit card rewards",
-  "QR code payments",
-]
-scoring_criteria = [
-  { name = "Novelty", weight = 20, desc = "No similar theme in past_topics.json" },
-  { name = "Urgency", weight = 30, desc = "Time-sensitive campaign or policy change with a deadline" },
-  { name = "Impact", weight = 30, desc = "Potential savings or points value for a typical user" },
-  { name = "Whisper trend", weight = 20, desc = "A change not yet widely noticed" },
-]
-
 [user_profile]
 skills = ["Python", "Swift", "TypeScript", "iOS development"]
 interests = ["AI/ML", "Agents", "Embodied Cognition", "Buddhism", "Meditation", "Free Energy Principle"]
