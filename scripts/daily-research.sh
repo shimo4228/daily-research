@@ -126,9 +126,16 @@ except json.JSONDecodeError as e:
     print(f'JSON parse error: {e}', file=sys.stderr)
     sys.exit(1)
 
+# config.toml からトラック名一覧を動的に取得
+import tomllib
+with open('config.toml', 'rb') as f:
+    config = tomllib.load(f)
+valid_tracks = set(config.get('tracks', {}).keys())
+expected_count = len(valid_tracks)
+
 themes = d.get('themes', [])
-if not isinstance(themes, list) or len(themes) != 2:
-    print(f'Expected 2 themes, got {len(themes) if isinstance(themes, list) else type(themes).__name__}', file=sys.stderr)
+if not isinstance(themes, list) or len(themes) != expected_count:
+    print(f'Expected {expected_count} themes, got {len(themes) if isinstance(themes, list) else type(themes).__name__}', file=sys.stderr)
     sys.exit(1)
 
 for i, t in enumerate(themes):
@@ -136,7 +143,7 @@ for i, t in enumerate(themes):
         if k not in t:
             print(f'Theme {i}: missing key \"{k}\"', file=sys.stderr)
             sys.exit(1)
-    if t['track'] not in ('tech', 'personal'):
+    if t['track'] not in valid_tracks:
         print(f'Theme {i}: invalid track \"{t[\"track\"]}\"', file=sys.stderr)
         sys.exit(1)
     if not isinstance(t['slug'], str) or not re.fullmatch(r'[a-z0-9-]+', t['slug']):
@@ -261,9 +268,9 @@ if [ "$USE_FALLBACK" = true ]; then
 
 1. config.toml を読み込む
 2. past_topics.json で過去テーマを確認する
-3. テックトレンドとパーソナル関心の2テーマを選定する
+3. config.toml で定義されている全トラックのテーマを選定する
 4. 各テーマについて多段階リサーチを実行する
-5. レポートを2本生成し、Obsidian vault に保存する
+5. 各テーマのレポートを生成し、Obsidian vault に保存する
 6. past_topics.json を更新する
 
 research-protocol.md に記載されたプロトコルに厳密に従ってください。"
