@@ -44,7 +44,8 @@ daily-research/
 ├── tests/
 │   ├── test-daily-research.bats        # Unit tests (syntax, config, security)
 │   ├── test-e2e-mock.bats             # E2E mock tests
-│   └── test-eval.bats                  # Evaluation framework tests
+│   ├── test-eval.bats                  # Evaluation framework tests
+│   └── test-log-summary.bats          # log_summary parser tests
 ├── logs/                                # Execution logs (date-stamped, auto-rotated 30d)
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md      # Operations guide
@@ -59,7 +60,7 @@ daily-research/
 
 | Script | Description | Usage |
 |--------|-------------|-------|
-| `scripts/daily-research.sh` | Main entry point. 2-pass execution: Pass 1 (Opus theme selection) → Pass 2 (Sonnet research & writing). Includes env sanitization, auth check, JSON validation, Sonnet fallback, and post-run evaluation hook. Called by launchd at AM 5:00. | `./scripts/daily-research.sh` |
+| `scripts/daily-research.sh` | Main entry point. MCP health check → 2-pass execution: Pass 1 (Opus theme selection) → Pass 2 (Sonnet research & writing with optional Mem0). Includes env sanitization, auth check, MCP health check, JSON validation, Sonnet fallback, Mem0 graceful degradation, and post-run evaluation hook. Called by launchd at AM 5:00. | `./scripts/daily-research.sh` |
 | `scripts/eval-run.sh` | LLM-as-Judge evaluation. Scores each report on 6 dimensions (1-5 scale) using Opus. Called automatically after Pass 2 success. Non-fatal: failures do not affect the main exit code. | `./scripts/eval-run.sh 2026-02-21` |
 | `scripts/check-auth.sh` | Checks Claude OAuth token validity via `claude --version`. Shows macOS notification on failure. | `./scripts/check-auth.sh` |
 
@@ -70,6 +71,8 @@ daily-research/
 | `PATH` | plist + script | Must include `/opt/homebrew/bin`, `/usr/local/bin`, `$HOME/.claude/local` |
 | `HOME` | plist | Required for Claude CLI to find auth tokens |
 | `ANTHROPIC_API_KEY` | **Must be unset** | If set, Claude uses per-token billing instead of Max plan |
+| `CLAUDE_TIMEOUT` | Script (internal) | Timeout in seconds for `claude -p` calls via `run_claude()`. 0 = no timeout. MCP health check uses 60s; Pass 2 uses 900s |
+| `DEBUG` | User-set | Set to `1` to enable debug logging (PATH, CLAUDE_CMD) |
 
 ## Configuration (`config.toml`)
 
@@ -135,6 +138,7 @@ bats tests/
 # - Evaluation framework: judge prompt files, placeholders, bias mitigation
 # - scores.example.jsonl schema validation
 # - eval-run.sh integration hook in daily-research.sh
+# - log_summary parser: NDJSON, plain JSON, array JSON, malformed input handling
 ```
 
 ## Claude Code CLI Flags
@@ -144,6 +148,7 @@ bats tests/
 | Flag | Value | Purpose |
 |------|-------|---------|
 | `-p` | theme-selection-prompt.md content | Non-interactive mode |
+| `--permission-mode` | `default` | Use default permission handling |
 | `--allowedTools` | `WebSearch,WebFetch,Read,Glob,Grep` | Read-only tools (no file writing) |
 | `--max-turns` | `15` | Limit theme selection scope |
 | `--model` | `opus` | Deep reasoning for theme quality |
@@ -156,18 +161,43 @@ bats tests/
 | Flag | Value | Purpose |
 |------|-------|---------|
 | `-p` | task-prompt.md content (+ theme JSON if Pass 1 succeeded) | Non-interactive mode |
+| `--permission-mode` | `default` | Use default permission handling |
 | `--append-system-prompt-file` | `prompts/research-protocol.md` | Inject research protocol while preserving defaults |
-| `--allowedTools` | `WebSearch,WebFetch,Read,Write,Edit,Glob,Grep` | Full tool access for research and writing |
+| `--allowedTools` | `WebSearch,WebFetch,Read,Write,Edit,Glob,Grep[,mcp__mem0__*]` | Full tool access for research and writing. Mem0 tools (`mcp__mem0__search-memories`, `mcp__mem0__add-memory`) added only when MCP health check passes |
 | `--max-turns` | `40` | Guideline limit for research depth |
 | `--model` | `sonnet` | Speed + cost efficiency |
 | `--output-format` | `json` | Structured output with metadata |
 | `--no-session-persistence` | - | Fresh context each run |
+
+**Note**: All `claude -p` calls use `< /dev/null` stdin redirect via the `run_claude()` wrapper. This prevents MCP stdio communication from conflicting with terminal stdin, which was a root cause of MCP hangs.
 
 ## Architecture Notes
 
 The 2-pass design was chosen based on blind LLM-as-Judge evaluation showing Opus produces +28% better theme selection while adding minimal cost (~$0.30 per run). See `docs/progress/agent-team-evaluation.md` for the full evaluation that led to this architecture.
 
 Timeout is controlled via `--max-turns` rather than external process timeouts (gtimeout/timeout). External timeouts kill the claude process via signals, which can cause data loss. See `docs/progress/postmortem-2026-02-20.md` for details.
+
+## Mem0 MCP Integration
+
+The pipeline optionally integrates with [Mem0](https://mem0.ai) via MCP (Model Context Protocol) to provide persistent memory across research sessions.
+
+### How It Works
+
+1. **MCP Health Check** (before Pass 1): A Haiku probe (`"Say OK"`, 60s timeout) verifies MCP server responsiveness. If it fails, the pipeline continues without Mem0 (non-fatal).
+
+2. **Pass 2 — Memory Search** (Step 1.5 in research-protocol.md): Sonnet calls `mcp__mem0__search-memories` to retrieve context from previous research sessions before starting new research.
+
+3. **Pass 2 — Memory Record** (Step 6 in research-protocol.md): After writing reports, Sonnet calls `mcp__mem0__add-memory` to store key findings for future sessions.
+
+### Graceful Degradation
+
+- If MCP health check fails: `MEM0_AVAILABLE=false`, Mem0 tools excluded from `--allowedTools`
+- If Mem0 tools are available but fail during Pass 2: research-protocol.md instructs Sonnet to skip and continue
+- Reports are identical in structure whether or not Mem0 is used
+
+### stdin Redirect (`< /dev/null`)
+
+All `claude -p` calls route stdin from `/dev/null` via the `run_claude()` wrapper. This prevents MCP's stdio-based communication from competing with the terminal's stdin, which was the root cause of MCP initialization hangs. See `docs/progress/` for the investigation history.
 
 ## Evaluation Framework (LLM-as-Judge)
 

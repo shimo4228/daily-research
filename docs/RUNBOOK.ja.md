@@ -57,10 +57,17 @@ launchctl start com.daily-research
 
 ```
 daily-research.sh
+├── MCP ヘルスチェック (Haiku, --max-turns 1)
+│   ├── 成功 → Pass 2 で Mem0 有効
+│   └── 失敗 → WARN、Mem0 なしで続行
 ├── Pass 1: Opus テーマ選定 (--max-turns 15, stream-json)
 │   ├── 成功 → テーマを Sonnet に渡す
 │   └── 失敗 → Sonnet フォールバック（テーマ選定 + リサーチを一括実行）
 ├── Pass 2: Sonnet リサーチ・執筆 (--max-turns 40)
+│   ├── Mem0 search-memories（利用可能時）
+│   ├── WebSearch + WebFetch（多段リサーチ）
+│   ├── レポート書き込み → Obsidian vault
+│   └── Mem0 add-memory（利用可能時）
 └── 品質評価: LLM-as-Judge (non-fatal, 6次元 x Opus)
     └── スコアを evals/scores.jsonl に追記
 ```
@@ -112,6 +119,8 @@ launchctl list | grep daily-research
 | `Fallback: Sonnet handles theme selection + research` | Sonnet が全作業を実行（正常なフォールバック動作） |
 | `SUMMARY Pass2: cost=... turns=... duration=...` | Pass 2 の実行統計 |
 | `SUMMARY Total: cost=... duration=...` | 両パス合計のコスト・所要時間 |
+| `MCP health check passed` | Mem0 MCP が応答、Pass 2 で有効化 |
+| `WARN: MCP health check failed (exit=N)` | Mem0 MCP 未応答、Mem0 なしで続行 |
 | `Completed successfully` | 全パス完了 |
 | `[eval] Evaluation start: DATE=...` | 評価フレームワーク開始 |
 | `[eval] Found N report(s)` | 評価対象レポートの検出数 |
@@ -203,7 +212,7 @@ ls "/path/to/your/obsidian/vault/daily-research/"
 # iCloud 同期を促す: iOS のファイルアプリを開くか、しばらく待つ
 ```
 
-### 8. プラグインによる実行遅延・ハング
+### 7. プラグインによる実行遅延・ハング
 
 **症状**: Pass 1 が通常の3〜5分ではなく30分以上かかる、または無限にハングする。ログに `No result event found in stream` が出力される。
 
@@ -228,7 +237,7 @@ ps aux | grep -E "pyright|sourcekit|claude-mem|sequential|japanese|ableton"
 
 **備考**: 現時点では「全プラグイン一括無効化」の設定は存在しない。各プラグインを個別に列挙する必要がある。[追跡 Issue](https://github.com/anthropics/claude-code/issues/20873) 参照。
 
-### 7. テーマの重複
+### 8. テーマの重複
 
 **症状**: 最近と同じテーマのレポートが生成される。
 
@@ -242,6 +251,28 @@ cat past_topics.json | python3 -m json.tool
 # 破損している場合はバックアップから復元
 cp past_topics.json.bak past_topics.json
 ```
+
+### 9. MCP ヘルスチェック失敗（Mem0 利用不可）
+
+**症状**: ログに `WARN: MCP health check failed (exit=N). Continuing without Mem0.` が出力される。macOS 通知に「MCP ヘルスチェック失敗（Mem0 なしで続行）」と表示される。
+
+**原因**: Mem0 MCP サーバーが応答しない、未設定、またはハングしている。これは非致命的 — パイプラインは Mem0 のメモリ機能なしで続行する。
+
+**影響**: レポートは通常通り生成されるが、Mem0 の永続メモリ（過去のリサーチからのセッション横断コンテキスト）は利用されない。
+
+**対処**（Mem0 機能を使いたい場合）:
+```bash
+# Mem0 MCP サーバーが起動しているか確認
+# （MCP 設定に依存）
+
+# Claude Code の MCP 設定を確認
+cat ~/.claude.json | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin).get('mcpServers',{}), indent=2))"
+
+# MCP を手動テスト（別のターミナルで）
+claude -p "Search memories for test" --max-turns 1 --model haiku
+```
+
+**備考**: Mem0 を使用していない場合、この警告は無視して問題ない。ヘルスチェック失敗時、パイプラインは自動的に Pass 2 の allowedTools から Mem0 ツールを除外する。
 
 ## ロールバック手順
 

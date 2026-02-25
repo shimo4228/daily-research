@@ -11,6 +11,10 @@ Every morning at 5:00 AM, Claude autonomously browses the web, selects trending 
 ```
 launchd (AM 5:00)
   └─ daily-research.sh
+       ├── MCP health check (Haiku)
+       │     ├── OK → Mem0 enabled
+       │     └── Fail → continue without Mem0
+       │
        ├── Pass 1: Opus (theme selection)
        │     ├── Read config.toml       # What to research
        │     ├── Read past_topics.json  # Avoid duplicates
@@ -18,9 +22,11 @@ launchd (AM 5:00)
        │     └── Score & select 2 topics
        │
        ├── Pass 2: Sonnet (research & writing)
+       │     ├── Mem0 search-memories   # Recall past insights (if available)
        │     ├── WebSearch x 20-30      # Multi-stage research
        │     ├── WebFetch (primary sources)
-       │     └── Write 2 reports        # → Obsidian vault
+       │     ├── Write 2 reports        # → Obsidian vault
+       │     └── Mem0 add-memory        # Store key findings (if available)
        │
        └── Eval: Opus (quality scoring, non-fatal)
              ├── 6 dimensions x 2 reports
@@ -39,6 +45,7 @@ The key insight: Claude Code's `-p` flag turns it into a fully autonomous resear
 - **Multi-stage deep research** -- Not just a summary; generates research questions, searches 20-30 times, cross-validates sources
 - **Weighted topic scoring** -- Novelty, momentum, buildability, and "whisper trend" scores
 - **Obsidian-native output** -- Reports with YAML frontmatter, ready for your vault
+- **Persistent memory (Mem0)** -- Optional MCP integration recalls past research insights and stores new findings across sessions
 - **Robust execution** -- Lock files, log rotation, auth checks, macOS notifications, automatic fallback
 - **Automated quality evaluation** -- LLM-as-Judge scores each report on 6 dimensions (30-point scale)
 
@@ -101,7 +108,8 @@ daily-research/
 ├── tests/
 │   ├── test-daily-research.bats     # Unit tests
 │   ├── test-e2e-mock.bats          # E2E mock tests
-│   └── test-eval.bats              # Evaluation framework tests
+│   ├── test-eval.bats              # Evaluation framework tests
+│   └── test-log-summary.bats       # log_summary parser tests
 └── docs/
     ├── RUNBOOK.md / RUNBOOK.ja.md   # Operations guide
     ├── CONTRIB.md / CONTRIB.ja.md   # Development guide
@@ -186,6 +194,8 @@ Then reload: `launchctl unload ... && launchctl load ...`
 | Shell scripts only | Zero dependencies beyond Claude Code CLI; trivial to understand and modify |
 | TOML config | Human-readable, supports nested structures for tracks/criteria |
 | LLM-as-Judge (non-fatal) | Automated quality feedback without blocking production; 6 independent dimensions reduce single-score bias |
+| `< /dev/null` stdin redirect | Prevents MCP stdio communication from conflicting with terminal stdin (root cause of MCP hangs) |
+| MCP health check (non-fatal) | Verifies Mem0 MCP before Pass 1; on failure, excludes Mem0 tools and continues |
 | `stream-json` for Pass 1 | Captures tool usage counts alongside result for cost/performance monitoring |
 
 ## Gotchas

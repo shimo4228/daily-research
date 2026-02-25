@@ -12,7 +12,7 @@ REAL_PROJECT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 
 setup() {
   MOCK_HOME="$(mktemp -d)"
-  MOCK_PROJECT="$MOCK_HOME/MyAI_Lab/daily-research-mem0-test"
+  MOCK_PROJECT="$MOCK_HOME/MyAI_Lab/daily-research"
 
   # プロジェクト構造を再現
   mkdir -p "$MOCK_PROJECT/scripts"

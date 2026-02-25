@@ -48,19 +48,19 @@ teardown() {
 # === launchd plist validation ===
 
 @test "plist is valid XML" {
-  plutil -lint "$PROJECT_DIR/com.daily-research-mem0.plist"
+  plutil -lint "$PROJECT_DIR/com.shimomoto.daily-research.plist"
 }
 
 @test "plist points to correct script path" {
   plutil -extract ProgramArguments json \
-    "$PROJECT_DIR/com.daily-research-mem0.plist" \
+    "$PROJECT_DIR/com.shimomoto.daily-research.plist" \
     -o - | grep -q "daily-research.sh"
 }
 
 @test "plist schedule is set to 5:00" {
   local hour
   hour=$(plutil -extract StartCalendarInterval.Hour raw \
-    "$PROJECT_DIR/com.daily-research-mem0.plist")
+    "$PROJECT_DIR/com.shimomoto.daily-research.plist")
   [ "$hour" = "5" ]
 }
 

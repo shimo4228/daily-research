@@ -16,10 +16,10 @@ fi
 
 # === 変数 ===
 DATE=$(date +%Y-%m-%d)
-PROJECT_DIR="$HOME/MyAI_Lab/daily-research-mem0-test"
+PROJECT_DIR="$HOME/MyAI_Lab/daily-research"
 LOG_DIR="$PROJECT_DIR/logs"
 LOG_FILE="$LOG_DIR/$DATE.log"
-LOCK_FILE="$PROJECT_DIR/.daily-research-mem0.lock"
+LOCK_FILE="$PROJECT_DIR/.daily-research.lock"
 
 mkdir -p "$LOG_DIR"
 chmod 700 "$LOG_DIR"
@@ -207,7 +207,7 @@ if ! command -v claude &> /dev/null; then
   exit 1
 fi
 
-# claude を絶対パスに解決（gtimeout 経由の execvp で symlink 一時消失を回避）
+# claude を絶対パスに解決（timeout 経由の実行で symlink 解決を確実にする）
 CLAUDE_CMD=$(command -v claude)
 [ "${DEBUG:-}" = "1" ] && log "DEBUG: CLAUDE_CMD=$CLAUDE_CMD"
 
@@ -229,11 +229,13 @@ CLAUDE_TIMEOUT=60 run_claude -p "Say OK" \
   2>> "$LOG_FILE" > /dev/null || MCP_PROBE_EXIT=$?
 
 if [ $MCP_PROBE_EXIT -ne 0 ]; then
-  log "ERROR: MCP health check failed (exit=$MCP_PROBE_EXIT). Mem0 MCP may be hanging."
-  notify "MCP ヘルスチェック失敗" "Daily Research Mem0"
-  exit 1
+  log "WARN: MCP health check failed (exit=$MCP_PROBE_EXIT). Continuing without Mem0."
+  notify "MCP ヘルスチェック失敗（Mem0 なしで続行）" "Daily Research"
+  MEM0_AVAILABLE=false
+else
+  log "MCP health check passed"
+  MEM0_AVAILABLE=true
 fi
-log "MCP health check passed"
 
 # === 実行 ===
 cd "$PROJECT_DIR"
@@ -333,12 +335,19 @@ fi
 # === Pass 2: リサーチ・執筆 (Sonnet) ===
 log "=== Pass 2: Research & writing (Sonnet) ==="
 
+# Mem0 の利用可否に応じて allowedTools を構成
+if [ "${MEM0_AVAILABLE:-false}" = true ]; then
+  PASS2_TOOLS="WebSearch,WebFetch,Read,Write,Edit,Glob,Grep,mcp__mem0__search-memories,mcp__mem0__add-memory"
+else
+  PASS2_TOOLS="WebSearch,WebFetch,Read,Write,Edit,Glob,Grep"
+fi
+
 PASS2_EXIT=0
 PASS2_JSON=""
 PASS2_JSON=$(CLAUDE_TIMEOUT=900 run_claude -p "$TASK_PROMPT" \
   --permission-mode default \
   --append-system-prompt-file prompts/research-protocol.md \
-  --allowedTools "WebSearch,WebFetch,Read,Write,Edit,Glob,Grep,mcp__mem0__search-memories,mcp__mem0__add-memory" \
+  --allowedTools "$PASS2_TOOLS" \
   --max-turns 40 \
   --model sonnet \
   --output-format json \

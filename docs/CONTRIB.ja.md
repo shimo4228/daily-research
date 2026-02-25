@@ -44,7 +44,8 @@ daily-research/
 ├── tests/
 │   ├── test-daily-research.bats        # ユニットテスト（構文、設定、セキュリティ）
 │   ├── test-e2e-mock.bats             # E2E モックテスト
-│   └── test-eval.bats                  # 評価フレームワークテスト
+│   ├── test-eval.bats                  # 評価フレームワークテスト
+│   └── test-log-summary.bats          # log_summary パーサーテスト
 ├── logs/                                # 実行ログ（日付別、30日自動ローテーション）
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md      # 運用ガイド
@@ -59,7 +60,7 @@ daily-research/
 
 | スクリプト | 説明 | 使い方 |
 |-----------|------|--------|
-| `scripts/daily-research.sh` | メインエントリポイント。2パス実行: Pass 1（Opus テーマ選定）→ Pass 2（Sonnet リサーチ・執筆）。環境サニタイズ、認証チェック、JSON バリデーション、Sonnet フォールバック、実行後の評価フックを含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
+| `scripts/daily-research.sh` | メインエントリポイント。MCP ヘルスチェック → 2パス実行: Pass 1（Opus テーマ選定）→ Pass 2（Sonnet リサーチ・執筆 + オプショナル Mem0）。環境サニタイズ、認証チェック、MCP ヘルスチェック、JSON バリデーション、Sonnet フォールバック、Mem0 グレースフルデグラデーション、実行後の評価フックを含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
 | `scripts/eval-run.sh` | LLM-as-Judge 評価。各レポートを6次元（各1-5点）で Opus が採点。Pass 2 成功後に自動呼び出し。non-fatal: 失敗してもメインスクリプトの exit code に影響しない。 | `./scripts/eval-run.sh 2026-02-21` |
 | `scripts/check-auth.sh` | `claude --version` で OAuth トークンの有効性を確認。失敗時に macOS 通知を表示。 | `./scripts/check-auth.sh` |
 
@@ -70,6 +71,8 @@ daily-research/
 | `PATH` | plist + スクリプト | `/opt/homebrew/bin`, `/usr/local/bin`, `$HOME/.claude/local` を含む必要がある |
 | `HOME` | plist | Claude CLI が認証トークンを見つけるために必要 |
 | `ANTHROPIC_API_KEY` | **未設定であること** | 設定されていると Max プランではなく従量課金になる |
+| `CLAUDE_TIMEOUT` | スクリプト（内部） | `run_claude()` 経由の `claude -p` 呼び出しのタイムアウト（秒）。0 = 無制限。MCP ヘルスチェックは 60秒、Pass 2 は 900秒 |
+| `DEBUG` | ユーザー設定 | `1` に設定するとデバッグログ（PATH、CLAUDE_CMD）を出力 |
 
 ## 設定ファイル (`config.toml`)
 
@@ -135,6 +138,7 @@ bats tests/
 # - 評価フレームワーク: judge プロンプトファイル、プレースホルダ、バイアス緩和指示
 # - scores.example.jsonl スキーマバリデーション
 # - eval-run.sh 統合フック（daily-research.sh 内の呼び出し確認）
+# - log_summary パーサー: NDJSON、プレーン JSON、配列 JSON、不正入力の処理
 ```
 
 ## Claude Code CLI フラグ
@@ -144,6 +148,7 @@ bats tests/
 | フラグ | 値 | 用途 |
 |--------|---|------|
 | `-p` | theme-selection-prompt.md の内容 | 非対話モード |
+| `--permission-mode` | `default` | デフォルトの権限処理を使用 |
 | `--allowedTools` | `WebSearch,WebFetch,Read,Glob,Grep` | 読み取り専用ツール（ファイル書き込み不可） |
 | `--max-turns` | `15` | テーマ選定のスコープ制限 |
 | `--model` | `opus` | テーマ品質のための深い推論 |
@@ -156,18 +161,43 @@ bats tests/
 | フラグ | 値 | 用途 |
 |--------|---|------|
 | `-p` | task-prompt.md の内容（+ Pass 1 成功時はテーマ JSON） | 非対話モード |
+| `--permission-mode` | `default` | デフォルトの権限処理を使用 |
 | `--append-system-prompt-file` | `prompts/research-protocol.md` | デフォルト能力を保持しつつリサーチプロトコルを注入 |
-| `--allowedTools` | `WebSearch,WebFetch,Read,Write,Edit,Glob,Grep` | リサーチ・執筆用のフルツールアクセス |
+| `--allowedTools` | `WebSearch,WebFetch,Read,Write,Edit,Glob,Grep[,mcp__mem0__*]` | リサーチ・執筆用のフルツールアクセス。Mem0 ツール（`mcp__mem0__search-memories`, `mcp__mem0__add-memory`）は MCP ヘルスチェック成功時のみ追加 |
 | `--max-turns` | `40` | リサーチ深度の目安 |
 | `--model` | `sonnet` | 速度とコスト効率 |
 | `--output-format` | `json` | メタデータ付き構造化出力 |
 | `--no-session-persistence` | - | 毎回クリーンなコンテキストで実行 |
+
+**備考**: 全 `claude -p` 呼び出しは `run_claude()` ラッパー経由で `< /dev/null` stdin リダイレクトを使用する。これにより MCP の stdio 通信がターミナルの stdin と競合するのを防止する（MCP ハングの根本原因だった）。
 
 ## アーキテクチャ補足
 
 2パス設計は、ブラインド LLM-as-Judge 評価で Opus のテーマ選定が +28% 優れていたことに基づく。追加コストは ~$0.30/回。詳細は `docs/progress/agent-team-evaluation.md` 参照。
 
 タイムアウトは `--max-turns` で制御する。外部プロセスタイムアウト（gtimeout/timeout）はシグナルで claude を kill し、データ損失を引き起こすため不使用。詳細は `docs/progress/postmortem-2026-02-20.md` 参照。
+
+## Mem0 MCP 統合
+
+パイプラインはオプショナルで [Mem0](https://mem0.ai) を MCP（Model Context Protocol）経由で統合し、リサーチセッション間の永続メモリを提供する。
+
+### 動作の流れ
+
+1. **MCP ヘルスチェック**（Pass 1 前）: Haiku プローブ（`"Say OK"`、60秒タイムアウト）で MCP サーバーの応答を確認。失敗してもパイプラインは Mem0 なしで続行（非致命的）。
+
+2. **Pass 2 — メモリ検索**（research-protocol.md の Step 1.5）: Sonnet が `mcp__mem0__search-memories` を呼び出し、過去のリサーチセッションからコンテキストを取得。
+
+3. **Pass 2 — メモリ記録**（research-protocol.md の Step 6）: レポート書き込み後、Sonnet が `mcp__mem0__add-memory` を呼び出し、主要な知見を将来のセッション用に保存。
+
+### グレースフルデグラデーション
+
+- MCP ヘルスチェック失敗時: `MEM0_AVAILABLE=false`、Mem0 ツールを `--allowedTools` から除外
+- Mem0 ツールが利用可能でも Pass 2 中に失敗した場合: research-protocol.md の指示に従いスキップして続行
+- Mem0 の使用有無にかかわらず、レポートの構造は同一
+
+### stdin リダイレクト (`< /dev/null`)
+
+全 `claude -p` 呼び出しは `run_claude()` ラッパー経由で stdin を `/dev/null` からリダイレクトする。これにより MCP の stdio ベースの通信がターミナルの stdin と競合するのを防止する（MCP 初期化ハングの根本原因だった）。調査の経緯は `docs/progress/` を参照。
 
 ## 評価フレームワーク (LLM-as-Judge)
 

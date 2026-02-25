@@ -57,10 +57,17 @@ launchctl start com.daily-research
 
 ```
 daily-research.sh
+├── MCP health check (Haiku, --max-turns 1)
+│   ├── Success → Mem0 enabled for Pass 2
+│   └── Failure → WARN, continue without Mem0
 ├── Pass 1: Opus theme selection (--max-turns 15, stream-json)
 │   ├── Success → Pass themes to Sonnet
 │   └── Failure → Sonnet fallback (handles theme selection + research)
 ├── Pass 2: Sonnet research & writing (--max-turns 40)
+│   ├── Mem0 search-memories (if available)
+│   ├── WebSearch + WebFetch (multi-stage research)
+│   ├── Write reports → Obsidian vault
+│   └── Mem0 add-memory (if available)
 └── Evaluation: LLM-as-Judge (non-fatal, 6 dimensions x Opus)
     └── Scores appended to evals/scores.jsonl
 ```
@@ -112,6 +119,8 @@ launchctl list | grep daily-research
 | `Fallback: Sonnet handles theme selection + research` | Sonnet is doing all work (normal fallback behavior) |
 | `SUMMARY Pass2: cost=... turns=... duration=...` | Pass 2 execution statistics |
 | `SUMMARY Total: cost=... duration=...` | Combined cost/duration across both passes |
+| `MCP health check passed` | Mem0 MCP is responsive, enabled for Pass 2 |
+| `WARN: MCP health check failed (exit=N)` | Mem0 MCP not responding, continuing without Mem0 |
 | `Completed successfully` | Both passes completed |
 | `[eval] Evaluation start: DATE=...` | Evaluation framework started |
 | `[eval] Found N report(s)` | Number of reports found for evaluation |
@@ -203,7 +212,7 @@ ls "/path/to/your/obsidian/vault/daily-research/"
 # Force iCloud sync: open Files app on iOS or wait
 ```
 
-### 8. Slow Execution or Hangs Due to Plugins
+### 7. Slow Execution or Hangs Due to Plugins
 
 **Symptoms**: Pass 1 takes over 30 minutes instead of the normal 3-5 minutes, or hangs indefinitely. Log shows `No result event found in stream`.
 
@@ -228,7 +237,7 @@ ps aux | grep -E "pyright|sourcekit|claude-mem|sequential|japanese|ableton"
 
 **Note**: There is no blanket "disable all plugins" option yet. Each plugin must be listed explicitly. See [tracking issue](https://github.com/anthropics/claude-code/issues/20873).
 
-### 7. Duplicate Topics
+### 8. Duplicate Topics
 
 **Symptoms**: Reports cover the same theme as recent days.
 
@@ -242,6 +251,28 @@ cat past_topics.json | python3 -m json.tool
 # Restore from backup if corrupted
 cp past_topics.json.bak past_topics.json
 ```
+
+### 9. MCP Health Check Failed (Mem0 Unavailable)
+
+**Symptoms**: Log shows `WARN: MCP health check failed (exit=N). Continuing without Mem0.` macOS notification says "MCP ヘルスチェック失敗（Mem0 なしで続行）".
+
+**Cause**: Mem0 MCP server is not responding, not configured, or hanging. This is non-fatal -- the pipeline continues without Mem0 memory features.
+
+**Impact**: Reports are generated normally, but without Mem0's persistent memory (no cross-session context from previous research).
+
+**Fix** (if you want Mem0 features):
+```bash
+# Check if Mem0 MCP server is running
+# (depends on your MCP configuration)
+
+# Verify MCP settings in Claude Code
+cat ~/.claude.json | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin).get('mcpServers',{}), indent=2))"
+
+# Test MCP manually (in a separate terminal)
+claude -p "Search memories for test" --max-turns 1 --model haiku
+```
+
+**Note**: If you don't use Mem0, this warning can be safely ignored. The pipeline automatically excludes Mem0 tools from Pass 2's allowedTools when the health check fails.
 
 ## Rollback Procedures
 

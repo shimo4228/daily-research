@@ -34,7 +34,8 @@ daily-research/
 ├── tests/
 │   ├── test-daily-research.bats     # 構文・設定・セキュリティテスト
 │   ├── test-e2e-mock.bats          # E2E モックテスト
-│   └── test-eval.bats              # 評価フレームワークテスト
+│   ├── test-eval.bats              # 評価フレームワークテスト
+│   └── test-log-summary.bats       # log_summary パーサーテスト
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md   # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md   # 開発ガイド
@@ -75,7 +76,9 @@ tail -f logs/$(date +%Y-%m-%d).log
 - **`--append-system-prompt-file`** を使用（`--system-prompt-file` ではない）。Claude Code のデフォルト能力を保持するため
 - **`--allowedTools`** で最小権限。`--dangerously-skip-permissions` は使わない
   - Pass 1 (Opus): WebSearch, WebFetch, Read, Glob, Grep
-  - Pass 2 (Sonnet): WebSearch, WebFetch, Read, Write, Edit, Glob, Grep
+  - Pass 2 (Sonnet): WebSearch, WebFetch, Read, Write, Edit, Glob, Grep, mcp__mem0__search-memories, mcp__mem0__add-memory
+- **`< /dev/null`**: 全 `claude -p` 呼び出しで stdin をリダイレクト。MCP stdio 通信とのコンフリクトを防止
+- **MCP ヘルスチェック**: Pass 1 前に Haiku で疎通確認。MCP ハング時は即座に exit 1
 - **シェルスクリプトのみ** で構成。Python や追加フレームワークは導入しない
 
 ### 設定ファイル
@@ -107,13 +110,19 @@ tail -f logs/$(date +%Y-%m-%d).log
 - **統計規律**: n < 20 の比較は「暫定シグナル」。バージョン比較は n ≥ 20 から有効とみなす
 - 評価失敗は daily-research.sh の exit code に影響しない（non-fatal）
 
-### 過去に試行・棚上げした機能
+### Mem0 MCP 統合
+
+- Pass 2 で Mem0 の `search-memories` / `add-memory` を使用（allowedTools に追加済み）
+- `research-protocol.md` に Mem0 参照ステップ (Step 1.5) と記録ステップ (Step 6) を追加
+- MCP ハング対策: `< /dev/null` で stdin 競合を解消、MCP ヘルスチェックで事前検知
+
+### 過去に試行・棄却した機能
 
 - **エージェントチーム版**: コスト・時間対効果が低く棄却。詳細は `docs/progress/` のポストモーテム参照。コードは git history (`a79074e`) で復元可能
-- **Mem0 永続メモリ**: MCP 初期化ハングのため棚上げ。復元手順は `docs/MEM0-RESTORE.md`
 
 ## Status
 
 - 本番稼働中。毎朝 AM 5:00 に launchd で自動実行
 - Opus テーマ選定 + Sonnet リサーチ・執筆の2パス方式（E2E 検証済み、2026-02-20）
+- Mem0 MCP 統合済み（`feature/mem0-stability-test` → main マージ、2026-02-26）
 - Pass 1 失敗時は Sonnet 一括フォールバックで継続稼働
