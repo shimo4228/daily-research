@@ -5,7 +5,7 @@ logs/
 .DS_Store
 
 # Runtime
-.daily-research.lock
+.daily-research*.lock
 
 # Personal data (use *.example.* as templates)
 config.toml
@@ -16,6 +16,7 @@ past_topics.json.bak
 .mcp.json
 
 # Personal launchd plist (use com.example.daily-research.plist as template)
+com.daily-research*.plist
 com.*.daily-research.plist
 !com.example.daily-research.plist
 

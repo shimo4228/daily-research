@@ -4,6 +4,8 @@ set -euo pipefail
 # === 環境サニタイズ ===
 # APIキーが設定されていると従量課金になるため確実に除去
 unset ANTHROPIC_API_KEY
+# CLAUDECODEが残っているとネストチェックや起動挙動が変わるため除去
+unset CLAUDECODE 2>/dev/null || true
 
 # launchd環境はPATHが最小限。必要なパスを明示的に設定
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
@@ -14,10 +16,10 @@ fi
 
 # === 変数 ===
 DATE=$(date +%Y-%m-%d)
-PROJECT_DIR="$HOME/MyAI_Lab/daily-research"
+PROJECT_DIR="$HOME/MyAI_Lab/daily-research-mem0-test"
 LOG_DIR="$PROJECT_DIR/logs"
 LOG_FILE="$LOG_DIR/$DATE.log"
-LOCK_FILE="$PROJECT_DIR/.daily-research.lock"
+LOCK_FILE="$PROJECT_DIR/.daily-research-mem0.lock"
 
 mkdir -p "$LOG_DIR"
 chmod 700 "$LOG_DIR"
@@ -29,16 +31,26 @@ log() {
 }
 
 notify() {
-  local body="${1//\"/}"
-  local title="${2//\"/}"
+  local body="$1"
+  local title="$2"
+  # AppleScript インジェクション防止: バックスラッシュ → ダブルクォートの順でエスケープ
+  body="${body//\\/\\\\}"
+  body="${body//\"/\\\"}"
+  title="${title//\\/\\\\}"
+  title="${title//\"/\\\"}"
   osascript -e "display notification \"$body\" with title \"$title\"" 2>/dev/null || true
 }
 
 # claude -p の実行ラッパー
 # CLAUDE_CMD は認証チェック時に絶対パスへ解決済み
-# タイムアウトは --max-turns で制御（gtimeout はプロセスグループ分離で claude を停止させるため不使用）
+# < /dev/null: MCP の stdio 通信とターミナル stdin の競合を防止
+# CLAUDE_TIMEOUT: 0 以外を設定すると timeout コマンドで制限（秒）
 run_claude() {
-  "$CLAUDE_CMD" "$@"
+  if [ "${CLAUDE_TIMEOUT:-0}" -gt 0 ] 2>/dev/null; then
+    timeout "$CLAUDE_TIMEOUT" "$CLAUDE_CMD" "$@" < /dev/null
+  else
+    "$CLAUDE_CMD" "$@" < /dev/null
+  fi
 }
 
 # stream-json の NDJSON を集約するパーサー（python3 -c 用コード）
@@ -180,23 +192,48 @@ find "$LOG_DIR" -name "*.log" -mtime +30 -delete 2>/dev/null || true
 
 log "=== Starting daily research ==="
 
+# === 依存コマンドチェック ===
+if ! command -v timeout &> /dev/null; then
+  log "ERROR: 'timeout' command not found. Install coreutils: brew install coreutils"
+  notify "timeout コマンドが見つかりません" "Daily Research Error"
+  exit 1
+fi
+
 # === 認証チェック ===
 if ! command -v claude &> /dev/null; then
   log "ERROR: claude command not found in PATH"
-  log "DEBUG: PATH=$PATH"
+  [ "${DEBUG:-}" = "1" ] && log "DEBUG: PATH=$PATH"
   notify "claude コマンドが見つかりません" "Daily Research Error"
   exit 1
 fi
 
 # claude を絶対パスに解決（gtimeout 経由の execvp で symlink 一時消失を回避）
 CLAUDE_CMD=$(command -v claude)
-log "DEBUG: CLAUDE_CMD=$CLAUDE_CMD"
+[ "${DEBUG:-}" = "1" ] && log "DEBUG: CLAUDE_CMD=$CLAUDE_CMD"
 
 if ! "$CLAUDE_CMD" --version >> "$LOG_FILE" 2>&1; then
   log "ERROR: Claude authentication may have expired"
   notify "Claude認証の更新が必要です。claude を起動してください。" "Daily Research Auth Error"
   exit 1
 fi
+
+# === MCP ヘルスチェック ===
+log "=== MCP health check ==="
+MCP_PROBE_EXIT=0
+CLAUDE_TIMEOUT=60 run_claude -p "Say OK" \
+  --max-turns 1 \
+  --model haiku \
+  --output-format json \
+  --no-session-persistence \
+  --permission-mode default \
+  2>> "$LOG_FILE" > /dev/null || MCP_PROBE_EXIT=$?
+
+if [ $MCP_PROBE_EXIT -ne 0 ]; then
+  log "ERROR: MCP health check failed (exit=$MCP_PROBE_EXIT). Mem0 MCP may be hanging."
+  notify "MCP ヘルスチェック失敗" "Daily Research Mem0"
+  exit 1
+fi
+log "MCP health check passed"
 
 # === 実行 ===
 cd "$PROJECT_DIR"
@@ -298,10 +335,10 @@ log "=== Pass 2: Research & writing (Sonnet) ==="
 
 PASS2_EXIT=0
 PASS2_JSON=""
-PASS2_JSON=$(run_claude -p "$TASK_PROMPT" \
+PASS2_JSON=$(CLAUDE_TIMEOUT=900 run_claude -p "$TASK_PROMPT" \
   --permission-mode default \
   --append-system-prompt-file prompts/research-protocol.md \
-  --allowedTools "WebSearch,WebFetch,Read,Write,Edit,Glob,Grep" \
+  --allowedTools "WebSearch,WebFetch,Read,Write,Edit,Glob,Grep,mcp__mem0__search-memories,mcp__mem0__add-memory" \
   --max-turns 40 \
   --model sonnet \
   --output-format json \
@@ -344,10 +381,14 @@ if [ $PASS2_EXIT -eq 0 ]; then
   notify "今朝のリサーチレポートが完成しました" "Daily Research"
 
   # === 品質評価 (non-fatal) ===
-  log "=== Starting evaluation ==="
-  "$PROJECT_DIR/scripts/eval-run.sh" "$DATE" >> "$LOG_FILE" 2>&1 || {
-    log "WARN: Evaluation failed (non-fatal)"
-  }
+  if [ -x "$PROJECT_DIR/scripts/eval-run.sh" ]; then
+    log "=== Starting evaluation ==="
+    "$PROJECT_DIR/scripts/eval-run.sh" "$DATE" >> "$LOG_FILE" 2>&1 || {
+      log "WARN: Evaluation failed (non-fatal)"
+    }
+  else
+    log "WARN: eval-run.sh not found or not executable, skipping evaluation"
+  fi
 else
   log "=== Failed with exit code $PASS2_EXIT ==="
   notify "リサーチ実行に失敗しました。ログを確認してください。" "Daily Research Error"

@@ -12,7 +12,7 @@ REAL_PROJECT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 
 setup() {
   MOCK_HOME="$(mktemp -d)"
-  MOCK_PROJECT="$MOCK_HOME/MyAI_Lab/daily-research"
+  MOCK_PROJECT="$MOCK_HOME/MyAI_Lab/daily-research-mem0-test"
 
   # プロジェクト構造を再現
   mkdir -p "$MOCK_PROJECT/scripts"
@@ -82,6 +82,12 @@ for arg in "$@"; do
   PREV="$arg"
 done
 
+# --- Haiku (MCP health check) ---
+if [[ "$MODEL" == "haiku" ]]; then
+  echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.001,"num_turns":1,"duration_ms":2000,"usage":{"input_tokens":100,"output_tokens":10}}'
+  exit 0
+fi
+
 # --- Opus (Pass 1: theme selection) ---
 if [[ "$MODEL" == "opus" ]]; then
   case "$SCENARIO" in
@@ -118,7 +124,8 @@ if [[ "$MODEL" == "sonnet" ]]; then
     PREV="$arg"
   done
 
-  echo '{"type":"result","subtype":"success","is_error":false,"duration_ms":100}'
+  # --output-format json は JSON array を返す場合がある
+  echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.05,"num_turns":3,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}}]'
   exit 0
 fi
 
@@ -131,7 +138,7 @@ MOCK_SCRIPT
 # === Helper ===
 
 run_script() {
-  HOME="$MOCK_HOME" bash "$MOCK_PROJECT/scripts/daily-research.sh" 2>&1
+  HOME="$MOCK_HOME" DEBUG=1 bash "$MOCK_PROJECT/scripts/daily-research.sh" 2>&1
 }
 
 get_log() {
@@ -155,6 +162,9 @@ get_log() {
 
   # 成功完了
   echo "$log_content" | grep -q "Completed successfully"
+
+  # MCP ヘルスチェック通過
+  echo "$log_content" | grep -q "MCP health check passed"
 
   # CLAUDE_CMD がログに記録されている
   echo "$log_content" | grep -q "DEBUG: CLAUDE_CMD="
@@ -245,10 +255,10 @@ get_log() {
   echo "$log_content" | grep -q "DEBUG: CLAUDE_CMD=$MOCK_HOME/.claude/local/claude"
 }
 
-# === Test: No gtimeout dependency ===
+# === Test: No legacy gtimeout dependency ===
 
-@test "E2E: script does not invoke gtimeout/timeout commands" {
-  # gtimeout/timeout はプロセスグループ分離で claude を停止させるため不使用
-  # コメント行を除外して、実行コードに gtimeout/TIMEOUT_CMD がないことを確認
+@test "E2E: script does not use gtimeout or legacy timeout patterns" {
+  # gtimeout/TIMEOUT_CMD/timeout_secs はレガシーパターン。timeout (coreutils) は意図的に使用している
+  # コメント行を除外して、レガシーパターンがないことを確認
   ! grep -v '^#\|^[[:space:]]*#' "$MOCK_PROJECT/scripts/daily-research.sh" | grep -q 'gtimeout\|TIMEOUT_CMD\|timeout_secs'
 }
