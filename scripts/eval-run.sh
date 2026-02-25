@@ -17,7 +17,7 @@ if ! [[ "$DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
   exit 1
 fi
 
-PROJECT_DIR="$HOME/MyAI_Lab/daily-research"
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PROMPTS_DIR="$PROJECT_DIR/evals/prompts"
 SCORES_FILE="$PROJECT_DIR/evals/scores.jsonl"
 PIPELINE_VERSION="2pass-opus-sonnet"
@@ -63,14 +63,25 @@ REPORT_DIR="${VAULT_PATH}/${OUTPUT_DIR}"
 log "=== Evaluation start: DATE=${DATE} ==="
 log "Report dir: ${REPORT_DIR}"
 
-# === 当日レポートを探す ===
-REPORTS=()
-while IFS= read -r -d '' f; do
-  REPORTS+=("$f")
-done < <(find "$REPORT_DIR" -maxdepth 1 -name "${DATE}_*.md" -print0 2>/dev/null || true)
+# === 当日レポートを探す（iCloud Drive 同期待ちリトライ付き） ===
+MAX_RETRIES=6
+RETRY_INTERVAL=5
+for attempt in $(seq 1 $MAX_RETRIES); do
+  REPORTS=()
+  while IFS= read -r -d '' f; do
+    REPORTS+=("$f")
+  done < <(find "$REPORT_DIR" -maxdepth 1 -name "${DATE}_*.md" -print0 2>/dev/null || true)
+
+  [ ${#REPORTS[@]} -gt 0 ] && break
+
+  if [ $attempt -lt $MAX_RETRIES ]; then
+    log "No reports found yet, retrying in ${RETRY_INTERVAL}s (${attempt}/${MAX_RETRIES})"
+    sleep $RETRY_INTERVAL
+  fi
+done
 
 if [ ${#REPORTS[@]} -eq 0 ]; then
-  log "WARN: No reports found for ${DATE} in ${REPORT_DIR}"
+  log "WARN: No reports found for ${DATE} in ${REPORT_DIR} after ${MAX_RETRIES} retries"
   exit 0
 fi
 
@@ -152,7 +163,11 @@ print(template.replace('{ARTICLE_CONTENT}', article))
     # スコア抽出（stdin 経由で渡す / フォールバック付き）
     SCORE=$(echo "$JUDGE_JSON" | python3 -c "
 import sys, json, re
-outer = json.loads(sys.stdin.read())
+raw = json.loads(sys.stdin.read())
+if isinstance(raw, list):
+    outer = next((e for e in raw if isinstance(e, dict) and e.get('type') == 'result'), {})
+else:
+    outer = raw
 result_text = outer.get('result', '').strip()
 
 # マークダウンコードフェンスを除去
