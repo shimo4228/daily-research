@@ -1,3 +1,5 @@
+Language: English | [日本語](README.ja.md)
+
 # daily-research
 
 Automated daily research reports powered by [Claude Code](https://docs.anthropic.com/en/docs/claude-code) non-interactive mode and macOS `launchd`.
