@@ -50,7 +50,6 @@ daily-research/
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md      # Operations guide
 │   ├── CONTRIB.md / CONTRIB.ja.md      # Development guide (this file)
-│   ├── MEM0-RESTORE.md                 # Mem0 restoration procedure
 │   ├── plans/                           # Future expansion plans
 │   └── progress/                        # Postmortems and evaluation reports
 └── .claude/settings.local.json          # Claude Code project permissions
@@ -60,7 +59,7 @@ daily-research/
 
 | Script | Description | Usage |
 |--------|-------------|-------|
-| `scripts/daily-research.sh` | Main entry point. MCP health check → 2-pass execution: Pass 1 (Opus theme selection) → Pass 2 (Sonnet research & writing with optional Mem0). Includes env sanitization, auth check, MCP health check, JSON validation, Sonnet fallback, Mem0 graceful degradation, and post-run evaluation hook. Called by launchd at AM 5:00. | `./scripts/daily-research.sh` |
+| `scripts/daily-research.sh` | Main entry point. 2-pass execution: Pass 1 (Opus theme selection) → Pass 2 (Sonnet research & writing). Includes env sanitization, auth check, JSON validation, Sonnet fallback, and post-run evaluation hook. Called by launchd at AM 5:00. | `./scripts/daily-research.sh` |
 | `scripts/eval-run.sh` | LLM-as-Judge evaluation. Scores each report on 6 dimensions (1-5 scale) using Opus. Called automatically after Pass 2 success. Non-fatal: failures do not affect the main exit code. | `./scripts/eval-run.sh 2026-02-21` |
 | `scripts/check-auth.sh` | Checks Claude OAuth token validity via `claude --version`. Shows macOS notification on failure. | `./scripts/check-auth.sh` |
 
@@ -163,13 +162,13 @@ bats tests/
 | `-p` | task-prompt.md content (+ theme JSON if Pass 1 succeeded) | Non-interactive mode |
 | `--permission-mode` | `default` | Use default permission handling |
 | `--append-system-prompt-file` | `prompts/research-protocol.md` | Inject research protocol while preserving defaults |
-| `--allowedTools` | `WebSearch,WebFetch,Read,Write,Edit,Glob,Grep[,mcp__mem0__*]` | Full tool access for research and writing. Mem0 tools (`mcp__mem0__search-memories`, `mcp__mem0__add-memory`) added only when MCP health check passes |
+| `--allowedTools` | `WebSearch,WebFetch,Read,Write,Edit,Glob,Grep` | Full tool access for research and writing |
 | `--max-turns` | `40` | Guideline limit for research depth |
 | `--model` | `sonnet` | Speed + cost efficiency |
 | `--output-format` | `json` | Structured output with metadata |
 | `--no-session-persistence` | - | Fresh context each run |
 
-**Note**: All `claude -p` calls use `< /dev/null` stdin redirect via the `run_claude()` wrapper. This prevents MCP stdio communication from conflicting with terminal stdin, which was a root cause of MCP hangs.
+**Note**: All `claude -p` calls use `< /dev/null` stdin redirect via the `run_claude()` wrapper. This prevents MCP stdio communication from conflicting with terminal stdin, which was a root cause of past MCP hangs.
 
 ## Architecture Notes
 
@@ -177,27 +176,9 @@ The 2-pass design was chosen based on blind LLM-as-Judge evaluation showing Opus
 
 Timeout is controlled via `--max-turns` rather than external process timeouts (gtimeout/timeout). External timeouts kill the claude process via signals, which can cause data loss. See `docs/progress/postmortem-2026-02-20.md` for details.
 
-## Mem0 MCP Integration
+## Persistent Memory Layer
 
-The pipeline optionally integrates with [Mem0](https://mem0.ai) via MCP (Model Context Protocol) to provide persistent memory across research sessions.
-
-### How It Works
-
-1. **MCP Health Check** (before Pass 1): A Haiku probe (`"Say OK"`, 60s timeout) verifies MCP server responsiveness. If it fails, the pipeline continues without Mem0 (non-fatal).
-
-2. **Pass 2 — Memory Search** (Step 1.5 in research-protocol.md): Sonnet calls `mcp__mem0__search-memories` to retrieve context from previous research sessions before starting new research.
-
-3. **Pass 2 — Memory Record** (Step 6 in research-protocol.md): After writing reports, Sonnet calls `mcp__mem0__add-memory` to store key findings for future sessions.
-
-### Graceful Degradation
-
-- If MCP health check fails: `MEM0_AVAILABLE=false`, Mem0 tools excluded from `--allowedTools`
-- If Mem0 tools are available but fail during Pass 2: research-protocol.md instructs Sonnet to skip and continue
-- Reports are identical in structure whether or not Mem0 is used
-
-### stdin Redirect (`< /dev/null`)
-
-All `claude -p` calls route stdin from `/dev/null` via the `run_claude()` wrapper. This prevents MCP's stdio-based communication from competing with the terminal's stdin, which was the root cause of MCP initialization hangs. See `docs/progress/` for the investigation history.
+A Mem0 Cloud MCP integration was merged on 2026-02-26 but remained in zero-operation state for 32 days due to a missing `.mcp.json` and a non-functional health check. It was removed on 2026-05-23. The successor is a local JSON-LD concept cluster graph (`graph.jsonld`) that eliminates external MCP dependency and the structural risk of silent failures. See `~/.claude/plans/cosmic-dazzling-fox.md` for the plan.
 
 ## Evaluation Framework (LLM-as-Judge)
 

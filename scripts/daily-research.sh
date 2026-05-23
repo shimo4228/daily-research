@@ -233,26 +233,6 @@ if ! "$CLAUDE_CMD" --version >> "$LOG_FILE" 2>&1; then
   exit 1
 fi
 
-# === MCP ヘルスチェック ===
-log "=== MCP health check ==="
-MCP_PROBE_EXIT=0
-CLAUDE_TIMEOUT=60 run_claude -p "Say OK" \
-  --max-turns 1 \
-  --model haiku \
-  --output-format json \
-  --no-session-persistence \
-  --permission-mode default \
-  2>> "$LOG_FILE" > /dev/null || MCP_PROBE_EXIT=$?
-
-if [ $MCP_PROBE_EXIT -ne 0 ]; then
-  log "WARN: MCP health check failed (exit=$MCP_PROBE_EXIT). Continuing without Mem0."
-  notify "MCP ヘルスチェック失敗（Mem0 なしで続行）" "Daily Research"
-  MEM0_AVAILABLE=false
-else
-  log "MCP health check passed"
-  MEM0_AVAILABLE=true
-fi
-
 # === 実行 ===
 cd "$PROJECT_DIR"
 
@@ -351,19 +331,12 @@ fi
 # === Pass 2: リサーチ・執筆 (Sonnet) ===
 log "=== Pass 2: Research & writing (Sonnet) ==="
 
-# Mem0 の利用可否に応じて allowedTools を構成
-if [ "${MEM0_AVAILABLE:-false}" = true ]; then
-  PASS2_TOOLS="WebSearch,WebFetch,Read,Write,Edit,Glob,Grep,mcp__mem0__search-memories,mcp__mem0__add-memory"
-else
-  PASS2_TOOLS="WebSearch,WebFetch,Read,Write,Edit,Glob,Grep"
-fi
-
 PASS2_EXIT=0
 PASS2_JSON=""
 PASS2_JSON=$(CLAUDE_TIMEOUT=900 run_claude -p "$TASK_PROMPT" \
   --permission-mode default \
   --append-system-prompt-file prompts/research-protocol.md \
-  --allowedTools "$PASS2_TOOLS" \
+  --allowedTools "WebSearch,WebFetch,Read,Write,Edit,Glob,Grep" \
   --max-turns 55 \
   --model sonnet \
   --output-format json \

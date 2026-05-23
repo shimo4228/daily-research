@@ -2,6 +2,8 @@
 
 作成日: 2026-02-18
 
+> **Status: SUPERSEDED (2026-05-23)** — Mem0 Cloud MCP 統合は 2026-02-26 マージ後 `.mcp.json` 不在 + ヘルスチェック形骸化で 32 日間ゼロ稼働。撤去済み。後継プランはローカル JSON-LD concept cluster graph (`graph.jsonld`)、詳細は `~/.claude/plans/cosmic-dazzling-fox.md`。本ファイルは履歴記録として保持する。
+
 ## 概要
 
 ### What

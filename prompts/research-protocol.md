@@ -22,19 +22,7 @@
 3. Read ツールで `templates/report-template.md` を読み込む
 4. 今日の日付を確認する
 
-テーマ選定は事前に完了済み（タスクプロンプトに含まれている）。以下の Step 1.5 から開始する。
-
-### Step 1.5: 永続メモリの参照（Mem0）
-
-Mem0 が利用可能な場合、以下を検索して後続ステップに活用する。
-Mem0 がエラーの場合はスキップして Step 2 に進む。
-
-1. `mcp__mem0__search-memories` で過去のリサーチテーマを検索
-   - query: "最近調査したテーマの傾向"
-   - user_id: "daily-research"
-2. `mcp__mem0__search-memories` で有効だったリサーチ手法を検索
-   - query: "有効だったリサーチ手法と検索クエリ"
-   - user_id: "daily-research"
+テーマ選定は事前に完了済み（タスクプロンプトに含まれている）。以下の Step 2 から開始する。
 
 ### Step 2: リサーチプロンプト動的生成
 
@@ -93,19 +81,7 @@ templates/report-template.md のフォーマットに厳密に従い、選定さ
    - 新しいエントリを追加（テーマ数分）
    - Write で書き戻し
 
-### Step 6: 学習メモリの記録（Mem0）
-
-Mem0 が利用可能な場合、以下を記録する。失敗してもレポート生成は完了扱い（Step 7 に進む）。
-
-1. 各テーマの要約を記録:
-   - `mcp__mem0__add-memory` で messages: [{ role: "user", content: "テーマ「{topic}」を調査した。{要約}" }]
-   - user_id: "daily-research", metadata: { category: "topic_history", date: "{date}" }
-
-2. 有効だったリサーチ手法を記録:
-   - `mcp__mem0__add-memory` で messages: [{ role: "user", content: "{具体的な検索手法}が有効だった" }]
-   - user_id: "daily-research", metadata: { category: "research_method", date: "{date}" }
-
-### Step 7: 完了報告
+### Step 6: 完了報告
 
 全ステップが完了したら、以下の形式で完了を報告:
 

@@ -39,7 +39,6 @@ daily-research/
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md   # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md   # 開発ガイド
-│   ├── MEM0-RESTORE.md              # Mem0 復元手順
 │   ├── plans/                       # 将来の拡張プラン（eval-framework-plan.md など）
 │   └── progress/                    # ポストモーテム・評価レポート
 └── com.example.daily-research.plist  # launchd plist テンプレート
@@ -76,9 +75,8 @@ tail -f logs/$(date +%Y-%m-%d).log
 - **`--append-system-prompt-file`** を使用（`--system-prompt-file` ではない）。Claude Code のデフォルト能力を保持するため
 - **`--allowedTools`** で最小権限。`--dangerously-skip-permissions` は使わない
   - Pass 1 (Opus): WebSearch, WebFetch, Read, Glob, Grep
-  - Pass 2 (Sonnet): WebSearch, WebFetch, Read, Write, Edit, Glob, Grep, mcp__mem0__search-memories, mcp__mem0__add-memory
-- **`< /dev/null`**: 全 `claude -p` 呼び出しで stdin をリダイレクト。MCP stdio 通信とのコンフリクトを防止
-- **MCP ヘルスチェック**: Pass 1 前に Haiku で疎通確認。MCP ハング時は即座に exit 1
+  - Pass 2 (Sonnet): WebSearch, WebFetch, Read, Write, Edit, Glob, Grep
+- **`< /dev/null`**: 全 `claude -p` 呼び出しで stdin をリダイレクト。他 MCP の stdio 通信とのコンフリクトを防止
 - **シェルスクリプトのみ** で構成。Python や追加フレームワークは導入しない
 
 ### 設定ファイル
@@ -109,21 +107,16 @@ tail -f logs/$(date +%Y-%m-%d).log
 - **6次元ルーブリック**: Factual Grounding / Depth / Coherence / Specificity / Novelty / Actionability（各1-5点、30点満点）
 - **スコアログ**: `evals/scores.jsonl` に追記（.gitignore）。スキーマは `scores.example.jsonl` を参照
 
-### Mem0 MCP 統合
-
-- Pass 2 で Mem0 の `search-memories` / `add-memory` を使用（allowedTools に追加済み）
-- `research-protocol.md` に Mem0 参照ステップ (Step 1.5) と記録ステップ (Step 6) を追加
-- MCP ハング対策: `< /dev/null` で stdin 競合を解消、MCP ヘルスチェックで事前検知
-
 ### 過去に試行・棄却した機能
 
 - **エージェントチーム版**: コスト・時間対効果が低く棄却。詳細は `docs/progress/` のポストモーテム参照。コードは git history (`a79074e`) で復元可能
+- **Mem0 Cloud MCP 統合**: 2026-02-26 に main へマージしたが `.mcp.json` 不在 + ヘルスチェック形骸化により 32 日間ゼロ稼働。2026-05-23 撤去。今後はローカル JSON-LD concept cluster graph (`graph.jsonld`) で永続メモリ層を構築する方針
 
 ## Status
 
 - 本番稼働中。毎朝 AM 5:00 に launchd で自動実行
 - Opus テーマ選定 + Sonnet リサーチ・執筆の2パス方式（E2E 検証済み、2026-02-20）
 - 3トラック構成: tech / personal / social（トラック数は config.toml から動的取得）
-- Mem0 MCP 統合済み（`feature/mem0-stability-test` → main マージ、2026-02-26）
 - Pass 1 失敗時は Sonnet 一括フォールバックで継続稼働
 - 評価フレームワーク (LLM-as-Judge) は運用停止中
+- 永続メモリ層: JSON-LD concept cluster graph 導入予定（Mem0 撤去後）

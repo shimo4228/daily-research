@@ -50,7 +50,6 @@ daily-research/
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md      # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md      # 開発ガイド（本ファイル）
-│   ├── MEM0-RESTORE.md                 # Mem0 復元手順
 │   ├── plans/                           # 将来の拡張プラン
 │   └── progress/                        # ポストモーテム・評価レポート
 └── .claude/settings.local.json          # Claude Code プロジェクト権限設定
@@ -60,7 +59,7 @@ daily-research/
 
 | スクリプト | 説明 | 使い方 |
 |-----------|------|--------|
-| `scripts/daily-research.sh` | メインエントリポイント。MCP ヘルスチェック → 2パス実行: Pass 1（Opus テーマ選定）→ Pass 2（Sonnet リサーチ・執筆 + オプショナル Mem0）。環境サニタイズ、認証チェック、MCP ヘルスチェック、JSON バリデーション、Sonnet フォールバック、Mem0 グレースフルデグラデーション、実行後の評価フックを含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
+| `scripts/daily-research.sh` | メインエントリポイント。2パス実行: Pass 1（Opus テーマ選定）→ Pass 2（Sonnet リサーチ・執筆）。環境サニタイズ、認証チェック、JSON バリデーション、Sonnet フォールバック、実行後の評価フックを含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
 | `scripts/eval-run.sh` | LLM-as-Judge 評価。各レポートを6次元（各1-5点）で Opus が採点。Pass 2 成功後に自動呼び出し。non-fatal: 失敗してもメインスクリプトの exit code に影響しない。 | `./scripts/eval-run.sh 2026-02-21` |
 | `scripts/check-auth.sh` | `claude --version` で OAuth トークンの有効性を確認。失敗時に macOS 通知を表示。 | `./scripts/check-auth.sh` |
 
@@ -163,13 +162,13 @@ bats tests/
 | `-p` | task-prompt.md の内容（+ Pass 1 成功時はテーマ JSON） | 非対話モード |
 | `--permission-mode` | `default` | デフォルトの権限処理を使用 |
 | `--append-system-prompt-file` | `prompts/research-protocol.md` | デフォルト能力を保持しつつリサーチプロトコルを注入 |
-| `--allowedTools` | `WebSearch,WebFetch,Read,Write,Edit,Glob,Grep[,mcp__mem0__*]` | リサーチ・執筆用のフルツールアクセス。Mem0 ツール（`mcp__mem0__search-memories`, `mcp__mem0__add-memory`）は MCP ヘルスチェック成功時のみ追加 |
+| `--allowedTools` | `WebSearch,WebFetch,Read,Write,Edit,Glob,Grep` | リサーチ・執筆用のフルツールアクセス |
 | `--max-turns` | `40` | リサーチ深度の目安 |
 | `--model` | `sonnet` | 速度とコスト効率 |
 | `--output-format` | `json` | メタデータ付き構造化出力 |
 | `--no-session-persistence` | - | 毎回クリーンなコンテキストで実行 |
 
-**備考**: 全 `claude -p` 呼び出しは `run_claude()` ラッパー経由で `< /dev/null` stdin リダイレクトを使用する。これにより MCP の stdio 通信がターミナルの stdin と競合するのを防止する（MCP ハングの根本原因だった）。
+**備考**: 全 `claude -p` 呼び出しは `run_claude()` ラッパー経由で `< /dev/null` stdin リダイレクトを使用する。これにより MCP の stdio 通信がターミナルの stdin と競合するのを防止する（過去 MCP ハングの根本原因だった）。
 
 ## アーキテクチャ補足
 
@@ -177,27 +176,9 @@ bats tests/
 
 タイムアウトは `--max-turns` で制御する。外部プロセスタイムアウト（gtimeout/timeout）はシグナルで claude を kill し、データ損失を引き起こすため不使用。詳細は `docs/progress/postmortem-2026-02-20.md` 参照。
 
-## Mem0 MCP 統合
+## 永続メモリ層
 
-パイプラインはオプショナルで [Mem0](https://mem0.ai) を MCP（Model Context Protocol）経由で統合し、リサーチセッション間の永続メモリを提供する。
-
-### 動作の流れ
-
-1. **MCP ヘルスチェック**（Pass 1 前）: Haiku プローブ（`"Say OK"`、60秒タイムアウト）で MCP サーバーの応答を確認。失敗してもパイプラインは Mem0 なしで続行（非致命的）。
-
-2. **Pass 2 — メモリ検索**（research-protocol.md の Step 1.5）: Sonnet が `mcp__mem0__search-memories` を呼び出し、過去のリサーチセッションからコンテキストを取得。
-
-3. **Pass 2 — メモリ記録**（research-protocol.md の Step 6）: レポート書き込み後、Sonnet が `mcp__mem0__add-memory` を呼び出し、主要な知見を将来のセッション用に保存。
-
-### グレースフルデグラデーション
-
-- MCP ヘルスチェック失敗時: `MEM0_AVAILABLE=false`、Mem0 ツールを `--allowedTools` から除外
-- Mem0 ツールが利用可能でも Pass 2 中に失敗した場合: research-protocol.md の指示に従いスキップして続行
-- Mem0 の使用有無にかかわらず、レポートの構造は同一
-
-### stdin リダイレクト (`< /dev/null`)
-
-全 `claude -p` 呼び出しは `run_claude()` ラッパー経由で stdin を `/dev/null` からリダイレクトする。これにより MCP の stdio ベースの通信がターミナルの stdin と競合するのを防止する（MCP 初期化ハングの根本原因だった）。調査の経緯は `docs/progress/` を参照。
+2026-02-26 に Mem0 Cloud MCP を統合したが、`.mcp.json` 不在 + ヘルスチェック形骸化により 32 日間ゼロ稼働。2026-05-23 に撤去。今後はローカル JSON-LD concept cluster graph (`graph.jsonld`) を導入する方針（外部 MCP 依存を排除し、静かな失敗リスクを構造的に回避）。プランは `~/.claude/plans/cosmic-dazzling-fox.md` 参照。
 
 ## 評価フレームワーク (LLM-as-Judge)
 
