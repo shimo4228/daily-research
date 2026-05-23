@@ -81,7 +81,42 @@ templates/report-template.md のフォーマットに厳密に従い、選定さ
    - 新しいエントリを追加（テーマ数分）
    - Write で書き戻し
 
-### Step 6: 完了報告
+### Step 6: graph.jsonld の増分更新
+
+プロジェクトルートの `graph.jsonld` を読み込み、今回のレポート（テーマ数分の Article ノード）を追記する。失敗してもレポート生成は完了扱いとし、Step 7 に進む。
+
+1. Read で `graph.jsonld` を読み込み、`@graph` 配列内の以下を把握する:
+   - 既存の `broadCluster` 一覧（`@type: "Thing"` で `broaderClusterOf` を持たないノード）
+   - 既存の `subCluster` 一覧（`@type: "Thing"` で `broaderClusterOf` を持つノード）
+   - 詳細スキーマは `docs/graph-schema.md` 参照
+
+2. 各テーマについて、Article ノードを構築:
+
+   ```jsonld
+   {
+     "@id": "dr:topic/{date}_{track}_{slug}",
+     "@type": "Article",
+     "name": "{topic 日本語タイトル}",
+     "datePublished": "{date}",
+     "track": "{track}",
+     "broadCluster": "dr:cluster/{既存 broadCluster から 1 件選択}",
+     "subCluster": ["dr:cluster/{既存または新規 subCluster}", ...]
+   }
+   ```
+
+3. クラスタ割り当てルール:
+   - **broadCluster は必ず既存 7 個から選択する。新規追加禁止**（taxonomy 安定性のため）
+   - **subCluster は既存を優先**して再利用。意味的に該当する既存 subCluster がなければ新規追加可
+   - 新規 subCluster を追加する場合は、`@graph` 末尾に `{ "@id": "dr:cluster/{name}", "@type": "Thing", "name": "{英語名}", "broaderClusterOf": "dr:cluster/{親 broadCluster}" }` ノードも追加
+   - subCluster 命名規則は `docs/graph-schema.md` の Convention を遵守（lowercase + underscore、30 文字以内、名詞句）
+
+4. Edit ツールで `graph.jsonld` の `@graph` 配列に新規 Article ノード（テーマ数分）と必要な subCluster ノードを追記する
+
+5. 整合性: 追記後の JSON が valid であること、新規 subCluster の `broaderClusterOf` が既存 broadCluster の `@id` を指していること
+
+このステップで Edit が失敗した、または既存スキーマ規約に違反する内容しか生成できない場合は、graph.jsonld を変更せずに Step 7 に進む（後続の launchd 実行で再試行される）。
+
+### Step 7: 完了報告
 
 全ステップが完了したら、以下の形式で完了を報告:
 
@@ -92,4 +127,5 @@ templates/report-template.md のフォーマットに厳密に従い、選定さ
 - Reports: (各トラックの topic → filename を列挙)
 - Total searches: {search_count}
 - Total sources cited: {source_count}
+- Graph updated: yes|skipped (skipped の場合は理由を 1 行)
 ```

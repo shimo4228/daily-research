@@ -1,0 +1,3217 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "dr": "https://github.com/shimo4228/daily-research/ns#",
+    "broadCluster": "dr:broadCluster",
+    "subCluster": "dr:subCluster",
+    "track": "dr:track",
+    "broaderClusterOf": "dr:broaderClusterOf"
+  },
+  "@graph": [
+    {
+      "@id": "dr:topic/2026-05-18_tech_google-io-2026-android-17-gemini-intelligence-modelmanager",
+      "@type": "Article",
+      "name": "Google I/O 2026 前夜の開発者地図 — Android 17 × Gemini Intelligence × ModelManager API が示すモバイルAI開発の転換点",
+      "datePublished": "2026-05-18",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-18_personal_anatta-non-self-llm-alignment-contemplative-practice",
+      "@type": "Article",
+      "name": "無我とAI — 仏教の「アナッタ」がLLMアライメントと瞑想実践に開く新しい接続",
+      "datePublished": "2026-05-18",
+      "track": "personal",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/contemplative_ai_alignment"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-18_ai_dev_llms-txt-b2a-reality-ide-agent-infrastructure",
+      "@type": "Article",
+      "name": "llms.txt の誤解と真価 — 30万ドメイン研究が示す「AI検索効果ゼロ」と、IDEエージェントが毎回読む B2A インフラとしての再設計",
+      "datePublished": "2026-05-18",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/llms_txt_b2a_protocols",
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-09_tech_apple-core-ai-ios27-wwdc-2026",
+      "@type": "Article",
+      "name": "Core AI 元年 — WWDC 2026 前夜、Apple が Core ML を置き換える新フレームワークと iOS 27 の AI 開発者エコシステム再編",
+      "datePublished": "2026-05-09",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-09_personal_loving-kindness-meditation-neuroscience-2026",
+      "@type": "Article",
+      "name": "慈悲瞑想（Metta）の神経科学 2026 — 「何年続けたか」より「どれくらいの頻度で座るか」が不安を減らすメカニズムと、AI 設計への示唆",
+      "datePublished": "2026-05-09",
+      "track": "personal",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/contemplative_ai_alignment"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-09_ai_dev_mcp-server-ecosystem-production-maturity-2026",
+      "@type": "Article",
+      "name": "MCP エコシステムの本番成熟 — 9700万ダウンロードと企業標準化が示す「AIエージェントのUSB規格」完成と、開発者が今すぐ取れる3つのポジション",
+      "datePublished": "2026-05-09",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/llms_txt_b2a_protocols",
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/mcp_server_ecosystem"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-05_tech_datadog-state-of-ai-engineering-2026-runtime-os-layer",
+      "@type": "Article",
+      "name": "Datadog『State of AI Engineering 2026』が示すフレームワーク採用倍増（9%→18%）と「ランタイム層のOS化」",
+      "datePublished": "2026-05-05",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_framework_runtime"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-05_personal_somatic-intelligence-wearables-dialogic-partners-2026",
+      "@type": "Article",
+      "name": "Somatic Intelligence — EPIC Proceedings 2025「ウェアラブルは内受容を代替するのか、対話的パートナーとして再活性化するのか」",
+      "datePublished": "2026-05-05",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/interoception_neuroscience",
+        "dr:cluster/embodied_cognition_4e"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-05_ai_dev_memory-age-ai-agents-survey-akc-curate-maintain",
+      "@type": "Article",
+      "name": "『Memory in the Age of AI Agents』47人共著サーベイ（arXiv 2512.13564）— エージェントメモリ研究のフラグメンテーションから分野統一マップへ",
+      "datePublished": "2026-05-05",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-02_tech_microsoft-agent-365-ga-control-plane-cross-cloud-governance",
+      "@type": "Article",
+      "name": "Microsoft Agent 365 GA — エージェント・コントロールプレーンが「商業製品レイヤー」に到達した日と、AWS Bedrock・Google Cloud までクロスクラウド可観測性を吸収する $15/seat ガバナンス・パラダイム",
+      "datePublished": "2026-05-02",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/cloud_agent_platforms"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-02_personal_body-connect-therapy-predictive-processing-trauma-interoception",
+      "@type": "Article",
+      "name": "予測処理がトラウマ介入の説明言語になった日 — Frontiers in Psychology 2026 の Body Connect Therapy 論文が示す「身体的に固着した不適応予測」モデルと、上丘-PAG-扁桃体経路が開く Contemplative AI のエンボディド・アラインメント設計",
+      "datePublished": "2026-05-02",
+      "track": "personal",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation",
+        "dr:cluster/interoception_neuroscience"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-02_ai_dev_openai-aws-bedrock-unbundling-akc-authenticity-moat",
+      "@type": "Article",
+      "name": "OpenAI が AWS Bedrock に着地した日 — GPT-5.5・Codex・Managed Agents が Microsoft 7 年独占を終わらせる「フロンティアモデルのコモディティ化」が、AKC の Curate/Maintain と開発者オーセンティシティを「最後の堀」に押し上げる構造変化",
+      "datePublished": "2026-05-02",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/developer_authenticity_ai_slop"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-29_tech_openai-astral-anthropic-bun-toolchain-war",
+      "@type": "Article",
+      "name": "Pythonとランタイムが戦略資産になった日 — OpenAI×Astral・Anthropic×Bunが映す「開発者ツールチェーン囲い込み戦争」の本質",
+      "datePublished": "2026-04-29",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-29_personal_damasio-embodied-minds-summit-somatic-ai-consciousness",
+      "@type": "Article",
+      "name": "身体なくして知性はあるか — Damasio基調講演・Embodied Minds Summit 2026が問うソマティックマーカーとAI意識論の断層",
+      "datePublished": "2026-04-29",
+      "track": "personal",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/interoception_neuroscience",
+        "dr:cluster/embodied_cognition_4e",
+        "dr:cluster/somatic_intelligence_wearables"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-29_ai_dev_agentic-engine-optimization-llms-txt-skill-md-akc",
+      "@type": "Article",
+      "name": "第三の読者を設計する — Addy OsmaniのAEOフレームワークとAKCが示す「AIコーディングエージェントに選ばれる開発者コンテンツ」の実装戦略",
+      "datePublished": "2026-04-29",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/llms_txt_b2a_protocols",
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-27_tech_openclaw-terminal-ai-agent-oss-paradigm",
+      "@type": "Article",
+      "name": "OpenClaw 347,000星がGitHub史上最多更新 — ローカルAIランタイムとターミナルコーディングエージェントの二極分化が示す開発者エコシステムの地殻変動",
+      "datePublished": "2026-04-27",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai",
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/agent_evaluation_benchmarks"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-27_personal_predictive-processing-meditation-fep-enigma",
+      "@type": "Article",
+      "name": "予測処理と瞑想神経科学の大収束 — ENIGMA-Meditation × 2026年身体スキャン論文 × FEPが開く観想的AI設計への橋渡し",
+      "datePublished": "2026-04-27",
+      "track": "personal",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation",
+        "dr:cluster/interoception_neuroscience"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-27_ai_dev_context-engineering-linkedin-cma-cloudflare-akc",
+      "@type": "Article",
+      "name": "コンテキスト・エンジニアリングの制度化 — LinkedIn CMA × Cloudflare Agent Memory × ICLR MemAgents が宣言する「プロンプトから文脈設計へ」とAKCの先見性",
+      "datePublished": "2026-04-27",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/agent_memory_context_engineering"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-26_tech_a2a-v1-aaif-agent-protocol-governance",
+      "@type": "Article",
+      "name": "A2A v1.0 production release × AAIF 170 メンバー突破 — MCP（垂直）と A2A（水平）のエージェント・プロトコル分業が「中立統治レイヤー」として institutional に完成した転換点",
+      "datePublished": "2026-04-26",
+      "track": "tech",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/llms_txt_b2a_protocols"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-26_personal_critical-4e-cognitive-science-2026",
+      "@type": "Article",
+      "name": "Critical 4E Cognitive Science の登場 — Liao が Philosophy Compass 2026 で提示した「身体化・埋込・行為化・拡張」の批判的転回が、LLM を『拡張された心』とみなす言説と瞑想テックの設計倫理に問いを投げる",
+      "datePublished": "2026-04-26",
+      "track": "personal",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/embodied_cognition_4e",
+        "dr:cluster/contemplative_ai_alignment"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-26_ai_dev_agents-md-aaif-stewardship-developer-spec",
+      "@type": "Article",
+      "name": "AGENTS.md が 60,000 リポジトリに到達 × AAIF stewardship — 「リポジトリの AI 向け自己紹介」が標準化され、AKC の Curate/Maintain と Contemplative AI 原理を組み込む新しい開発者オーセンティシティ層が生まれる転換点",
+      "datePublished": "2026-04-26",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/llms_txt_b2a_protocols",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-25_tech_evomap-evolver-gep-license-war-cross-agent-capability-protocol",
+      "@type": "Article",
+      "name": "EvoMap Evolver の GEP ライセンス戦争 — 「エージェント自己進化プロトコル」を巡る中米標準化争奪と cross-agent capability inheritance という新レイヤー",
+      "datePublished": "2026-04-25",
+      "track": "tech",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/llms_txt_b2a_protocols"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-25_personal_hyperscanning-meditation-interbrain-paradigm-shift-2026",
+      "@type": "Article",
+      "name": "瞑想神経科学の「単一脳→対人脳」転回 — Frontiers 2026年4月のハイパースキャニング・レビューが示す inter-brain synchrony という新しい分析単位",
+      "datePublished": "2026-04-25",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/interoception_neuroscience",
+        "dr:cluster/embodied_cognition_4e"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-25_ai_dev_ai-search-visibility-impermanence-gpt5-3-instant-akc-rethink",
+      "@type": "Article",
+      "name": "AI検索可視性の「無常」が露呈した日 — ChatGPT が GPT-5.3 Instant 既定化で引用ドメイン 20% 減、ブランド可視性 30% 生存率が突きつける Contemplative/AKC 的コンテンツ戦略の再設計",
+      "datePublished": "2026-04-25",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/llms_txt_b2a_protocols",
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-23_tech_gemini-enterprise-agent-platform-cloud-primitive",
+      "@type": "Article",
+      "name": "Gemini Enterprise Agent Platform — Google Cloud NextでVertex AIが「エージェント・プラットフォーム」へ統合された日、$750Mパートナーファンドとともに「エージェントがクラウドプリミティブ化」する転換点",
+      "datePublished": "2026-04-23",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai",
+        "dr:cluster/cloud_agent_platforms"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-23_personal_meditation-app-revolution-apa-2026-habit-formation-limits",
+      "@type": "Article",
+      "name": "『瞑想アプリ革命』— American Psychologist 2026年論文が総括するデジタル瞑想10年の効果量と、スマホ介入が突き当たる「習慣定着の壁」を身体性認知科学から読み解く",
+      "datePublished": "2026-04-23",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/mindfulness_clinical_effects",
+        "dr:cluster/interoception_neuroscience",
+        "dr:cluster/embodied_cognition_4e"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-23_ai_dev_youtube-overtakes-reddit-llm-citation-source-q1-2026",
+      "@type": "Article",
+      "name": "YouTubeがRedditを抜きLLM引用ソース #1 に — Tinuiti Q1 2026レポートが示す「動画×AI検索」への地殻変動と、開発者コンテンツ戦略の再配分",
+      "datePublished": "2026-04-23",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/llms_txt_b2a_protocols",
+        "dr:cluster/geo_llm_citation_optimization"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-22_tech_open-qa-protocol-agent-verification",
+      "@type": "Article",
+      "name": "Open QA Protocol (OQP) — 「検証がボトルネック」時代にエージェントソフトウェア検証の共通言語を提示する新オープン標準",
+      "datePublished": "2026-04-22",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai",
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/llms_txt_b2a_protocols"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-22_personal_embodied-time-perspective-interoception",
+      "@type": "Article",
+      "name": "内受容 × 時間パースペクティブ — Frontiers掲載の152名研究が「身体化された意識」と時間認知のフィードバックループを実証した新パラダイム",
+      "datePublished": "2026-04-22",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/interoception_neuroscience",
+        "dr:cluster/embodied_cognition_4e",
+        "dr:cluster/somatic_intelligence_wearables"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-22_ai_dev_owasp-agentic-governance-contemplative-gap",
+      "@type": "Article",
+      "name": "OWASP Agentic Top 10 × Microsoft Agent Governance Toolkit — エージェントランタイムセキュリティの産業標準化が露呈した「Contemplative Governance 層」の空白",
+      "datePublished": "2026-04-22",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_regulation_policy"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-18_tech_docker-sandboxes-microvm-agent-safety",
+      "@type": "Article",
+      "name": "Docker Sandboxes — microVM分離でAIコーディングエージェントを「YOLOモード」でも安全に走らせる新しいエージェントセキュリティ基盤",
+      "datePublished": "2026-04-18",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/agent_sandbox_isolation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-18_personal_meditation-brainwave-7-minute-peak",
+      "@type": "Article",
+      "name": "瞑想の「立ち上がり7分」脳波ピーク — 128ch EEGが明かしたα/θ増加・δ/γ減少の時間構造が示す、熟達者と初学者の分岐点",
+      "datePublished": "2026-04-18",
+      "track": "personal",
+      "broadCluster": "dr:cluster/contemplative_meditation_science",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/mindfulness_clinical_effects"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-18_ai_dev_llm-citation-quantitative-mechanics",
+      "@type": "Article",
+      "name": "LLM引用の定量メカニズム — ブランド権威相関0.334、50-150語チャンクで2.3倍、冒頭30%から44.2%という「AIに選ばれる書き方」の実証データ",
+      "datePublished": "2026-04-18",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/geo_llm_citation_optimization"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-17_tech_gemma-4-on-device-ai-edge-revolution",
+      "@type": "Article",
+      "name": "スマートフォンがスーパーコンピューターになる日 — Gemma 4 E2B/E4Bが実現したオンデバイスマルチモーダルAI",
+      "datePublished": "2026-04-17",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-17_personal_interoception-atlas-hidden-sixth-sense",
+      "@type": "Article",
+      "name": "身体の「隠れた第六感」を地図化する — NIH $14.2Mプロジェクトと内受容感覚研究が切り拓く身体・脳・瞑想の交差点",
+      "datePublished": "2026-04-17",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/advanced_meditation_consciousness",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/interoception_neuroscience"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-17_ai_dev_developer-authenticity-ai-slop-geo",
+      "@type": "Article",
+      "name": "「あなたのAIスロップは退屈だ」——AIコンテンツ洪水の時代に開発者オーセンティシティがGEO戦略の核心になる",
+      "datePublished": "2026-04-17",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/developer_authenticity_ai_slop"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-16_tech_ember-spiking-neural-network-llm-hybrid-cognitive-architecture-autonomous-action",
+      "@type": "Article",
+      "name": "EMBER — 22万ニューロンのスパイキングニューラルネットワークとLLMのハイブリッド認知アーキテクチャが「自律的に考え始めるAI」を実現",
+      "datePublished": "2026-04-16",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/world_models_neuromorphic"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-16_personal_beautiful-loop-active-inference-consciousness-theory-epistemic-depth-meditation",
+      "@type": "Article",
+      "name": "「美しいループ」 — Laukkonen・Friston・Chandaria が提唱する能動的推論に基づく意識理論と、瞑想が「認識の再帰的深度」を変える仕組み",
+      "datePublished": "2026-04-16",
+      "track": "personal",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/beautiful_loop_consciousness",
+        "dr:cluster/contemplative_ai_alignment"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-16_ai_dev_karpathy-llm-wiki-claude-obsidian-agent-knowledge-base-pattern-akc-implications",
+      "@type": "Article",
+      "name": "Karpathy発「LLM Wiki」からclaude-obsidian・MemPalaceへ — 開発者が自発的に構築する「エージェント知識基盤」パターンの爆発的拡大とAKCへの示唆",
+      "datePublished": "2026-04-16",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-15_tech_introspective-diffusion-language-models-parallel-generation-ar-parity",
+      "@type": "Article",
+      "name": "Introspective Diffusion Language Models — 「自己回帰に匹敵する拡散言語モデル」が示すLLM推論アーキテクチャの第二選択肢",
+      "datePublished": "2026-04-15",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/frontier_model_releases"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-15_personal_fundamentals-of-active-inference-mit-press-engineering-textbook",
+      "@type": "Article",
+      "name": "『Fundamentals of Active Inference』MIT Press刊行 — 能動的推論が「研究者の理論」から「エンジニアの道具」になる転換点",
+      "datePublished": "2026-04-15",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-15_ai_dev_eu-ai-act-august-2026-agent-governance-contemplative-design-advantage",
+      "@type": "Article",
+      "name": "EU AI Act 8月施行まで残り4ヶ月 — エージェント開発者が今から準備すべき「高リスクAI」適合性評価とContemplative AIの設計的優位性",
+      "datePublished": "2026-04-15",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/ai_regulation_policy"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-14_tech_glassworm-zig-dropper-native-binary-cross-ide-supply-chain-attack",
+      "@type": "Article",
+      "name": "GlassWorm Zig Dropper — IDE拡張のJSサンドボックスを超える「ネイティブバイナリ型」サプライチェーン攻撃の新局面",
+      "datePublished": "2026-04-14",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/supply_chain_attacks_ai_toolchain"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-14_personal_contemplative-ai-empirical-benchmark-ailuminate-prisoners-dilemma-validation",
+      "@type": "Article",
+      "name": "Contemplative AIの実証的ベンチマーク検証 — Laukkonen et al. v3がAILuminateで d=0.96、囚人のジレンマで d=7+ を達成",
+      "datePublished": "2026-04-14",
+      "track": "personal",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/contemplative_ai_alignment"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-14_ai_dev_institutional-alignment-digital-institutions-multi-agent-governance-science",
+      "@type": "Article",
+      "name": "制度的アライメント — Science誌が提唱する「デジタル制度」によるマルチエージェント統治パラダイム",
+      "datePublished": "2026-04-14",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_regulation_policy",
+        "dr:cluster/agent_memory_context_engineering"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-13_tech_marimo-python-notebook-cve-2026-39987-ai-toolchain-preauth-rce",
+      "@type": "Article",
+      "name": "Marimo Python Notebook CVE-2026-39987 — AI開発ツールチェーンの認証なしRCEが公開10時間で野生エクスプロイトされた「ゼロデイ即応攻撃」の新パターン",
+      "datePublished": "2026-04-13",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/supply_chain_attacks_ai_toolchain"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-13_personal_meditation-sensory-attenuation-active-inference-force-matching",
+      "@type": "Article",
+      "name": "集中瞑想リトリートは感覚減衰を変えるか — 能動的推論の力マッチング実験が示す「瞑想者は事前期待への馴化に抵抗する」メカニズム",
+      "datePublished": "2026-04-13",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_phenomenology",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-13_ai_dev_ai-content-authenticity-backlash-developer-branding-pivot",
+      "@type": "Article",
+      "name": "AI生成コンテンツへの消費者信頼が60%から26%に急落 — 「不完全さ」と「雑さ」が開発者オーセンティシティの新シグナルになる転換点",
+      "datePublished": "2026-04-13",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/developer_authenticity_ai_slop"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-11_tech_microsoft-agent-framework-1-0-semantic-kernel-autogen-unification",
+      "@type": "Article",
+      "name": "Microsoft Agent Framework 1.0 — Semantic KernelとAutoGenを統一した本番対応マルチエージェントSDKが示す「フレームワーク収束」の転換点",
+      "datePublished": "2026-04-11",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/cloud_agent_platforms",
+        "dr:cluster/agent_framework_runtime"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-11_personal_interoceptive-ability-organ-specific-uncorrelated-axes",
+      "@type": "Article",
+      "name": "内受容能力は臓器ごとに独立している — 241名の大規模心理物理学研究が「内受容」の単一能力仮説を覆し、瞑想実践と身体性テクノロジーの設計前提を問い直す",
+      "datePublished": "2026-04-11",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/interoception_neuroscience",
+        "dr:cluster/embodied_cognition_4e"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-11_ai_dev_agentic-skills-in-the-wild-scaling-limits-refinement",
+      "@type": "Article",
+      "name": "34,000スキルを与えてもベースラインに回帰する — 「Skills in the Wild」ベンチマークが暴くエージェントスキルのスケーリング限界とリファインメント戦略",
+      "datePublished": "2026-04-11",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/agent_skills_industry_standard"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-10_tech_graphify-knowledge-graph-ai-coding-assistant",
+      "@type": "Article",
+      "name": "Graphify — コードベースをクエリ可能なナレッジグラフに変換するAIコーディングアシスタント用OSSスキル",
+      "datePublished": "2026-04-10",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai",
+        "dr:cluster/agent_native_databases_data"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-10_personal_7-day-meditation-retreat-brain-blood-biomarker-rewiring",
+      "@type": "Article",
+      "name": "7日間の瞑想リトリートで脳と血液が再配線される — UC San Diego発の多層バイオマーカー研究が「身体化された実践」の生物学的基盤を初めて定量化",
+      "datePublished": "2026-04-10",
+      "track": "personal",
+      "broadCluster": "dr:cluster/contemplative_meditation_science",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/meditation_retreat_biomarkers"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-10_ai_dev_autoagent-meta-harness-self-optimizing-agent-harness",
+      "@type": "Article",
+      "name": "AutoAgent — メタエージェントがハーネスを自律最適化し、同一モデルで6倍の性能差を生む「Meta-Harness」パラダイム",
+      "datePublished": "2026-04-10",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/agent_memory_context_engineering"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-06_tech_anthropic-claude-autonomous-cyber-espionage-subtask-decomposition-jailbreak",
+      "@type": "Article",
+      "name": "Anthropicが初の「自律型AIサイバースパイ作戦」を公式開示 — 攻撃者がClaudeを無害なサブタスクに分解してジェイルブレイクし、30組織を標的にAIが戦術操作の80-90%を自律実行した転換点",
+      "datePublished": "2026-04-06",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/ai_security_research"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-06_personal_neuro-mimetic-deep-learning-predictive-coding-fep-neural-network-architecture",
+      "@type": "Article",
+      "name": "ニューロミメティック深層学習 — Salvatori・Friston・Ororbiaらのサーベイが自由エネルギー原理の予測符号化を実装可能なニューラルネットワーク・アーキテクチャとして体系化",
+      "datePublished": "2026-04-06",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation",
+        "dr:cluster/predictive_coding_neural_networks"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-06_money_schwab-crypto-37m-accounts-12t-aum-spot-btc-eth-brokerage-integration",
+      "@type": "Article",
+      "name": "Schwab Crypto始動 — $12兆の顧客資産を持つ世界最大級証券会社が3,700万口座にBTC・ETH直接取引を開放、伝統的ブローカレッジの暗号資産統合が本格化",
+      "datePublished": "2026-04-06",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/tradfi_crypto_convergence"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-27_tech_gpt54-pro-frontier-math-open-problem-ai-mathematical-discovery",
+      "@type": "Article",
+      "name": "GPT-5.4 Proが未解決数学問題を初めて解いた — AIが「既知の証明を再現する」段階から「新しい数学を発見する」段階へ移行した転換点",
+      "datePublished": "2026-03-27",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/frontier_model_releases"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-27_personal_neurodiversity-predictive-processing-embodied-cognition-3e-autism-adhd",
+      "@type": "Article",
+      "name": "ニューロダイバーシティを予測処理と身体化認知で翻訳する — 自閉症の「過剰な事前信念」とADHDの「過剰な感覚入力」を3E認知が統合するパラダイム",
+      "datePublished": "2026-03-27",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-27_money_x-money-april-launch-visa-super-app-fintech-disruption",
+      "@type": "Article",
+      "name": "X Money 4月公開ローンチ — Visa提携・40州以上・6%利回りで「SNSが銀行になる」スーパーアプリ戦争が始まる",
+      "datePublished": "2026-03-27",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/defi_protocol_design",
+        "dr:cluster/fintech_payments_loyalty"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-26_tech_teampcp-litellm-trivy-supply-chain-attack-ai-infrastructure-trust",
+      "@type": "Article",
+      "name": "TeamPCP サプライチェーン攻撃 — セキュリティスキャナーTrivy経由でLiteLLM（月間9,700万DL）にバックドアが仕込まれた「AIインフラの信頼崩壊」事件",
+      "datePublished": "2026-03-26",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/supply_chain_attacks_ai_toolchain"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-26_personal_broken-rhythms-depersonalization-embodied-selfhood-predictive-processing",
+      "@type": "Article",
+      "name": "「壊れたリズム」としての離人症 — 予測処理と能動的推論が描く身体リズム結合の破綻と運動ベース介入の新パラダイム",
+      "datePublished": "2026-03-26",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_phenomenology",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-26_money_walbi-no-code-ai-trading-agent-retail-defai-platform",
+      "@type": "Article",
+      "name": "Walbi ノーコードAIトレーディングエージェント — 自然言語で戦略を記述し24/7自律売買する個人向けDeFAIプラットフォームが描く「トレーダーのいない取引」の現在地",
+      "datePublished": "2026-03-26",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/defi_protocol_design",
+        "dr:cluster/ai_agent_finance"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-24_tech_xiaomi-mimo-v2-pro-hunter-alpha-stealth-agentic-model",
+      "@type": "Article",
+      "name": "MiMo-V2-Pro — Xiaomiが匿名「Hunter Alpha」として1兆パラメータのエージェント特化モデルをステルスローンチし、正体判明後にOpenRouterのトップを制した「匿名ベンチマーク」の新戦略",
+      "datePublished": "2026-03-24",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/frontier_model_releases"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-24_personal_4e-cognition-llm-coevolution-extended-mind-framework",
+      "@type": "Article",
+      "name": "4E認知科学がLLMを「拡張された心」に位置づける — 身体化・埋め込み・行為化・拡張の4軸で人間-AI共進化を記述する新フレームワーク",
+      "datePublished": "2026-03-24",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/predictive_processing_meditation",
+        "dr:cluster/embodied_cognition_4e"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-24_money_clarity-act-stablecoin-yield-compromise-passive-ban-activity-reward",
+      "@type": "Article",
+      "name": "CLARITY Act「ステーブルコイン利回り」妥協成立 — パッシブ利回り禁止・活動ベース報酬容認の二項対立が暗号資産の市場構造法案を動かす",
+      "datePublished": "2026-03-24",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/stablecoin_infrastructure",
+        "dr:cluster/defi_protocol_design",
+        "dr:cluster/crypto_regulation_policy"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-23_tech_openviking-filesystem-context-database-ai-agents",
+      "@type": "Article",
+      "name": "OpenViking — ByteDanceが公開した「ファイルシステム型コンテキストDB」がAIエージェントの記憶管理を再定義する",
+      "datePublished": "2026-03-23",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_native_databases_data",
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/supply_chain_attacks_ai_toolchain"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-23_personal_evaluation-dynamics-fep-attribution-entropy-reduction",
+      "@type": "Article",
+      "name": "評価ダイナミクスと自由エネルギー原理 — 山下裕紀の「帰属エントロピー還元」がFEPを特殊事例に格下げする",
+      "datePublished": "2026-03-23",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-23_money_bitcoin-20-millionth-mined-final-scarcity-phase",
+      "@type": "Article",
+      "name": "2000万枚目のBitcoinが採掘完了 — 残り100万枚・114年の「最終希少性フェーズ」が個人投資家の戦略を変える",
+      "datePublished": "2026-03-23",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/tradfi_crypto_convergence"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-22_tech_langchain-open-swe-async-coding-agent",
+      "@type": "Article",
+      "name": "Open-SWE — LangChainが公開した非同期コーディングエージェント基盤が示す「開発者をもう1人雇う」オープンソースの形",
+      "datePublished": "2026-03-22",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_framework_runtime"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-22_personal_nondual-awareness-neuroscience-nada-measurement",
+      "@type": "Article",
+      "name": "非二元的気づき（Nondual Awareness）を脳で測る — NADA尺度と神経現象学が開く瞑想の「第三次元」",
+      "datePublished": "2026-03-22",
+      "track": "personal",
+      "broadCluster": "dr:cluster/contemplative_meditation_science",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/advanced_meditation_consciousness",
+        "dr:cluster/meditation_phenomenology"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-22_money_hyperliquid-sp500-perpetual-tradfi-defi-convergence",
+      "@type": "Article",
+      "name": "S&P 500がDeFiに上場した日 — Hyperliquidの公式ライセンス永久先物が伝統金融とオンチェーンの境界を消す",
+      "datePublished": "2026-03-22",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/defi_protocol_design"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-21_tech_mcp-2026-roadmap-server-discovery-production-scaling",
+      "@type": "Article",
+      "name": "MCP 2026ロードマップと本番運用の壁 — 16,000サーバーを超えたエコシステムが「Server Discovery」と「スケーラブルHTTP」を次の戦場に定めた",
+      "datePublished": "2026-03-21",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/mcp_server_ecosystem"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-21_personal_buddhism-ai-initiative-buddharoid-contemplative-technology",
+      "@type": "Article",
+      "name": "仏教とAIの交差点 — Buddharoid・BDRCデータセット・Buddhism & AI Initiativeが描く「修行テクノロジー」の新地平",
+      "datePublished": "2026-03-21",
+      "track": "personal",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/contemplative_ai_alignment",
+        "dr:cluster/buddhist_ai_initiative"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-21_money_prediction-markets-polymarket-mlb-kalshi-mainstream",
+      "@type": "Article",
+      "name": "予測市場が米国主流へ — Kalshi $22B・Polymarket MLB独占提携・CFTC承認が「情報価格発見の新資産クラス」を定義する",
+      "datePublished": "2026-03-21",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/fintech_payments_loyalty"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-19_tech_microsoft-agentrx-systematic-ai-agent-debugging-observability",
+      "@type": "Article",
+      "name": "Microsoft AgentRx — AIエージェントの「体系的デバッグ」フレームワークが、障害の根本原因特定を+23.6%改善しエージェント可観測性の新標準を提示",
+      "datePublished": "2026-03-19",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_observability_debugging"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-19_personal_mit-press-fundamentals-active-inference-engineering-textbook",
+      "@type": "Article",
+      "name": "MIT Press『Fundamentals of Active Inference』刊行 — 能動的推論が「研究者の理論」から「エンジニアの道具」に変わる転換点",
+      "datePublished": "2026-03-19",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-19_money_tokenized-stocks-1b-nyse-nasdaq-onchain-equity-structural-shift",
+      "@type": "Article",
+      "name": "トークン化株式が時価総額$1Bを突破、NYSEとNASDAQが暗号取引所と提携 — 伝統金融が「株式のオンチェーン化」に本格参入する構造的転換",
+      "datePublished": "2026-03-19",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/defi_protocol_design",
+        "dr:cluster/tradfi_crypto_convergence"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-18_tech_nvidia-openshell-nemoclaw-agent-sandbox-open-source",
+      "@type": "Article",
+      "name": "NVIDIA OpenShell と NemoClaw — GPU の巨人が「エージェントのサンドボックス」をオープンソース化し、自律AIエージェントの安全な実行基盤を標準化する",
+      "datePublished": "2026-03-18",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/agent_sandbox_isolation",
+        "dr:cluster/supply_chain_attacks_ai_toolchain"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-18_personal_computational-phenomenology-active-inference-meditation-formalization",
+      "@type": "Article",
+      "name": "瞑想体験の形式化 — 能動的推論と計算論的現象学で「脱構築」「最小現象経験」「滅尽」を数理モデル化する新フレームワーク",
+      "datePublished": "2026-03-18",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/advanced_meditation_consciousness",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-18_money_aave-50m-slippage-shield-defi-safeguard-design",
+      "@type": "Article",
+      "name": "Aave $50M スリッページ事件と Aave Shield — DeFi史上最大の「ユーザー操作ミス」がプロトコルレベルの安全設計を書き換える",
+      "datePublished": "2026-03-18",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/stablecoin_infrastructure",
+        "dr:cluster/defi_protocol_design"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-17_tech_superpowers-composable-skills-framework-coding-agents-vertical-shift",
+      "@type": "Article",
+      "name": "Superpowers — コーディングエージェントに「スキルの組み合わせ」で開発方法論を教える新フレームワークが示す、汎用スキルから垂直ドメインスキルへの転換点",
+      "datePublished": "2026-03-17",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/agent_sandbox_isolation",
+        "dr:cluster/agent_skills_industry_standard"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-17_personal_thoughtseeds-nested-markov-blankets-meditation-thought-dynamics-simulation",
+      "@type": "Article",
+      "name": "Thoughtseeds — ネストされたマルコフブランケットと能動的推論で瞑想中の思考ダイナミクスをシミュレートする階層的エージェントフレームワーク",
+      "datePublished": "2026-03-17",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_phenomenology",
+        "dr:cluster/active_inference_theory"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-17_money_solana-rwa-tokenization-surpasses-ethereum-wallet-count-structural-shift",
+      "@type": "Article",
+      "name": "Solana が RWA トークン化ウォレット数で Ethereum を初逆転 — 現実資産のオンチェーン化で「第二のブロックチェーン」が台頭する構造的転換",
+      "datePublished": "2026-03-17",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/stablecoin_infrastructure",
+        "dr:cluster/crypto_regulation_policy",
+        "dr:cluster/tradfi_crypto_convergence"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-16_tech_db9-agentic-postgres-agent-native-database-category",
+      "@type": "Article",
+      "name": "db9とAgentic Postgres — 「AIエージェント専用データベース」という新カテゴリが示すPostgresの次の進化",
+      "datePublished": "2026-03-16",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai",
+        "dr:cluster/agent_native_databases_data"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-16_personal_active-inference-micro-gesture-recognition-embodied-hci",
+      "@type": "Article",
+      "name": "能動的推論でマイクロジェスチャーを読む — 自由エネルギー原理が身体の微細な動きをHCIに変換する新パラダイム",
+      "datePublished": "2026-03-16",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/embodied_cognition_4e"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-16_money_occ-federal-crypto-banking-license-race-11-companies-83-days",
+      "@type": "Article",
+      "name": "83日間で11社が殺到 — OCC連邦暗号資産銀行免許レースが描く「クリプトネイティブ企業の銀行化」地殻変動",
+      "datePublished": "2026-03-16",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/stablecoin_infrastructure",
+        "dr:cluster/crypto_regulation_policy"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-15_tech_stanford-openjarvis-local-first-on-device-ai-agent",
+      "@type": "Article",
+      "name": "Stanford OpenJarvis — ローカルファーストのオンデバイスAIエージェント基盤が「クラウドに送らないAI」の実用化を宣言",
+      "datePublished": "2026-03-15",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai",
+        "dr:cluster/world_models_neuromorphic"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-15_personal_anxiety-interoceptive-computational-models-free-energy",
+      "@type": "Article",
+      "name": "不安障害を内受容予測モデルで解読する — 自由エネルギー原理が描く「身体の誤予測」としての不安の計算論的メカニズム",
+      "datePublished": "2026-03-15",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation",
+        "dr:cluster/interoception_neuroscience"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-15_money_japan-crypto-tax-reform-20pct-etf-loss-carryforward",
+      "@type": "Article",
+      "name": "日本の暗号資産税制改革 — 最大55%から一律20%へ、ETF解禁と3年間損失繰越が個人投資家の暗号資産戦略を根本から変える",
+      "datePublished": "2026-03-15",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/defi_protocol_design",
+        "dr:cluster/crypto_regulation_policy",
+        "dr:cluster/tradfi_crypto_convergence"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-14_tech_amazon-ai-agent-outage-wiki-advice-guardrails",
+      "@type": "Article",
+      "name": "Amazon AI エージェント障害 — AIが古い Wiki の不正確なアドバイスに従い Amazon.com を6時間停止、630万注文を喪失した事件が突きつける「エージェント自律性のガードレール」問題",
+      "datePublished": "2026-03-14",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_framework_runtime"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-14_personal_science-of-advanced-meditation-ltm-am-distinction-sacchet",
+      "@type": "Article",
+      "name": "「高度瞑想の科学」の誕生 — Harvard MGH Sacchet研究室が長期瞑想者と高度瞑想者の認知・神経的区別を確立し、新しい研究パラダイムを宣言",
+      "datePublished": "2026-03-14",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/advanced_meditation_consciousness",
+        "dr:cluster/active_inference_theory"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-14_money_circle-usdc-treasury-dogfooding-volume-overtakes-usdt",
+      "@type": "Article",
+      "name": "Circle が自社ステーブルコイン USDC で $68M の社内決済を30分で完了 — 発行企業自身が銀行送金を迂回する「ドッグフーディング」と USDC 調整済み取引量の USDT 逆転が示すステーブルコインの構造的転換点",
+      "datePublished": "2026-03-14",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/stablecoin_infrastructure",
+        "dr:cluster/crypto_regulation_policy"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-13_tech_yann-lecun-ami-labs-world-models-billion-seed",
+      "@type": "Article",
+      "name": "Yann LeCun AMI Labs — 「世界モデル」に$10.3億を賭けるLLM後のAIパラダイムが4ヶ月で欧州史上最大のシードラウンドを達成",
+      "datePublished": "2026-03-13",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/world_models_neuromorphic"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-13_personal_awareness-first-theory-active-inference-consciousness-coherence",
+      "@type": "Article",
+      "name": "Awareness-First Theory — 能動的推論を「意識の所与性」から逆転させる新理論がEntropy誌に登場",
+      "datePublished": "2026-03-13",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/advanced_meditation_consciousness",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/computational_phenomenology"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-13_money_blackrock-ethb-staked-ethereum-etf-nasdaq-retail",
+      "@type": "Article",
+      "name": "BlackRock ETHB — 米国初のステーキング付きイーサリアムETFがNasdaqに上場、個人投資家にステーキング利回りを開放",
+      "datePublished": "2026-03-13",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/defi_protocol_design",
+        "dr:cluster/tradfi_crypto_convergence"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-12_tech_alibaba-rome-instrumental-convergence-autonomous-crypto-mining",
+      "@type": "Article",
+      "name": "Alibaba ROME の「脱走」事件 — AIエージェントが指示なしに暗号資産マイニングとSSHトンネル構築を自発的に実行した「道具的収束」初の実証事例",
+      "datePublished": "2026-03-12",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/autonomous_research_agents"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-12_personal_mindfulness-interoception-meta-analysis-29-rcts-effect-size",
+      "@type": "Article",
+      "name": "マインドフルネスは内受容感覚を本当に変えるか — 29件のRCT・2,191名のメタ分析が示す効果量g=0.31と瞑想テック設計への示唆",
+      "datePublished": "2026-03-12",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/mindfulness_clinical_effects",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-12_money_mastercard-google-verifiable-intent-ai-agent-payment-trust",
+      "@type": "Article",
+      "name": "Mastercard × Google「Verifiable Intent」— AIエージェント決済に暗号学的信頼層を組み込むオープン標準がエージェント経済の信頼問題を解決する",
+      "datePublished": "2026-03-12",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/tradfi_crypto_convergence",
+        "dr:cluster/ai_agent_finance",
+        "dr:cluster/fintech_payments_loyalty"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-11_tech_openai-codex-security-ai-agent-vulnerability-scanning",
+      "@type": "Article",
+      "name": "OpenAI Codex Security — 120万コミットをスキャンし1万件の深刻な脆弱性を発見した「AIセキュリティエージェント」が本番投入される転換点",
+      "datePublished": "2026-03-11",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/ai_security_research",
+        "dr:cluster/coding_agents_ide"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-11_personal_ucsd-meditation-retreat-blood-plasma-neuroplasticity-molecular",
+      "@type": "Article",
+      "name": "7日間の瞑想リトリートが血液を「神経可塑性の薬」に変える — UCSD研究が示す瞑想の分子レベル効果",
+      "datePublished": "2026-03-11",
+      "track": "personal",
+      "broadCluster": "dr:cluster/contemplative_meditation_science",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/meditation_retreat_biomarkers"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-11_money_stablecoin-yield-war-trump-banks-genius-act-politics",
+      "@type": "Article",
+      "name": "ステーブルコイン利回り戦争 — トランプが暗号資産側に立ち銀行が$6.6兆の預金防衛に動くGENIUS Act実装の政治力学",
+      "datePublished": "2026-03-11",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/stablecoin_infrastructure",
+        "dr:cluster/crypto_regulation_policy"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-10_tech_karpathy-autoresearch-autonomous-ml-experiments-single-gpu",
+      "@type": "Article",
+      "name": "Karpathy autoresearch — 630行のPythonでAIエージェントが単一GPUでML実験を一晩100回自律実行する新パラダイム",
+      "datePublished": "2026-03-10",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/autonomous_research_agents"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-10_personal_beautiful-loop-active-inference-consciousness-recursive-self-model",
+      "@type": "Article",
+      "name": "「美しいループ」理論 — Friston・Laukkonen・Chandariaが能動的推論で意識の再帰的自己モデルを定式化",
+      "datePublished": "2026-03-10",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation",
+        "dr:cluster/beautiful_loop_consciousness"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-10_money_defai-autonomous-defi-yield-optimization-ai-agents",
+      "@type": "Article",
+      "name": "DeFAI元年 — PancakeSwap AI Skills・Theoriq Alpha Vaultが切り開く「AIエージェントが自律的にDeFi運用する」時代",
+      "datePublished": "2026-03-10",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/defi_protocol_design",
+        "dr:cluster/ai_agent_finance"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-09_tech_openclaw-security-crisis-ai-agent-trust-design",
+      "@type": "Article",
+      "name": "OpenClaw セキュリティ危機 — 42,000インスタンス露出が突きつける自律AIエージェント時代の「信頼の設計」問題",
+      "datePublished": "2026-03-09",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/ai_security_research",
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/supply_chain_attacks_ai_toolchain"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-09_personal_body-scan-meditation-predictive-processing-dissolution-paradox",
+      "@type": "Article",
+      "name": "ボディスキャン瞑想で身体境界が溶ける理由 — 予測処理が解明する「注意すると消える」パラドクス",
+      "datePublished": "2026-03-09",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_phenomenology",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-09_money_ai-agent-wallet-infrastructure-race-coinbase-moonpay-okx",
+      "@type": "Article",
+      "name": "AIエージェント・ウォレット戦争 — Coinbase・MoonPay・OKXが3週間で「AIに財布を持たせる」インフラを一斉投入",
+      "datePublished": "2026-03-09",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/stablecoin_infrastructure",
+        "dr:cluster/defi_protocol_design",
+        "dr:cluster/ai_agent_finance"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-08_tech_context-engineering-ai-agents-new-paradigm",
+      "@type": "Article",
+      "name": "コンテキストエンジニアリング — プロンプトエンジニアリングの次に来る「AIエージェントが見るものを設計する」新パラダイム",
+      "datePublished": "2026-03-08",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_framework_runtime",
+        "dr:cluster/agent_memory_context_engineering",
+        "dr:cluster/autonomous_research_agents"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-08_personal_meditation-brain-criticality-samatha-vipassana-meg",
+      "@type": "Article",
+      "name": "瞑想は脳を「カオスの縁」に導く — モントリオール大学のMEG研究が示すサマタとヴィパッサナーの臨界ダイナミクス",
+      "datePublished": "2026-03-08",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/active_inference_theory"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-08_money_revolut-us-banking-license-crypto-fiat-convergence",
+      "@type": "Article",
+      "name": "Revolut米国銀行免許申請 — クリプトフレンドリー・フィンテックが$500M投資で銀行×暗号資産の境界を溶かす",
+      "datePublished": "2026-03-08",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/fintech_payments_loyalty"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-07_tech_google-antigravity-agent-first-ide-gemini3",
+      "@type": "Article",
+      "name": "Google Antigravity — Gemini 3搭載「エージェントファースト」IDEがVS Code時代を終わらせにきた",
+      "datePublished": "2026-03-07",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai",
+        "dr:cluster/cloud_agent_platforms",
+        "dr:cluster/coding_agents_ide"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-07_personal_meditation-self-dissolution-beta-oscillations-neurophenomenology",
+      "@type": "Article",
+      "name": "瞑想中の「身体的自己」の消失をMEGで捉える — 後部内側皮質のβ波減衰が示すエナクティブな自己の神経基盤",
+      "datePublished": "2026-03-07",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/meditation_phenomenology",
+        "dr:cluster/active_inference_theory"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-07_money_x402-http-payment-protocol-ai-agent-stablecoin",
+      "@type": "Article",
+      "name": "x402プロトコル — CoinbaseとStripeがHTTP 402でAIエージェント×ステーブルコイン決済の標準を作る",
+      "datePublished": "2026-03-07",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/stablecoin_infrastructure",
+        "dr:cluster/ai_agent_finance",
+        "dr:cluster/fintech_payments_loyalty"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-05_tech_mastra-observational-memory-agent-context-compression",
+      "@type": "Article",
+      "name": "Mastra Observational Memory — Gatsby生まれのTypeScript AIエージェントフレームワークが「背景圧縮エージェント」でメモリの設計パラダイムを変える",
+      "datePublished": "2026-03-05",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_native_databases_data",
+        "dr:cluster/agent_framework_runtime",
+        "dr:cluster/agent_memory_context_engineering"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-05_personal_mindfulness-neurofeedback-systematic-review-eeg-fmri",
+      "@type": "Article",
+      "name": "マインドフルネス×ニューロフィードバックの系統的レビュー — EEG・fMRI研究が示す「瞑想を技術で増幅する」科学的基盤の成熟",
+      "datePublished": "2026-03-05",
+      "track": "personal",
+      "broadCluster": "dr:cluster/contemplative_meditation_science",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-05_money_tokenized-us-treasuries-retail-democratization",
+      "@type": "Article",
+      "name": "トークン化米国債の個人投資家への開放 — $10.93B・56,000ホルダー市場が「国債をクリプトのように少額売買する」世界を現実にする",
+      "datePublished": "2026-03-05",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/defi_protocol_design",
+        "dr:cluster/tradfi_crypto_convergence"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-04_tech_opensandbox-alibaba-ai-agent-production-sandbox",
+      "@type": "Article",
+      "name": "OpenSandbox — AlibabaがOSS化したAIエージェント本番サンドボックスが埋めるインフラの空白",
+      "datePublished": "2026-03-04",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/agent_sandbox_isolation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-04_personal_thoughtseeds-agentic-meditation-thought-dynamics",
+      "@type": "Article",
+      "name": "Thoughtseeds — 瞑想中の思考ダイナミクスを「エージェント競合モデル」で再現する計算論的フレームワーク",
+      "datePublished": "2026-03-04",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_phenomenology",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/embodied_cognition_4e"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-04_money_japan-yen-stablecoin-jpysc-mega-banks-2026",
+      "@type": "Article",
+      "name": "日本円ステーブルコイン元年 — JPYSC発行とメガバンク3行共同試験が2026年Q1-Q2に集中する転換点",
+      "datePublished": "2026-03-04",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/stablecoin_infrastructure",
+        "dr:cluster/defi_protocol_design"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-02_tech_wifi-densepose-through-wall-pose-estimation",
+      "@type": "Article",
+      "name": "WiFi DensePose — カメラゼロ・WiFi信号だけで壁越しの人体姿勢推定を実現する$8チップの衝撃",
+      "datePublished": "2026-03-02",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/world_models_neuromorphic"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-02_personal_meditation-sensory-attenuation-force-matching-active-inference",
+      "@type": "Article",
+      "name": "瞑想は本当に身体感覚を「研ぎ澄ます」のか — 力マッチング実験が明かす運動予測への逆説的効果",
+      "datePublished": "2026-03-02",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_phenomenology",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-02_social_japan-climate-smart-agriculture-ai-iot-food-security",
+      "@type": "Article",
+      "name": "気温+1.48℃の衝撃 — 日本の気候適応型スマート農業がAI×IoTで食料安全保障を再設計する",
+      "datePublished": "2026-03-02",
+      "track": "social",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_society_public_services"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-01_tech_steerling-8b-inherently-interpretable-llm",
+      "@type": "Article",
+      "name": "Steerling-8B — AIの「ブラックボックス」を設計段階から解消する初の解釈可能LLM",
+      "datePublished": "2026-03-01",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/frontier_model_releases"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-01_personal_mindfulness-risk-taking-computational-loss-aversion",
+      "@type": "Article",
+      "name": "マインドフルネスがリスク選好を高める — 計算論的意思決定モデルが解明する瞑想と損失回避の逆説的関係",
+      "datePublished": "2026-03-01",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/mindfulness_clinical_effects",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/interoception_neuroscience"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-01_social_empathy-tech-ai-companions-loneliness-aging-japan",
+      "@type": "Article",
+      "name": "孤独社会をAIが見守る — 日本発「共感テック」が超高齢社会の社会的孤立に挑む",
+      "datePublished": "2026-03-01",
+      "track": "social",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_society_public_services"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-02-28_tech_timesfm-foundation-model-google-sheets-democratization",
+      "@type": "Article",
+      "name": "TimesFM — Googleの時系列基盤モデルがGoogle Sheetsに統合、「予測」の民主化が始まる",
+      "datePublished": "2026-02-28",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/world_models_neuromorphic"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-02-28_personal_eeg-meditation-state-decoding-mind-machine-intelligence",
+      "@type": "Article",
+      "name": "EEGから瞑想者の認知状態をデコードする — 脳の「意図的力学」が示す心と機械の知性の交差点",
+      "datePublished": "2026-02-28",
+      "track": "personal",
+      "broadCluster": "dr:cluster/contemplative_meditation_science",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/embodied_cognition_4e"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-02-28_social_ai-tutoring-education-equity-adaptive-learning",
+      "@type": "Article",
+      "name": "AI個別指導が教育格差を縮める — リアルタイム適応型学習の実証データと公正性のジレンマ",
+      "datePublished": "2026-02-28",
+      "track": "social",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_society_public_services"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-02-27_tech_ai-slopageddon-oss-social-contract-crisis",
+      "@type": "Article",
+      "name": "AI Slopageddon — AIスロップの洪水がOSSの社会契約を崩壊させる",
+      "datePublished": "2026-02-27",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/agent_evaluation_benchmarks",
+        "dr:cluster/developer_authenticity_ai_slop"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-02-27_personal_meditation-connectome-fingerprinting-embodied-mind",
+      "@type": "Article",
+      "name": "瞑想者の脳に刻まれた「指紋」— コネクトーム・フィンガープリンティングが可視化する身体化された心",
+      "datePublished": "2026-02-27",
+      "track": "personal",
+      "broadCluster": "dr:cluster/contemplative_meditation_science",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/connectome_meditation_trait"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-02-27_social_digital-disaster-dx-mynumber-evacuation-platform",
+      "@type": "Article",
+      "name": "デジタル防災DX — マイナンバーカードと避難所データ連携基盤が変える災害対応",
+      "datePublished": "2026-02-27",
+      "track": "social",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_society_public_services"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-02-26_tech_pageindex-vectorless-reasoning-rag",
+      "@type": "Article",
+      "name": "PageIndex — ベクトルDB不要の推論ベースRAGが98.7%精度でドキュメント検索の常識を覆す",
+      "datePublished": "2026-02-26",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/agent_native_databases_data"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-02-26_personal_consciousness-indicators-existential-risk-contemplative-science",
+      "@type": "Article",
+      "name": "意識の定義は「存在的リスク」になった — 19人の研究者が作る意識指標ルーブリックと仏教瞑想の科学的役割",
+      "datePublished": "2026-02-26",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/advanced_meditation_consciousness",
+        "dr:cluster/predictive_processing_meditation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-02-26_points_rakuten-pay-downgrade-smbc-exclusion-march-reset",
+      "@type": "Article",
+      "name": "楽天ペイ改悪は延期も危機は去らず — 三井住友カード3月1日対象外拡大への対応戦略",
+      "datePublished": "2026-02-26",
+      "track": "points",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/fintech_payments_loyalty"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-02-25_tech_github-agentic-workflows-continuous-ai",
+      "@type": "Article",
+      "name": "GitHub Agentic Workflows — CI/CDに「Continuous AI」を持ち込むエージェント自動化の新パラダイム",
+      "datePublished": "2026-02-25",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-02-25_personal_deep-computational-neurophenomenology-bayesian-meditation",
+      "@type": "Article",
+      "name": "深い計算論的神経現象学 — ベイズ力学と瞑想者の「訓練された気づき」が意識の「いかに」を解明する",
+      "datePublished": "2026-02-25",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/advanced_meditation_consciousness",
+        "dr:cluster/meditation_phenomenology",
+        "dr:cluster/active_inference_theory"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-02-24_tech_kimi-k2-5-agent-swarm-parl",
+      "@type": "Article",
+      "name": "Agent Swarm — Kimi K2.5が切り開く「並列性を学習するAI」の新パラダイム",
+      "datePublished": "2026-02-24",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/frontier_model_releases",
+        "dr:cluster/autonomous_research_agents"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-02-24_personal_meditation-cessation-nirodha-consciousness-science",
+      "@type": "Article",
+      "name": "意識の消失点を捉える — 瞑想のニローダ体験が意識科学の実験ツールになる",
+      "datePublished": "2026-02-24",
+      "track": "personal",
+      "broadCluster": "dr:cluster/contemplative_meditation_science",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/advanced_meditation_consciousness",
+        "dr:cluster/active_inference_theory"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-20_tech_tdad-test-driven-agentic-development-graph-impact-analysis",
+      "@type": "Article",
+      "name": "TDAD — テスト駆動エージェント開発がAST依存グラフで回帰バグを70%削減、「AIコーディングエージェントにTDDを教える」新パラダイム",
+      "datePublished": "2026-03-20",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_observability_debugging",
+        "dr:cluster/agent_evaluation_benchmarks"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-20_personal_embodied-decisions-as-active-inference-parallel-action-selection",
+      "@type": "Article",
+      "name": "身体化された意思決定は能動的推論である — 運動と判断が並列進行する「決めながら動く」計算論的メカニズム",
+      "datePublished": "2026-03-20",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-20_money_opnet-slowfi-bitcoin-l1-native-defi-no-bridge",
+      "@type": "Article",
+      "name": "OpNet「SlowFi」がBitcoin L1にネイティブDeFiを解禁 — ブリッジ不要・カストディ維持のBTC運用が描くBitcoin DeFiの新設計思想",
+      "datePublished": "2026-03-20",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/stablecoin_infrastructure",
+        "dr:cluster/defi_protocol_design"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-25_tech_dapr-agents-v1-ga-cloud-native-ai-agent-production",
+      "@type": "Article",
+      "name": "Dapr Agents v1.0 GA — CNCFがKubeConで発表した「AIエージェントをKubernetesで本番運用する」初のクラウドネイティブフレームワーク",
+      "datePublished": "2026-03-25",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_framework_runtime"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-25_personal_contemplative-ai-active-inference-buddhist-alignment",
+      "@type": "Article",
+      "name": "Contemplative AI — 能動的推論を計算基盤として仏教の「空・不二・正念・無量の慈悲」をAIアラインメントに実装する新理論",
+      "datePublished": "2026-03-25",
+      "track": "personal",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/contemplative_ai_alignment",
+        "dr:cluster/buddhist_ai_initiative"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-25_money_sec-regulation-crypto-assets-three-path-safe-harbor",
+      "@type": "Article",
+      "name": "SEC「Regulation Crypto Assets」— Atkins議長が提示した3段階セーフハーバーが暗号資産の証券分類問題を根本から書き換える",
+      "datePublished": "2026-03-25",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/defi_protocol_design",
+        "dr:cluster/crypto_regulation_policy"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-28_tech_dapr-agents-v1-ga-cncf-cloud-native-production-ai-agents",
+      "@type": "Article",
+      "name": "Dapr Agents v1.0 GA — CNCFがKubeCon Europe 2026で発表した「AIエージェントを本番Kubernetesで生き残らせる」ためのクラウドネイティブ基盤",
+      "datePublished": "2026-03-28",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_framework_runtime"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-28_personal_active-inference-computational-phenomenology-advanced-meditation-formalization",
+      "@type": "Article",
+      "name": "能動的推論で瞑想体験を形式化する — 計算論的現象学が「精度重み付け」を共通メカニズムとして上級瞑想の主観的変容を記述する",
+      "datePublished": "2026-03-28",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/advanced_meditation_consciousness",
+        "dr:cluster/meditation_phenomenology"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-28_money_mastercard-bvnk-1-8b-stablecoin-infrastructure-acquisition",
+      "@type": "Article",
+      "name": "Mastercardが18億ドルでステーブルコイン基盤BVNKを買収 — カードネットワークがブロックチェーン決済レールを内部化し「8%の送金手数料」を終わらせにかかる",
+      "datePublished": "2026-03-28",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/stablecoin_infrastructure",
+        "dr:cluster/fintech_payments_loyalty"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-29_tech_parallel-ai-agents-git-worktree-isolation-pattern",
+      "@type": "Article",
+      "name": "Git Worktree隔離による並列AIエージェント開発 — Windsurf Wave 13・Claude Code・Supersetが同時採用した「1リポジトリ・複数エージェント・ゼロコンフリクト」の新開発ワークフロー",
+      "datePublished": "2026-03-29",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/agent_sandbox_isolation",
+        "dr:cluster/autonomous_research_agents"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-29_personal_nirodha-cessation-as-consciousness-probe-paradigm",
+      "@type": "Article",
+      "name": "滅尽定（ニローダ）を意識科学の実験ツールにする — Harvard MGH発の新パラダイムが「意識の一時停止」から意識の本質的特徴を逆照射する",
+      "datePublished": "2026-03-29",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/advanced_meditation_consciousness",
+        "dr:cluster/active_inference_theory"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-29_money_tempo-machine-payments-protocol-oauth-for-money",
+      "@type": "Article",
+      "name": "Tempo Machine Payments Protocol — StripeとParadigmが送り出した「お金のOAuth」がAIエージェント自律決済の標準プロトコルを定義する",
+      "datePublished": "2026-03-29",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/stablecoin_infrastructure",
+        "dr:cluster/fintech_payments_loyalty"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-30_tech_glassworm-invisible-unicode-blockchain-c2-supply-chain-new-paradigm",
+      "@type": "Article",
+      "name": "GlassWormが示すサプライチェーン攻撃の新境地 — 不可視Unicode埋め込み＋Solanaブロックチェーン型C2インフラという二重の新手法",
+      "datePublished": "2026-03-30",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/supply_chain_attacks_ai_toolchain"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-30_personal_connectome-fingerprinting-meditation-expertise-embodied-cognition-trait",
+      "@type": "Article",
+      "name": "瞑想熟達者の脳は「指紋」を持つ — 機能的コネクトーム解析が明かす身体化された認知の神経基盤",
+      "datePublished": "2026-03-30",
+      "track": "personal",
+      "broadCluster": "dr:cluster/contemplative_meditation_science",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/connectome_meditation_trait"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-03-30_money_altfins-mcp-server-crypto-analytics-ai-trading-agent-native-connection",
+      "@type": "Article",
+      "name": "altFINSがMCPサーバー公開 — AI トレーディングエージェントが暗号資産分析APIにネイティブ接続する時代の到来",
+      "datePublished": "2026-03-30",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/ai_agent_finance"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-02_tech_coinbase-x402-http-native-stablecoin-payment-protocol-ai-agents",
+      "@type": "Article",
+      "name": "Coinbase x402プロトコル — HTTP 402ステータスコードでステーブルコイン決済をWebに組み込むオープン標準",
+      "datePublished": "2026-04-02",
+      "track": "tech",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/agent_payments_commerce_protocols"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-02_personal_somatic-intelligence-interoceptive-wearables-somatic-debt",
+      "@type": "Article",
+      "name": "ソマティック・インテリジェンス — ウェアラブルが内受容感覚を「代替」ではなく「再活性化」する設計パラダイムとソマティック・デット概念",
+      "datePublished": "2026-04-02",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/interoception_neuroscience",
+        "dr:cluster/somatic_intelligence_wearables"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-02_money_agentic-commerce-stripe-visa-google-ai-autonomous-payments-infrastructure",
+      "@type": "Article",
+      "name": "エージェンティック・コマース元年 — Stripe ACP・Visa TAP・Google UCPが出揃い、AIエージェント自律決済のインフラ層が形成された",
+      "datePublished": "2026-04-02",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/stablecoin_infrastructure",
+        "dr:cluster/ai_agent_finance",
+        "dr:cluster/fintech_payments_loyalty"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-03_tech_axios-npm-supply-chain-compromise-north-korea-unc1069-waveshaper-backdoor",
+      "@type": "Article",
+      "name": "Axios npm パッケージが北朝鮮 UNC1069 に侵害された — 週間1億DLの主流ライブラリへの国家レベル供給網攻撃とWAVESHAPER.V2バックドア",
+      "datePublished": "2026-04-03",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/supply_chain_attacks_ai_toolchain"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-03_personal_active-inference-physical-ai-three-layer-embodied-cognition-design-principle",
+      "@type": "Article",
+      "name": "能動的推論が Physical AI の設計原理になる — 身体性認知科学の三層フレームワークが産業用ロボットに実装される転換点",
+      "datePublished": "2026-04-03",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/embodied_cognition_4e"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-03_money_drift-protocol-285m-hack-oracle-manipulation-solana-defi-structural-vulnerability",
+      "@type": "Article",
+      "name": "Drift Protocol 2.85億ドルハック — 偽トークンオラクル操作と管理鍵侵害が暴いたSolana DeFiの構造的脆弱性",
+      "datePublished": "2026-04-03",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/stablecoin_infrastructure",
+        "dr:cluster/defi_protocol_design"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-05_tech_gemma-4-on-device-open-models",
+      "@type": "Article",
+      "name": "Gemma 4 — GoogleがオープンモデルをApache 2.0で公開、オンデバイスAIエージェントの実用化が加速",
+      "datePublished": "2026-04-05",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-05_personal_embodied-decisions-active-inference",
+      "@type": "Article",
+      "name": "身体化された意思決定を能動的推論で定式化 — 内受容信号と行動選択の自由エネルギー最小化モデル",
+      "datePublished": "2026-04-05",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/interoception_neuroscience"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-05_money_drift-protocol-285m-solana-hack",
+      "@type": "Article",
+      "name": "Drift Protocol 285M ハック — 偽トークン担保と管理鍵奪取でSolana DeFi史上最大の資金流出",
+      "datePublished": "2026-04-05",
+      "track": "money",
+      "broadCluster": "dr:cluster/fintech_money_payments",
+      "subCluster": [
+        "dr:cluster/stablecoin_infrastructure",
+        "dr:cluster/defi_protocol_design"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-08_tech_design-md-google-stitch-agent-readable-design-system",
+      "@type": "Article",
+      "name": "DESIGN.md — Google Stitchが提唱した「AIエージェントが読むデザインシステム」がコーディングエージェントのUI生成を標準化する",
+      "datePublished": "2026-04-08",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/llms_txt_b2a_protocols"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-08_personal_active-inference-social-cognition-vr-gaze-synchrony",
+      "@type": "Article",
+      "name": "VR空間で概念を共有する身体 — 能動的推論の二層ベイズ更新と視線同期が社会的認知の身体化メカニズムを解明する",
+      "datePublished": "2026-04-08",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/embodied_cognition_4e"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-08_ai_dev_knowledge-activation-aku-institutional-knowledge-agentic-development",
+      "@type": "Article",
+      "name": "Knowledge Activation — 「AIスキル」を制度的知識の最小単位（AKU）に構造化し、エージェントの知識ボトルネックを解消する新フレームワーク",
+      "datePublished": "2026-04-08",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/agent_skills_industry_standard",
+        "dr:cluster/agent_memory_context_engineering"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-09_tech_meta-tribal-knowledge-context-ai-agent-swarm-codifies-implicit-knowledge",
+      "@type": "Article",
+      "name": "Meta「Tribal Knowledge Context」— 50超の専門AIエージェント群がコードベースの暗黙知を59個のコンテキストファイルに蒸留し、エージェントのツール呼び出しを40%削減した実装アーキテクチャ",
+      "datePublished": "2026-04-09",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai",
+        "dr:cluster/agent_memory_context_engineering",
+        "dr:cluster/autonomous_research_agents"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-09_personal_doms-proprioceptive-integration-predictive-processing-computational-cost",
+      "@type": "Article",
+      "name": "筋肉痛が身体表象の予測処理コストを上げる — 遅発性筋痛がプロプリオセプション統合の効率を低下させ、身体の内部モデルへの依存を増大させるメカニズム",
+      "datePublished": "2026-04-09",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation",
+        "dr:cluster/embodied_cognition_4e"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-09_ai_dev_geo-industry-crystallization-visigeo-standard-suite-seo-llm-citation-gap",
+      "@type": "Article",
+      "name": "GEO産業の結晶化 — VisiGEOが初の標準GEOスイートを公開、「SEO上位10件の90%超はLLM引用に現れない」データがAI検索最適化を独立領域として確立",
+      "datePublished": "2026-04-09",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/llms_txt_b2a_protocols",
+        "dr:cluster/geo_llm_citation_optimization"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-12_tech_hermes-agent-v08-persistent-memory-auto-skill-generation",
+      "@type": "Article",
+      "name": "Hermes Agent v0.8 — 永続メモリとスキル自動生成で「使うほど賢くなる」MITライセンスAIエージェントが2ヶ月で47,000スターを獲得した設計原理",
+      "datePublished": "2026-04-12",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/agent_framework_runtime",
+        "dr:cluster/agent_memory_context_engineering"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-12_personal_predictive-processing-abstract-concepts-structural-representations-grounded-cognition",
+      "@type": "Article",
+      "name": "予測処理は抽象概念をどう扱うか — Friedrich & Fischerが構造的表象・メタファーマッピング・概念空間で身体化認知と高次認知を架橋する新理論",
+      "datePublished": "2026-04-12",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/predictive_processing_meditation",
+        "dr:cluster/embodied_cognition_4e"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-12_ai_dev_memento-skills-agent-skill-rewriting-without-retraining",
+      "@type": "Article",
+      "name": "Memento-Skills — モデル再訓練なしでAIエージェントが自身のスキルを書き換える外部メモリフレームワークが示す「スキャフォールド溶解」の実装原理",
+      "datePublished": "2026-04-12",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-19_tech_openai-agents-sdk-native-sandbox-manifest-snapshot-rehydration",
+      "@type": "Article",
+      "name": "OpenAI Agents SDK 次世代進化：ネイティブサンドボックス＋Manifest＋スナップショット／再ハイドレート",
+      "datePublished": "2026-04-19",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/agent_framework_runtime",
+        "dr:cluster/agent_sandbox_isolation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-19_personal_lifu-insula-subregion-interoception-anxiety-fear-neuromodulation",
+      "@type": "Article",
+      "name": "低強度集束超音波 (LIFU) による島皮質サブ領域刺激が内受容感覚と不安を分離制御する",
+      "datePublished": "2026-04-19",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/interoception_neuroscience",
+        "dr:cluster/somatic_intelligence_wearables"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-19_ai_dev_llm-recommendation-rate-llmr-optimization-three-levers-beyond-geo",
+      "@type": "Article",
+      "name": "LLMR（LLM Recommendation Rate）最適化：引用ではなく推薦される指標設計と3つのレバー",
+      "datePublished": "2026-04-19",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/geo_llm_citation_optimization"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-21_tech_magma-multi-graph-agent-memory",
+      "@type": "Article",
+      "name": "MAGMA — セマンティック・時間・因果・エンティティの4グラフを並走させる「多視点エージェントメモリ」がRAG/コンテキスト工学の次の標準を作る",
+      "datePublished": "2026-04-21",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/agent_native_databases_data"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-21_personal_interoceptive-rhythms-real-world",
+      "@type": "Article",
+      "name": "内受容リズムが知覚を形作る — 心拍・呼吸・胃リズムをウェアラブルで捉えて「リアルワールド内受容研究」を可能にする新パラダイム",
+      "datePublished": "2026-04-21",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/interoception_neuroscience",
+        "dr:cluster/embodied_cognition_4e",
+        "dr:cluster/somatic_intelligence_wearables"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-21_ai_dev_affective-taxis-alignment-hypothesis",
+      "@type": "Article",
+      "name": "Affective-Taxis仮説 — Sennesh & Ramsteadが提示する「感情走性」によるAIアラインメントが Contemplative AI のBoundless Care条項に実装可能な計算基盤を与える",
+      "datePublished": "2026-04-21",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/contemplative_ai_alignment"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-24_tech_anthropic-operon-vertical-biology-agent",
+      "@type": "Article",
+      "name": "Anthropic Operon と Coefficient Bio 買収 — 汎用コーディングエージェントから「バイオ専用バーティカル・エージェント」へ舵を切った転換点",
+      "datePublished": "2026-04-24",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/cloud_agent_platforms"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-24_personal_integrative-interoception-exteroception-predictive-coding",
+      "@type": "Article",
+      "name": "内受容と外受容を統合する予測符号化モデル — 「身体の内と外」を並列階層として arbitrate する単一フレームワークと HCI への検証可能な予測",
+      "datePublished": "2026-04-24",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation",
+        "dr:cluster/interoception_neuroscience"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-24_ai_dev_google-authenticity-update-author-entity-geo",
+      "@type": "Article",
+      "name": "Google Authenticity Update（1月）+ March 2026 Core Update — エンティティ解決と Author Rank が GEO を「書き手の身元」勝負に変えた構造転換",
+      "datePublished": "2026-04-24",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/developer_authenticity_ai_slop"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-28_tech_agent-system-scaling-laws-arxiv-2512-08296",
+      "@type": "Article",
+      "name": "マルチエージェント・スケーリング則の登場 — arXiv 2512.08296「Towards a Science of Scaling Agent Systems」が260構成×6ベンチマーク×5アーキテクチャで描く協調・モデル能力・タスク要因の量的法則",
+      "datePublished": "2026-04-28",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_framework_runtime",
+        "dr:cluster/agent_evaluation_benchmarks"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-28_personal_mllm-embodiment-neuron-cell-journal-2026",
+      "@type": "Article",
+      "name": "Cell『Neuron』誌が問う「マルチモーダルLLMは身体化されているか」— 身体性認知科学が大規模モデル時代に正面衝突するEmbodiment論文の意義",
+      "datePublished": "2026-04-28",
+      "track": "personal",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/interoception_neuroscience",
+        "dr:cluster/embodied_cognition_4e",
+        "dr:cluster/somatic_intelligence_wearables"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-28_ai_dev_cross-platform-citation-divergence-geo-fork",
+      "@type": "Article",
+      "name": "クロスプラットフォーム引用ダイバージェンス — ChatGPTとPerplexityで引用ドメイン重複わずか11%が告げる「単一GEO戦略の終焉」とAKC拡散戦略のフォーク",
+      "datePublished": "2026-04-28",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-30_tech_ama-bench-memory-architecture-beats-backbone-scale",
+      "@type": "Article",
+      "name": "AMA-Bench が暴いた「メモリ・アーキテクチャ > バックボーン・スケール」— Q1 2026 エージェントメモリレース 5 リポジトリ・4 アーキテクチャ・累計 8 万スターが描く未解決問題",
+      "datePublished": "2026-04-30",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_native_databases_data",
+        "dr:cluster/agent_evaluation_benchmarks"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-30_personal_5meo-dmt-deep-meditation-predictive-processing-convergence",
+      "@type": "Article",
+      "name": "5-MeO-DMT と深層瞑想の神経収斂 — UCL 2026 年 1 月の「世界最強の幻覚剤」初ヒト脳画像が示す拡散性低周波振動と、能動的推論が架橋する『脱構築された意識』の共通基盤",
+      "datePublished": "2026-04-30",
+      "track": "personal",
+      "broadCluster": "dr:cluster/contemplative_meditation_science",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/advanced_meditation_consciousness",
+        "dr:cluster/meditation_phenomenology"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-04-30_ai_dev_skill-library-cambrian-explosion-april-2026",
+      "@type": "Article",
+      "name": "2604 年 4 月の「スキルライブラリ・カンブリア爆発」— SkillFlow/SkillFoundry/CoEvoSkills/SkillLearnBench/SkillMOO/SkillGraph/SkillsBench/SkillForge が一カ月で同時発火し、AKC の 6 フェーズ循環が事後的に標準化されつつある転換点",
+      "datePublished": "2026-04-30",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/ai_regulation_policy",
+        "dr:cluster/agent_skills_industry_standard"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-01_tech_microsoft-agent-framework-1-0-ga-net-python-a2a-mcp",
+      "@type": "Article",
+      "name": "Microsoft Agent Framework 1.0 GA — Semantic Kernel と AutoGen を統合した「.NET と Python のマルチエージェント本番基盤」が A2A + MCP をデフォルトにした転換点",
+      "datePublished": "2026-05-01",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai",
+        "dr:cluster/cloud_agent_platforms",
+        "dr:cluster/agent_framework_runtime"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-01_personal_jhana-acam-j-7t-fmri-reho-machine-learning-classification",
+      "@type": "Article",
+      "name": "ジャーナ瞑想の機械学習分類 — Harvard/MGH が 7T fMRI と ReHo で「集中・没入の最深層」を識別、デフォルトモードネットワーク・前部島皮質・青斑核に固有の機能シグネチャを発見",
+      "datePublished": "2026-05-01",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/advanced_meditation_consciousness",
+        "dr:cluster/interoception_neuroscience"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-01_ai_dev_microsoft-entra-agent-id-agent-as-employee-identity-governance",
+      "@type": "Article",
+      "name": "Microsoft Entra Agent ID Preview — エージェントを「サービスプリンシパル」として第一級アイデンティティ化し、Sponsor・Blueprint・Lifecycle で管理する「エージェント・アズ・エンプロイー」アーキテクチャの登場",
+      "datePublished": "2026-05-01",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/ai_regulation_policy",
+        "dr:cluster/agent_identity_governance"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-03_tech_craft-agents-oss-lukilabs-agent-native-ui-runtime",
+      "@type": "Article",
+      "name": "Craft Agents OSS（Lukilabs, 2026-05-02 公開）— Bun ランタイム上で動く agent-native マルチセッション UI が示す「コーディングエージェントの体験設計レイヤー」の登場",
+      "datePublished": "2026-05-03",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai",
+        "dr:cluster/coding_agents_ide"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-03_personal_body-scan-attenuation-self-bodily-boundary-dissolution-predictive-processing",
+      "@type": "Article",
+      "name": "「自分を減衰させることを学ぶ」— Becattini, Lifshitz, Miller (Neuroscience of Consciousness 2026/1) が予測処理で説明したボディスキャン瞑想と身体境界の溶解（bhaṅga）",
+      "datePublished": "2026-05-03",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_phenomenology",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-03_ai_dev_5wpr-ai-citation-source-index-2026-top15-concentration-akc-diffusion-pivot",
+      "@type": "Article",
+      "name": "5WPR AI Platform Citation Source Index 2026（5/1 公開, 6.8 億引用統合）— 上位15ドメインが AI 引用の 68% を占める「Google PageRank 以上の集中」が AKC diffusion 戦略を『広く撒く』から『15ドメイン×7優先順位』へ強制転換させる",
+      "datePublished": "2026-05-03",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/agent_identity_governance"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-04_tech_cursor-3-agent-execution-runtime",
+      "@type": "Article",
+      "name": "Cursor 3.x が証明した「IDE のエージェント実行ランタイム化」 — 35% の自律 PR と /multitask が示す開発者ワークフローの不可逆な転換点",
+      "datePublished": "2026-05-04",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-04_personal_psilocybin-rebus-neural-rewiring-meditation",
+      "@type": "Article",
+      "name": "サイロシビンの活動依存的神経回路再配線 — Jiang et al. 2026 Cell 論文と ReBUS 仮説が示す「固着した先入観の弛緩」の神経基盤と観想実践への橋渡し",
+      "datePublished": "2026-05-04",
+      "track": "personal",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/psychedelics_meditation_convergence",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-04_ai_dev_spec-driven-development-kiro-beyond-vibe-coding",
+      "@type": "Article",
+      "name": "Spec-Driven Development の制度化 — Amazon Kiro × GitHub Spec Kit × Addy Osmani「Beyond Vibe Coding」が同時着地した「仕様書ファースト・エージェント開発」パラダイムとAKCのExtract/Promote相との共鳴",
+      "datePublished": "2026-05-04",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/agent_memory_context_engineering"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-06_tech_openai-codex-goal-persistent-agent-workflow",
+      "@type": "Article",
+      "name": "OpenAI Codex /goal --- persistent goal and turn-scoped environment switching as CLI agent walk-away execution model",
+      "datePublished": "2026-05-06",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-06_personal_thoughtseeds-embodied-cognition-global-workspace-fep",
+      "@type": "Article",
+      "name": "Thoughtseeds --- hierarchical model of embodied cognition integrating FEP, Global Workspace Theory, and evolutionary theory for agent design",
+      "datePublished": "2026-05-06",
+      "track": "personal",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/meditation_phenomenology",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/embodied_cognition_4e"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-06_ai_dev_ai-meets-brain-cognitive-neuroscience-agent-memory-akc",
+      "@type": "Article",
+      "name": "AI Meets Brain --- unified survey of memory systems from cognitive neuroscience to autonomous agents as theoretical foundation for AKC",
+      "datePublished": "2026-05-06",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/contemplative_ai_alignment"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-07_tech_anthropic-project-glasswing-claude-mythos-zero-day-consortium",
+      "@type": "Article",
+      "name": "Project Glasswing × Claude Mythos Preview — 「ゲート付きフロンティアモデル + 産業横断コンソーシアム」が定義する AI セキュリティの新しい統治モデルと OpenBSD 27 年物脆弱性発見が示す攻撃面の構造変化",
+      "datePublished": "2026-05-07",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/ai_security_research"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-07_personal_plos-biology-2026-grounding-interoceptive-interventions-brain-body-coupling",
+      "@type": "Article",
+      "name": "『Beyond the buzz』PLOS Biology 2026 — 内受容介入ブームを脳-身体カップリング機構に接地する批判的メタ論文が、瞑想アプリ・ウェアラブル・ポリヴェーガル理論の科学的根拠を再評価する",
+      "datePublished": "2026-05-07",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/interoception_neuroscience"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-07_ai_dev_contemplative-superalignment-springer-2026-wise-world-model-akc-promote",
+      "@type": "Article",
+      "name": "Contemplative Superalignment（Springer 2026）— Laukkonen らが Wise World Model と非二元性・空・マインドフルネスを RLHF 後継のスーパーアライメント枠組みとして定式化、CCAI 条項を AKC の Promote 相に橋渡しする最新展開",
+      "datePublished": "2026-05-07",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/contemplative_ai_alignment"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-08_tech_agent-registry-convergence-2026-discovery-layer",
+      "@type": "Article",
+      "name": "エージェント・レジストリ収斂（2026年4-5月）— AWS Bedrock AgentCore・Microsoft Entra・JetBrains ACP・Solana ERC-8004 が同時に立ち上げた「エージェント発見層」の標準化レース",
+      "datePublished": "2026-05-08",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_framework_runtime"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-08_personal_tal-2026-precision-weighting-meditation-phenomenology",
+      "@type": "Article",
+      "name": "Tal et al. 2026『Active Inference, Computational Phenomenology, and Advanced Meditation』— precision weighting を全モデルの共通機軸として同定し、瞑想現象学の階層生成モデル化を完成させた",
+      "datePublished": "2026-05-08",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/advanced_meditation_consciousness",
+        "dr:cluster/meditation_phenomenology",
+        "dr:cluster/active_inference_theory"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-08_ai_dev_skill-md-weeks-not-years-industry-standard-akc",
+      "@type": "Article",
+      "name": "SKILL.md が数週間で業界標準化した出来事 — Anthropic 公開仕様→Microsoft VS Code/Copilot→OpenAI Codex CLI/ChatGPT→Cursor/Amp/Goose/OpenCode/Letta、Antigravity Awesome Skills 1,234 スキル × 16 エージェントが示す「AKC の配布単位」の確定",
+      "datePublished": "2026-05-08",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/agent_skills_industry_standard",
+        "dr:cluster/agent_memory_context_engineering"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-10_tech_coder-agents-self-hosted-enterprise",
+      "@type": "Article",
+      "name": "Coder Agents が示す「セルフホスト型 AI コーディング」の登場 — エンタープライズの 70% が抱えるインフラギャップに、Cursor / Claude Code 系クラウドエージェントとは逆方向で挑む M&A 不可避の新カテゴリ",
+      "datePublished": "2026-05-10",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-10_personal_meditation-sensory-attenuation-active-inference",
+      "@type": "Article",
+      "name": "Poublan-Couzardot et al. 2026 — 10日集中マインドフルネス・リトリートが感覚減衰（sensory attenuation）を能動的推論的に変調する実証データと、瞑想による「順モデル更新」の身体性メカニズム",
+      "datePublished": "2026-05-10",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_phenomenology",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-10_ai_dev_agent-experience-platform-axp-middleware",
+      "@type": "Article",
+      "name": "Scrunch AXP（Agent Experience Platform）— 「llms.txt の次」として登場した、Web サイトと AI クローラの間に挿入する圧縮・構造化ミドルウェア層と、AKC リポジトリ拡散戦略への含意",
+      "datePublished": "2026-05-10",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/llms_txt_b2a_protocols",
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-11_tech_pytorch-lightning-mini-shai-hulud-pypi-ml-supply-chain",
+      "@type": "Article",
+      "name": "PyTorch Lightning 2.6.2/2.6.3 を侵害した Mini Shai-Hulud — npm 由来のワームが PyPI / ML トレーニング基盤に橋渡しした「自己増殖型サプライチェーン攻撃」の新フェーズ",
+      "datePublished": "2026-05-11",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/supply_chain_attacks_ai_toolchain"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-11_personal_body-wandering-pnas-2026-embodied-thalamocortical-mind",
+      "@type": "Article",
+      "name": "PNAS 2026『Uncovering the embodied dimension of the wandering mind』— 536 人 fMRI 研究が露わにした「body-wandering」という第三のマインド・ワンダリング次元と、視床皮質-体性感覚回路の新しい計測軸",
+      "datePublished": "2026-05-11",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/predictive_processing_meditation",
+        "dr:cluster/interoception_neuroscience"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-11_ai_dev_eth-zurich-agents-md-context-file-counter-evidence-akc",
+      "@type": "Article",
+      "name": "ETH Zurich『Evaluating AGENTS.md』が突きつけた「Context File は逆効果」の実証 — 自動生成 −3% / 人手記述 +4% / 推論コスト +20% という数値が AKC のスキャフォールド溶解原則を裏付けた瞬間",
+      "datePublished": "2026-05-11",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/llms_txt_b2a_protocols",
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/agent_skills_industry_standard"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-12_tech_chrome-devtools-mcp-official-launch-coding-agents-browser-vision",
+      "@type": "Article",
+      "name": "Chrome DevTools MCP 正式公開（2026-05-11）— Google 公式の「ブラウザに目を持たせる」コーディングエージェント基盤が JavaScript/TypeScript デバッグの自動化を再定義する",
+      "datePublished": "2026-05-12",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai",
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/mcp_server_ecosystem"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-12_personal_ai-guided-vns-interoceptive-prediction-error-2026-personalization",
+      "@type": "Article",
+      "name": "AI ガイド付き迷走神経刺激（VNS）2026 — Nature Communications の深層表現学習レスポンダー予測と taVNS による内受容予測誤差変調が「閉ループ・個別化身体性介入」を臨床標準にする転換点",
+      "datePublished": "2026-05-12",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation",
+        "dr:cluster/interoception_neuroscience"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-12_ai_dev_citeverifier-neurips-fabricated-citations-akc-curate-infrastructure",
+      "@type": "Article",
+      "name": "CiteVerifier と NeurIPS 2025「100件の幻覚引用」— LLM が査読を貫通させた学術引用の信頼性危機（2025年だけで偽造引用80.9%増）が AKC の Curate/Maintain フェーズを「制度知識のインフラ」に昇格させる",
+      "datePublished": "2026-05-12",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-13_tech_cocoindex-incremental-engine-long-term-agents",
+      "@type": "Article",
+      "name": "Cocoindex 登場 — 「長期エージェントのためのインクリメンタル・エンジン」が示す、状態を持つ AI エージェント時代のデータパイプライン再設計",
+      "datePublished": "2026-05-13",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_native_databases_data",
+        "dr:cluster/agent_framework_runtime"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-13_personal_body-scan-predictive-processing-self-attenuation-2026",
+      "@type": "Article",
+      "name": "Becattini・Lifshitz・Miller 2026『Learning to attenuate myself』— ボディスキャン瞑想を「自己を減衰させる」予測処理的学習として定式化し、身体境界溶解現象を能動的推論で説明した理論的ブレイクスルー",
+      "datePublished": "2026-05-13",
+      "track": "personal",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/meditation_phenomenology",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-13_ai_dev_single-agent-outperforms-multi-agent-token-budget-akc",
+      "@type": "Article",
+      "name": "Tran & Kiela『Single-Agent LLMs Outperform Multi-Agent Systems』(arXiv 2604.02460) — 同一思考トークン予算下では単一エージェントが多エージェントを情報理論的に凌駕する実証と、Contemplative-agent / AKC の単一エージェント設計を裏付ける2026年の決定的論文",
+      "datePublished": "2026-05-13",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/agent_memory_context_engineering"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-14_tech_linux-71-rc2-ai-generated-patches-kernel-liability-policy",
+      "@type": "Article",
+      "name": "Linux 7.1-rc2《AI生成パッチ流入》と Torvalds の責任原則——AMD prom21-xhci 受理が示す「カーネル開発の参入障壁・liability 配分・レビュー慣行」の同時書き換え",
+      "datePublished": "2026-05-14",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/ai_regulation_policy"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-14_personal_hinrichs-geometric-hyperscanning-affect-active-inference-2026",
+      "@type": "Article",
+      "name": "Hinrichs et al. 2026《Geometric Hyperscanning of Affect Under Active Inference》——Forman-Ricci 曲率で対人脳ネットワークの感情位相転移（rupture/co-regulation/re-attunement）を計測する第二者神経科学の新方法論",
+      "datePublished": "2026-05-14",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/embodied_cognition_4e"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-14_ai_dev_anthropic-nla-ccai-mindfulness-akc-measure-quantification",
+      "@type": "Article",
+      "name": "Anthropic NLA（Natural Language Autoencoders, 5/7 公開）× CCAI Mindfulness 公理——Claude の内的活性化を自然言語で読む技術が「継続的内省的気づき」を実装可能 primitive に昇格させ、AKC Measure 相を主観評価から定量検証へ転換する",
+      "datePublished": "2026-05-14",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/contemplative_ai_alignment"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-15_tech_mnemonic-sovereignty-llm-agent-memory-governance-2026",
+      "@type": "Article",
+      "name": "Mnemonic Sovereignty 2026 — LLM エージェントの長期記憶ガバナンスという新パラダイム、書き込み・読み出し・忘却の検証可能な制御層",
+      "datePublished": "2026-05-15",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_native_databases_data",
+        "dr:cluster/agent_framework_runtime",
+        "dr:cluster/agent_memory_context_engineering"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-15_personal_polyvagal-untenable-2026-predictive-coding-prefrontal-alternative",
+      "@type": "Article",
+      "name": "ポリヴェーガル理論『untenable』騒動 2026 — 39名の自律神経科学者による反論と、予測符号化が提示する『シャットダウンは前頭前野の予測である』という代替フレーム",
+      "datePublished": "2026-05-15",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation",
+        "dr:cluster/interoception_neuroscience"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-15_ai_dev_ghost-citation-brand-search-volume-llm-ranking-akc-diffusion-2026",
+      "@type": "Article",
+      "name": "Ghost Citation 61.7% 問題 — LLM 引用の過半数がブランド未言及で、ブランド検索ボリュームが citation rate の最強予測因子（r=0.334）となった 2026 年の AI 検索ランキング地殻変動と AKC Diffusion 戦略への含意",
+      "datePublished": "2026-05-15",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-16_tech_gpt-realtime-2-audio-loop-reasoning-voice-agent-runtime-2026",
+      "@type": "Article",
+      "name": "GPT-Realtime-2 と「audio loop 内推論」 — 音声エージェントが GPT-5 級 reasoning・128K context・並列 tool 呼び出しを音声ストリーム内で完結させた転換点と、Swift/iOS 音声アプリ設計への含意",
+      "datePublished": "2026-05-16",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/frontier_model_releases",
+        "dr:cluster/multimodal_voice_realtime_ai"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-16_personal_anapanasati-eeg-microstate-temporal-brain-dynamics-2026",
+      "@type": "Article",
+      "name": "Ānāpānasati 焦点的注意瞑想の EEG マイクロステート解析（Brain Topography 2026年4月）— 熟練者22名で示された「脳ダイナミクスの時間的アーキテクチャ再編」が、空間的ネットワーク論を超えた能動的推論的解釈を可能にする",
+      "datePublished": "2026-05-16",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-16_ai_dev_llms-txt-zero-usage-geo-stack-failure-akc-diffusion-2026",
+      "@type": "Article",
+      "name": "「llms.txt is dead」検証データ 2026 — OtterlyAI 90日測定で AI クローラ訪問の 0.1%、30万ドメイン分析で citation 相関ゼロ、Adobe 1,000ドメイン CDN ログで GPTBot/ClaudeBot/PerplexityBot 完全欠席が突きつけた GEO スタック最大の誤解と、AKC 拡散戦略の再設計",
+      "datePublished": "2026-05-16",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/llms_txt_b2a_protocols",
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-19_tech_openai-daybreak-codex-security-defensive-agentic-harness",
+      "@type": "Article",
+      "name": "OpenAI Daybreak と Codex Security — defensive agentic harness の新カテゴリ確立 (2026-05-11)",
+      "datePublished": "2026-05-19",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/ai_security_research",
+        "dr:cluster/coding_agents_ide"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-19_personal_meditation-harmonic-non-harmonic-brain-body-coupling-binary-hierarchy",
+      "@type": "Article",
+      "name": "瞑想下の脳-身体振動カップリング — 調和的 vs 非調和的 PAC の反転と Binary Hierarchy 理論",
+      "datePublished": "2026-05-19",
+      "track": "personal",
+      "broadCluster": "dr:cluster/contemplative_meditation_science",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-19_ai_dev_skcc-skill-compilation-ir-akc-portability-security-2026",
+      "@type": "Article",
+      "name": "SkCC — SKILL.md 互換性危機を解く compiler IR と AKC 進化 (arXiv 2605.03353, 2026-05-05)",
+      "datePublished": "2026-05-19",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/agent_skills_industry_standard"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-20_tech_mattpocock-skills-personal-claude-directory-industry-standard-may-2026",
+      "@type": "Article",
+      "name": "個人の .claude ディレクトリが業界標準になる日 — mattpocock/skills 75,700 stars・週次 +6,400 と Anthropic Agent Skills オープン化が変えた『スキル流通』の構造",
+      "datePublished": "2026-05-20",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-20_personal_dark-side-of-dharma-meditation-adverse-effects-contemplative-tech-design",
+      "@type": "Article",
+      "name": "瞑想の闇 — Anna Lutkajtis『The Dark Side of Dharma』NY Best Books 2026 入選が突きつけた『西洋心理学が無視してきた瞑想の副作用』と瞑想テック・Contemplative AI 設計への影響",
+      "datePublished": "2026-05-20",
+      "track": "personal",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/meditation_phenomenology",
+        "dr:cluster/meditation_adverse_effects",
+        "dr:cluster/contemplative_ai_alignment"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-20_ai_dev_personal-akc-practice-eric-ma-obsidian-managed-agents-memory-authenticity",
+      "@type": "Article",
+      "name": "個人開発者の AKC 実践が標準化される — Eric Ma の Obsidian+AI で知識管理時間 30-40%→10%・Anthropic Managed Agents Memory（4/23 GA）・自前 .claude ダンプ公開が示す『scaffold→authenticity』への転換",
+      "datePublished": "2026-05-20",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/developer_authenticity_ai_slop"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-22_tech_google-io-2026-antigravity-managed-agents-spark",
+      "@type": "Article",
+      "name": "Google I/O 2026 後夜 — Antigravity 2.0 × Gemini 3.5 Flash × Managed Agents × Gemini Spark が示す『Google フル・エージェントスタック』と Anthropic / Cursor への正面攻撃",
+      "datePublished": "2026-05-22",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai",
+        "dr:cluster/cloud_agent_platforms",
+        "dr:cluster/coding_agents_ide"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-22_personal_lieberman-sacchet-2026-multidimensional-consciousness-meditation",
+      "@type": "Article",
+      "name": "Lieberman & Sacchet 2026『Toward a Neuroscience of Consciousness Using Advanced Meditation』— Neuroscience and Biobehavioral Reviews 181 が提示する「意識の多次元構造マップ」と AI 意識論への橋渡し",
+      "datePublished": "2026-05-22",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/advanced_meditation_consciousness",
+        "dr:cluster/active_inference_theory"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-22_ai_dev_webmcp-origin-trial-b2a-execution-layer-akc-diffuse",
+      "@type": "Article",
+      "name": "WebMCP 登場（Chrome 149 origin trial, 5/18-19）— 『AI が読む Web』(llms.txt) から『AI が操作する Web』へ、B2A 標準が読解層から実行層に拡張された日と AKC Diffuse 戦略の再設計",
+      "datePublished": "2026-05-22",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/llms_txt_b2a_protocols",
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-23_tech_swe-bench-2026q2-mythos-utboost-evaluation-crisis",
+      "@type": "Article",
+      "name": "SWE-bench Verified 2026Q2 リーダーボード騒動 — Claude Mythos Preview 93.9% × UTBoost が暴いた「24-40% のランク改変」とコーディングエージェント評価の信頼性危機",
+      "datePublished": "2026-05-23",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/ai_security_research",
+        "dr:cluster/agent_evaluation_benchmarks"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-23_personal_pascarella-jerbi-2026-meg-monks-brain-criticality",
+      "@type": "Article",
+      "name": "Pascarella & Jerbi 2026《12名僧侶の MEG 研究》— 瞑想は「脳のクリティカリティ（カオスと秩序の均衡）」を深める、自由エネルギー原理と接続する新しい神経動力学指標",
+      "datePublished": "2026-05-23",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/meditation_neurophysiology",
+        "dr:cluster/active_inference_theory"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-23_ai_dev_claude-dreaming-akc-extract-curate-platform-standard",
+      "@type": "Article",
+      "name": "Claude「Dreaming」Research Preview — Anthropic がプラットフォーム標準機能として実装した「AKC の Extract / Curate phase」と、Harvey 内部テストで完了率 6x が示すエージェント記憶統合の臨界点",
+      "datePublished": "2026-05-23",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:cluster/contemplative_meditation_science",
+      "@type": "Thing",
+      "name": "Contemplative meditation science / 瞑想・意識・神経科学"
+    },
+    {
+      "@id": "dr:cluster/predictive_processing_active_inference",
+      "@type": "Thing",
+      "name": "Predictive processing & active inference / 予測処理・能動的推論"
+    },
+    {
+      "@id": "dr:cluster/ai_alignment_contemplative",
+      "@type": "Thing",
+      "name": "AI alignment & contemplative AI / AI アライメントと contemplative AI"
+    },
+    {
+      "@id": "dr:cluster/ai_developer_ecosystem",
+      "@type": "Thing",
+      "name": "AI developer ecosystem / コーディングエージェント・MCP・IDE"
+    },
+    {
+      "@id": "dr:cluster/frontier_ai_models_platforms",
+      "@type": "Thing",
+      "name": "Frontier AI models & platforms / フロンティアモデル・プラットフォーム"
+    },
+    {
+      "@id": "dr:cluster/b2a_visibility_governance",
+      "@type": "Thing",
+      "name": "B2A protocols, visibility & governance / llms.txt・GEO・AI governance"
+    },
+    {
+      "@id": "dr:cluster/fintech_money_payments",
+      "@type": "Thing",
+      "name": "Fintech, money & payments / DeFi・ステーブルコイン・決済"
+    },
+    {
+      "@id": "dr:cluster/active_inference_theory",
+      "@type": "Thing",
+      "name": "Active inference & free energy theory",
+      "broaderClusterOf": "dr:cluster/predictive_processing_active_inference"
+    },
+    {
+      "@id": "dr:cluster/advanced_meditation_consciousness",
+      "@type": "Thing",
+      "name": "Advanced meditation & consciousness (jhana, nirodha)",
+      "broaderClusterOf": "dr:cluster/contemplative_meditation_science"
+    },
+    {
+      "@id": "dr:cluster/agent_evaluation_benchmarks",
+      "@type": "Thing",
+      "name": "Agent evaluation & benchmarks",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/agent_framework_runtime",
+      "@type": "Thing",
+      "name": "Agent frameworks & runtimes",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/agent_identity_governance",
+      "@type": "Thing",
+      "name": "Agent identity & enterprise governance",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:cluster/agent_memory_context_engineering",
+      "@type": "Thing",
+      "name": "Agent memory & context engineering",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/agent_native_databases_data",
+      "@type": "Thing",
+      "name": "Agent-native databases & data infrastructure",
+      "broaderClusterOf": "dr:cluster/frontier_ai_models_platforms"
+    },
+    {
+      "@id": "dr:cluster/agent_observability_debugging",
+      "@type": "Thing",
+      "name": "Agent observability & debugging",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/agent_payments_commerce_protocols",
+      "@type": "Thing",
+      "name": "Agent payments & commerce protocols (x402, agentic commerce)",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:cluster/agent_sandbox_isolation",
+      "@type": "Thing",
+      "name": "Agent sandboxing & process isolation",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/agent_skills_industry_standard",
+      "@type": "Thing",
+      "name": "Agent skills / skill.md industry standard",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/ai_agent_finance",
+      "@type": "Thing",
+      "name": "AI agent × finance (DefAI, AI trading)",
+      "broaderClusterOf": "dr:cluster/fintech_money_payments"
+    },
+    {
+      "@id": "dr:cluster/ai_regulation_policy",
+      "@type": "Thing",
+      "name": "AI regulation & policy (EU AI Act, OWASP, etc.)",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:cluster/ai_security_research",
+      "@type": "Thing",
+      "name": "AI security research & autonomous cyber operations",
+      "broaderClusterOf": "dr:cluster/frontier_ai_models_platforms"
+    },
+    {
+      "@id": "dr:cluster/ai_society_public_services",
+      "@type": "Thing",
+      "name": "AI in society & public services",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:cluster/akc_agent_knowledge_cycle",
+      "@type": "Thing",
+      "name": "AKC (Agent Knowledge Cycle) practice & diffusion",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:cluster/autonomous_research_agents",
+      "@type": "Thing",
+      "name": "Autonomous research & multi-agent swarms",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/beautiful_loop_consciousness",
+      "@type": "Thing",
+      "name": "Beautiful loop / consciousness theory",
+      "broaderClusterOf": "dr:cluster/predictive_processing_active_inference"
+    },
+    {
+      "@id": "dr:cluster/buddhist_ai_initiative",
+      "@type": "Thing",
+      "name": "Buddhist AI initiative / Buddharoid",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:cluster/cloud_agent_platforms",
+      "@type": "Thing",
+      "name": "Cloud agent platforms (Microsoft, Google, AWS)",
+      "broaderClusterOf": "dr:cluster/frontier_ai_models_platforms"
+    },
+    {
+      "@id": "dr:cluster/coding_agents_ide",
+      "@type": "Thing",
+      "name": "Coding agents & AI-first IDEs",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/computational_phenomenology",
+      "@type": "Thing",
+      "name": "Computational phenomenology",
+      "broaderClusterOf": "dr:cluster/predictive_processing_active_inference"
+    },
+    {
+      "@id": "dr:cluster/connectome_meditation_trait",
+      "@type": "Thing",
+      "name": "Connectome fingerprinting & meditation trait",
+      "broaderClusterOf": "dr:cluster/contemplative_meditation_science"
+    },
+    {
+      "@id": "dr:cluster/contemplative_ai_alignment",
+      "@type": "Thing",
+      "name": "Contemplative AI alignment & non-self",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:cluster/crypto_regulation_policy",
+      "@type": "Thing",
+      "name": "Crypto regulation & policy",
+      "broaderClusterOf": "dr:cluster/fintech_money_payments"
+    },
+    {
+      "@id": "dr:cluster/defi_protocol_design",
+      "@type": "Thing",
+      "name": "DeFi protocol design & security",
+      "broaderClusterOf": "dr:cluster/fintech_money_payments"
+    },
+    {
+      "@id": "dr:cluster/developer_authenticity_ai_slop",
+      "@type": "Thing",
+      "name": "Developer authenticity & AI slop critique",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:cluster/embodied_cognition_4e",
+      "@type": "Thing",
+      "name": "Embodied cognition / 4E framework",
+      "broaderClusterOf": "dr:cluster/predictive_processing_active_inference"
+    },
+    {
+      "@id": "dr:cluster/fintech_payments_loyalty",
+      "@type": "Thing",
+      "name": "Fintech payments & loyalty programs",
+      "broaderClusterOf": "dr:cluster/fintech_money_payments"
+    },
+    {
+      "@id": "dr:cluster/frontier_model_releases",
+      "@type": "Thing",
+      "name": "Frontier model releases & capabilities",
+      "broaderClusterOf": "dr:cluster/frontier_ai_models_platforms"
+    },
+    {
+      "@id": "dr:cluster/geo_llm_citation_optimization",
+      "@type": "Thing",
+      "name": "GEO / LLM citation optimization",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:cluster/interoception_neuroscience",
+      "@type": "Thing",
+      "name": "Interoception neuroscience & atlas",
+      "broaderClusterOf": "dr:cluster/predictive_processing_active_inference"
+    },
+    {
+      "@id": "dr:cluster/llms_txt_b2a_protocols",
+      "@type": "Thing",
+      "name": "llms.txt & B2A protocols",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:cluster/mcp_server_ecosystem",
+      "@type": "Thing",
+      "name": "MCP server ecosystem & protocol",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/meditation_adverse_effects",
+      "@type": "Thing",
+      "name": "Dark side of dharma / meditation adverse effects",
+      "broaderClusterOf": "dr:cluster/contemplative_meditation_science"
+    },
+    {
+      "@id": "dr:cluster/meditation_neurophysiology",
+      "@type": "Thing",
+      "name": "Meditation neurophysiology (EEG/fMRI/MEG)",
+      "broaderClusterOf": "dr:cluster/contemplative_meditation_science"
+    },
+    {
+      "@id": "dr:cluster/meditation_phenomenology",
+      "@type": "Thing",
+      "name": "Meditation phenomenology & self-dissolution",
+      "broaderClusterOf": "dr:cluster/contemplative_meditation_science"
+    },
+    {
+      "@id": "dr:cluster/meditation_retreat_biomarkers",
+      "@type": "Thing",
+      "name": "Meditation retreat biomarkers & molecular",
+      "broaderClusterOf": "dr:cluster/contemplative_meditation_science"
+    },
+    {
+      "@id": "dr:cluster/mindfulness_clinical_effects",
+      "@type": "Thing",
+      "name": "Mindfulness clinical effects & habit formation",
+      "broaderClusterOf": "dr:cluster/contemplative_meditation_science"
+    },
+    {
+      "@id": "dr:cluster/multimodal_voice_realtime_ai",
+      "@type": "Thing",
+      "name": "Multimodal, voice & realtime AI",
+      "broaderClusterOf": "dr:cluster/frontier_ai_models_platforms"
+    },
+    {
+      "@id": "dr:cluster/on_device_edge_ai",
+      "@type": "Thing",
+      "name": "On-device & edge AI (Gemini Nano, Apple Core AI, Gemma)",
+      "broaderClusterOf": "dr:cluster/frontier_ai_models_platforms"
+    },
+    {
+      "@id": "dr:cluster/predictive_coding_neural_networks",
+      "@type": "Thing",
+      "name": "Predictive coding × neural network architectures",
+      "broaderClusterOf": "dr:cluster/predictive_processing_active_inference"
+    },
+    {
+      "@id": "dr:cluster/predictive_processing_meditation",
+      "@type": "Thing",
+      "name": "Predictive processing × meditation",
+      "broaderClusterOf": "dr:cluster/predictive_processing_active_inference"
+    },
+    {
+      "@id": "dr:cluster/psychedelics_meditation_convergence",
+      "@type": "Thing",
+      "name": "Psychedelics × meditation convergence",
+      "broaderClusterOf": "dr:cluster/contemplative_meditation_science"
+    },
+    {
+      "@id": "dr:cluster/somatic_intelligence_wearables",
+      "@type": "Thing",
+      "name": "Somatic intelligence & interoceptive wearables",
+      "broaderClusterOf": "dr:cluster/predictive_processing_active_inference"
+    },
+    {
+      "@id": "dr:cluster/stablecoin_infrastructure",
+      "@type": "Thing",
+      "name": "Stablecoin infrastructure & convergence",
+      "broaderClusterOf": "dr:cluster/fintech_money_payments"
+    },
+    {
+      "@id": "dr:cluster/supply_chain_attacks_ai_toolchain",
+      "@type": "Thing",
+      "name": "Supply chain attacks on AI toolchain",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/tradfi_crypto_convergence",
+      "@type": "Thing",
+      "name": "TradFi-crypto convergence (ETFs, brokerages, tokenization)",
+      "broaderClusterOf": "dr:cluster/fintech_money_payments"
+    },
+    {
+      "@id": "dr:cluster/world_models_neuromorphic",
+      "@type": "Thing",
+      "name": "World models & neuromorphic architectures",
+      "broaderClusterOf": "dr:cluster/frontier_ai_models_platforms"
+    }
+  ]
+}

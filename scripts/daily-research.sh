@@ -233,6 +233,20 @@ if ! "$CLAUDE_CMD" --version >> "$LOG_FILE" 2>&1; then
   exit 1
 fi
 
+# === graph.jsonld 健全性チェック ===
+# 飽和警告のソース。不在 or 破損なら Pass 1 飽和判断ができないため fatal。
+if [ ! -f "$PROJECT_DIR/graph.jsonld" ]; then
+  log "ERROR: graph.jsonld not found at $PROJECT_DIR/graph.jsonld"
+  notify "graph.jsonld が不在。bootstrap-graph.sh を実行してください" "Daily Research Error"
+  exit 1
+fi
+if ! python3 -c "import json; json.load(open('$PROJECT_DIR/graph.jsonld'))" >> "$LOG_FILE" 2>&1; then
+  log "ERROR: graph.jsonld JSON parse failed"
+  notify "graph.jsonld の JSON 構造が壊れています" "Daily Research Error"
+  exit 1
+fi
+log "graph.jsonld health check passed"
+
 # === 実行 ===
 cd "$PROJECT_DIR"
 

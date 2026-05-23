@@ -12,8 +12,11 @@ config.toml
 past_topics.json
 past_topics.json.bak
 
-# MCP config (use .mcp.example.json as template)
+# MCP config (project-scoped MCP servers, if any)
 .mcp.json
+
+# Concept cluster graph backup (graph.jsonld itself is tracked)
+graph.jsonld.bak
 
 # Personal launchd plist (use com.example.daily-research.plist as template)
 com.daily-research*.plist
@@ -26,6 +29,9 @@ com.*.daily-research.plist
 
 # Analysis reports
 .reports/
+
+# Internal planning notes (not for public repo)
+.notes/
 
 # Personal operational logs (postmortems, session transcripts, evaluations)
 docs/progress/
