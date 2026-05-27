@@ -3414,6 +3414,56 @@
       "@type": "Thing",
       "name": "Content provenance standards (C2PA, Content Credentials)",
       "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:topic/2026-05-28_authorship_training-data-attribution-influence-functions-2026",
+      "@type": "Article",
+      "name": "学習データ帰属(Training Data Attribution)と影響関数の2026年スケーリング研究 — 著者のアイデアが LLM 学習を経て出力へどう辿れるか(Mechanistic Data Attribution, LoGra 影響関数の大規模化)",
+      "datePublished": "2026-05-28",
+      "track": "authorship",
+      "contributesToRepo": "authorship",
+      "reinforces": [
+        "concept/attribution-diffusion",
+        "concept/exclusivity-to-derivation-axis"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/content_provenance_c2pa",
+        "dr:cluster/developer_authenticity_ai_slop"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-28_contemplative_autonomous-agent-memory-mechanisms-survey-2026",
+      "@type": "Article",
+      "name": "自律 LLM エージェントのメモリ機構2026サーベイ — distill/reflect/episodic を write-manage-read ループとして体系化し、reflection 除去で行動が48時間で退化する Generative Agents 知見を含む(arXiv 2603.07670)",
+      "datePublished": "2026-05-28",
+      "track": "contemplative",
+      "contributesToRepo": "contemplative",
+      "reinforces": [
+        "ca/concept/akc-cycle-mapping",
+        "ca/concept/moment-of-recognition"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/agent_memory_context_engineering"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-28_aap_eu-ai-act-excluded-accountability-interconnected-agents",
+      "@type": "Article",
+      "name": "EU AI Act が除外する領域の帰責 — 相互接続された自律エージェント群では各々が規制準拠でも「単一の責任主体」が消える問題と AgentGov-SC 3層ガバナンス提案(Butt et al., arXiv 2605.01091, 2026-05)",
+      "datePublished": "2026-05-28",
+      "track": "aap",
+      "contributesToRepo": "aap",
+      "reinforces": [
+        "aap/concept/accountability-distribution",
+        "aap/concept/pre-named-gap-bearer"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_regulation_policy"
+      ]
     }
   ]
 }
