@@ -17,7 +17,13 @@ python3 <<'PYEOF'
 import json, os, tomllib
 from datetime import date
 
-# daily-research graph の reinforces 履歴: concept @id -> [datePublished, ...]
+def norm_cid(cid):
+    # fragment 正規化: concept @id の "#" 以降を照合キーにする。
+    # repo concept は完全 URI (https://...#concept/foo)、Pass の reinforces は
+    # fragment (concept/foo) で記録されるため、# 以降で揃える。# がなければ全体。
+    return cid.split('#', 1)[1] if '#' in cid else cid
+
+# daily-research graph の reinforces 履歴: 正規化 concept キー -> [datePublished, ...]
 reinforced = {}
 try:
     with open('graph.jsonld') as f:
@@ -26,7 +32,7 @@ try:
         if n.get('@type') == 'Article':
             d = n.get('datePublished', '')
             for cid in n.get('reinforces', []):
-                reinforced.setdefault(cid, []).append(d)
+                reinforced.setdefault(norm_cid(cid), []).append(d)
 except FileNotFoundError:
     pass
 
@@ -59,7 +65,7 @@ for track, v in cfg.get('tracks', {}).items():
     for c in concepts:
         cid = c.get('@id')
         name = c.get('name', cid)
-        hits = reinforced.get(cid, [])
+        hits = reinforced.get(norm_cid(cid), [])
         cnt = len(hits)
         if cnt == 0:
             unc.append(f"{name}  [{cid}]")

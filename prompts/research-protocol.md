@@ -109,7 +109,7 @@ templates/report-template.md のフォーマットに厳密に従い、選定さ
 
 3. クラスタ割り当て・補強記録ルール:
    - **`contributesToRepo`** は track 名（`authorship` / `contemplative` / `aap`）をそのまま記入
-   - **`reinforces`** は選定済みテーマ JSON の `reinforces`（補強した repo concept の @id 配列）を **そのまま正確にコピー**する。coverage-report がこの @id で補強履歴を集計するため、表記揺れがあると追跡できない。フォールバックでテーマ JSON に `reinforces` が無い場合は、`.repo-graphs/{track}.jsonld` を読んで実際に補強した concept の @id を記入する
+   - **`reinforces`** は選定済みテーマ JSON の `reinforces`（補強した repo concept の @id 配列）を **そのままコピー**する。coverage-report は `#` 以降の fragment で正規化照合するため完全 URI でも fragment でも追跡できるが、テーマ JSON の表記をそのまま使うこと。フォールバックでテーマ JSON に `reinforces` が無い場合は、`.repo-graphs/{track}.jsonld` を読んで補強した concept の @id (完全 URI または `#` 以降の fragment) を記入する
    - **broadCluster は必ず既存 7 個から選択する。新規追加禁止**（taxonomy 安定性のため）
    - **subCluster は既存を優先**して再利用。意味的に該当する既存 subCluster がなければ新規追加可
    - 新規 subCluster を追加する場合は、`@graph` 末尾に `{ "@id": "dr:cluster/{name}", "@type": "Thing", "name": "{英語名}", "broaderClusterOf": "dr:cluster/{親 broadCluster}" }` ノードも追加
