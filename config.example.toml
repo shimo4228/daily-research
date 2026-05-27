@@ -7,77 +7,64 @@ date_format = "%Y-%m-%d"
 [report]
 min_sources = 5
 
-[tracks.tech]
-name = "Tech Trends"
-focus = "Developer technology trends. New tools, frameworks, AI, OSS"
+# Each track maps to one research repository.
+# At startup the repo's graph.jsonld is synced into .repo-graphs/<track>.jsonld,
+# and Pass 1 reads it together with the coverage-report to pick external research
+# that reinforces concepts not yet covered. No fixed `domains`: the area of interest
+# is derived dynamically from the repo graph. Define one track per repo you want fed.
+
+[tracks.repo_a]
+name = "Research Repo A Contribution"
+focus = "Discover external research that reinforces and extends the concept system of research repo A"
+target_repo = "/path/to/your/research-repo-a"
+target_graph = ".repo-graphs/repo_a.jsonld"   # cwd-relative path after sync
+target_doi = "10.xxxx/zenodo.xxxxxxxx"          # optional; the repo's DOI if it has one
 sources = [
-  "Hacker News top stories",
-  "GitHub Trending (past 7 days)",
-  "TechCrunch AI/Apps category",
-  "arXiv cs.AI, cs.CL, cs.SE new papers",
+  "Semantic Scholar (your repo's domain keywords)",
+  "arXiv (relevant categories for the repo)",
 ]
 scoring_criteria = [
-  { name = "Novelty", weight = 30, desc = "No similar theme in past_topics.json" },
-  { name = "Momentum", weight = 25, desc = "An actively evolving area, not static knowledge" },
-  { name = "Buildability", weight = 25, desc = "Could build something with Python/Swift/TypeScript" },
-  { name = "Whisper trend", weight = 20, desc = "A change not yet widely noticed" },
+  { name = "Concept reinforcement", weight = 35, desc = "Reinforces an uncovered / thinly-supported concept (see coverage-report)" },
+  { name = "Research recency", weight = 25, desc = "Latest 2026 research or development" },
+  { name = "Repo frontier fit", weight = 25, desc = "Serves the repo's next direction / open questions" },
+  { name = "Buildability", weight = 15, desc = "Leads to implementation in Python/Swift/TypeScript" },
 ]
 
-[tracks.personal]
-name = "Personal Interests"
-focus = "Embodied cognition, Buddhist studies, Free Energy Principle, and contemplative science"
+[tracks.repo_b]
+name = "Research Repo B Contribution"
+focus = "Discover external research that reinforces and extends the concept system of research repo B"
+target_repo = "/path/to/your/research-repo-b"
+target_graph = ".repo-graphs/repo_b.jsonld"
+target_doi = "10.xxxx/zenodo.xxxxxxxx"
 sources = [
-  "Semantic Scholar (embodied cognition, mindfulness, free energy principle)",
-  "arXiv q-bio.NC, nlin.AO new papers",
-  "Lion's Roar latest",
-  "Tricycle latest",
-  "Mindful Magazine latest",
-]
-domains = ["Embodied Cognition", "Buddhism", "Meditation", "Mindfulness", "Free Energy Principle", "Predictive Processing", "Active Inference"]
-scoring_criteria = [
-  { name = "Novelty", weight = 25, desc = "No similar theme in past_topics.json" },
-  { name = "Momentum", weight = 20, desc = "An actively evolving area, not static knowledge" },
-  { name = "Buildability", weight = 20, desc = "Could build something with Python/Swift/TypeScript" },
-  { name = "Whisper trend", weight = 15, desc = "A change not yet widely noticed" },
-  { name = "Tech x Body intersection", weight = 20, desc = "Intersection of technology and embodiment" },
-]
-
-[tracks.ai_dev]
-name = "AI-Era Developer Strategy"
-focus = "AI search optimization (AIO/GEO) and developer authenticity. Content design for LLM discoverability, personal branding in the AI era, Contemplative AI agent design, and AKC (Agent Knowledge Cycle) practice and evolution"
-context = """\
-User's own projects. When selecting themes or researching, WebFetch each repo's README for current state.
-
-- Contemplative-agent: https://github.com/shimo4228/contemplative-agent-rules
-  Applies CCAI clauses (Laukkonen et al. 2025) to AI agent design
-- Contemplative-agent data: https://github.com/shimo4228/contemplative-agent-data
-- AKC (Agent Knowledge Cycle): https://github.com/shimo4228/agent-knowledge-cycle
-  6-phase knowledge lifecycle framework for AI agents\
-"""
-sources = [
-  "Hacker News (AI search, LLM, developer branding)",
-  "arXiv cs.IR, cs.AI new papers (generative engine optimization, retrieval)",
-  "Google Search Central Blog / Search Engine Journal",
-  "IndieHackers / Dev.to (developer authenticity, personal branding)",
-  "Semantic Scholar (contemplative AI, AI alignment, knowledge management)",
-]
-domains = [
-  "AI Search Optimization", "AIO", "GEO (Generative Engine Optimization)",
-  "LLM Search", "RAG", "Content Strategy",
-  "Developer Authenticity", "Personal Branding",
-  "Contemplative AI", "Contemplative-agent",
-  "AKC (Agent Knowledge Cycle)", "Agent Knowledge Management",
-  "AI Alignment", "Constitutional AI",
+  "Semantic Scholar (your repo's domain keywords)",
+  "arXiv (relevant categories for the repo)",
 ]
 scoring_criteria = [
-  { name = "Novelty", weight = 25, desc = "No similar theme in past_topics.json" },
-  { name = "Momentum", weight = 25, desc = "An actively evolving technology, market, or discussion right now" },
-  { name = "Contemplative/AKC applicability", weight = 25, desc = "Can be applied to Contemplative-agent or AKC design and improvement" },
-  { name = "Buildability", weight = 15, desc = "Could build something with Python/Swift/TypeScript" },
-  { name = "Whisper trend", weight = 10, desc = "A change not yet noticed by most developers" },
+  { name = "Concept reinforcement", weight = 35, desc = "Reinforces an uncovered / thinly-supported concept (see coverage-report)" },
+  { name = "Research recency", weight = 25, desc = "Latest 2026 research or development" },
+  { name = "Repo frontier fit", weight = 25, desc = "Serves the repo's next direction / open questions" },
+  { name = "Buildability", weight = 15, desc = "Leads to implementation in Python/Swift/TypeScript" },
+]
+
+[tracks.repo_c]
+name = "Research Repo C Contribution"
+focus = "Discover external research that reinforces and extends the concept system of research repo C"
+target_repo = "/path/to/your/research-repo-c"
+target_graph = ".repo-graphs/repo_c.jsonld"
+target_doi = "10.xxxx/zenodo.xxxxxxxx"
+sources = [
+  "Semantic Scholar (your repo's domain keywords)",
+  "arXiv (relevant categories for the repo)",
+]
+scoring_criteria = [
+  { name = "Concept reinforcement", weight = 35, desc = "Reinforces an uncovered / thinly-supported concept (see coverage-report)" },
+  { name = "Research recency", weight = 25, desc = "Latest 2026 research or development" },
+  { name = "Repo frontier fit", weight = 25, desc = "Serves the repo's next direction / open questions" },
+  { name = "Buildability", weight = 15, desc = "Leads to implementation in Python/Swift/TypeScript" },
 ]
 
 [user_profile]
 skills = ["Python", "Swift", "TypeScript", "iOS development"]
-interests = ["AI/ML", "Agents", "Embodied Cognition", "Buddhism", "Meditation", "Free Energy Principle"]
-goal = "Discover ideas for the next development project to build"
+interests = ["AI/ML", "Agents", "your research domains"]
+goal = "Continuously discover external research that advances the concept systems of the mapped research repositories"

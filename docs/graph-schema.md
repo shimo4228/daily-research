@@ -38,7 +38,9 @@
 | `@id` | ✅ | `dr:topic/{YYYY-MM-DD}_{track}_{slug}` |
 | `name` | ✅ | topic のタイトル (日本語可) |
 | `datePublished` | ✅ | `YYYY-MM-DD` |
-| `track` | ✅ | `tech` / `personal` / `ai_dev` (config.toml に準拠) |
+| `track` | ✅ | config.toml の track 名 (現行 `authorship` / `contemplative` / `aap`)。過去 Article は旧 track (tech/personal/...) を保持 |
+| `contributesToRepo` | 任意 | 寄与先 repo (= track 名)。repo フィードバック型レポート (2026-05-27 転換以降) で記録 |
+| `reinforces` | 任意 | 補強した repo concept の @id 配列 (例 `https://github.com/shimo4228/authorship-strategy#concept/three-axis-inversion`)。`coverage-report.sh` がこれを集計し未補強 concept を算出 |
 | `broadCluster` | ✅ | `dr:cluster/{broad_name}` を 1 件指定 |
 | `subCluster` | ✅ | `dr:cluster/{sub_name}` の配列 (1 件以上、複数許可) |
 | `about` | 任意 | Wikidata `@id` または `dr:concept/...` 配列。意味タグ |

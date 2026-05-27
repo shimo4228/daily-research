@@ -18,6 +18,9 @@ past_topics.json.bak
 # Concept cluster graph backup (graph.jsonld itself is tracked)
 graph.jsonld.bak
 
+# Synced research repo graphs (read-only copies, regenerated each run)
+.repo-graphs/
+
 # Personal launchd plist (use com.example.daily-research.plist as template)
 com.daily-research*.plist
 com.*.daily-research.plist

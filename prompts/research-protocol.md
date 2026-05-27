@@ -68,6 +68,7 @@ templates/report-template.md のフォーマットに厳密に従い、選定さ
 - **最新性**: 2026年の情報を優先。古い情報は「背景」セクションのみ
 - **行動可能性**: 「開発アイデアへの示唆」セクションは具体的なアプリ/ツールのアイデアを含める
 - **出典の質**: 信頼できるソースのURLを最低5件含める
+- **repo への寄与節**: 各レポートの末尾に `## この repo への寄与` 節を設ける（散文、3-6 文）。(1) このレポートが補強する concept 名（選定済みテーマ JSON の `reinforces` または repo graph の concept）、(2) その concept をどう補強・拡張するか（新しい外部参照、未解決の問いへの示唆）、(3) 可能なら repo に追加提案できる観点（新 ADR の種、concept の精緻化）。これは人間が読んで repo に取り込むための橋渡しであり、daily-research が repo を直接編集することはない
 
 ### Step 5: 保存
 
@@ -99,12 +100,16 @@ templates/report-template.md のフォーマットに厳密に従い、選定さ
      "name": "{topic 日本語タイトル}",
      "datePublished": "{date}",
      "track": "{track}",
+     "contributesToRepo": "{track}",
+     "reinforces": ["{選定済みテーマ JSON の reinforces をそのままコピー}"],
      "broadCluster": "dr:cluster/{既存 broadCluster から 1 件選択}",
      "subCluster": ["dr:cluster/{既存または新規 subCluster}", ...]
    }
    ```
 
-3. クラスタ割り当てルール:
+3. クラスタ割り当て・補強記録ルール:
+   - **`contributesToRepo`** は track 名（`authorship` / `contemplative` / `aap`）をそのまま記入
+   - **`reinforces`** は選定済みテーマ JSON の `reinforces`（補強した repo concept の @id 配列）を **そのまま正確にコピー**する。coverage-report がこの @id で補強履歴を集計するため、表記揺れがあると追跡できない。フォールバックでテーマ JSON に `reinforces` が無い場合は、`.repo-graphs/{track}.jsonld` を読んで実際に補強した concept の @id を記入する
    - **broadCluster は必ず既存 7 個から選択する。新規追加禁止**（taxonomy 安定性のため）
    - **subCluster は既存を優先**して再利用。意味的に該当する既存 subCluster がなければ新規追加可
    - 新規 subCluster を追加する場合は、`@graph` 末尾に `{ "@id": "dr:cluster/{name}", "@type": "Thing", "name": "{英語名}", "broaderClusterOf": "dr:cluster/{親 broadCluster}" }` ノードも追加

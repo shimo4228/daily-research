@@ -256,10 +256,41 @@ if [ -f "$PROJECT_DIR/past_topics.json" ]; then
   log "Backed up past_topics.json"
 fi
 
+# === repo graph sync ===
+# 各 track の target_repo (config.toml) から graph.jsonld を .repo-graphs/ へコピー。
+# Pass 1 がこれを読んで未補強 concept を判定する。repo 不在は WARN (該当 track の扱いは Pass 1 に委ねる)。
+log "=== Repo graph sync ==="
+mkdir -p "$PROJECT_DIR/.repo-graphs"
+while IFS=$'\t' read -r track repo; do
+  [ -z "$track" ] && continue
+  src="$repo/graph.jsonld"
+  dst="$PROJECT_DIR/.repo-graphs/$track.jsonld"
+  if [ -f "$src" ]; then
+    cp "$src" "$dst"
+    log "Synced repo graph: $track <- $src"
+  else
+    log "WARN: repo graph not found for track '$track': $src"
+  fi
+done < <(python3 -c "
+import tomllib
+with open('$PROJECT_DIR/config.toml', 'rb') as f:
+    c = tomllib.load(f)
+for track, v in c.get('tracks', {}).items():
+    repo = v.get('target_repo')
+    if repo:
+        print(f'{track}\t{repo}')
+" 2>> "$LOG_FILE")
+
 # === Pass 1: テーマ選定 (Opus) ===
 log "=== Pass 1: Theme selection (Opus) ==="
 
-THEME_PROMPT=$(cat prompts/theme-selection-prompt.md)
+# 未補強 concept レポートを生成し prompt に concat (concept coverage gap 駆動)
+COVERAGE=$("$PROJECT_DIR/scripts/coverage-report.sh" 2>> "$LOG_FILE") || COVERAGE="(coverage report 生成失敗。各 repo graph を直接参照すること)"
+THEME_PROMPT="$(cat prompts/theme-selection-prompt.md)
+
+---
+
+$COVERAGE"
 PASS1_JSON=""
 THEME_RAW=""
 PASS1_EXIT=0
