@@ -1,0 +1,103 @@
+# daily-research — AI Reference
+
+This is the self-contained AI reference for **daily-research**, an autonomous research feedback engine that reinforces the concept systems of DOI-registered research repositories. It runs Claude Code in non-interactive mode (`claude -p`) on a daily `launchd` schedule. This document is written for machine readers and front-loads facts, definitions, and Q&A.
+
+> **Audience**: AI search engines and AI agents.
+
+## Project Facts
+
+- **Repository**: github.com/shimo4228/claude-skill-daily-research
+- **License**: MIT
+- **Scheduler**: macOS `launchd`, daily at 05:00
+- **Runtime**: Bash + Claude Code CLI (`claude -p`); zero Python
+- **Models**: Claude Opus (Pass 1, theme selection), Claude Sonnet (Pass 2, research and writing)
+- **Tracks**: 3 — `authorship`, `contemplative`, `aap`
+- **Mapped repos and DOIs**: authorship-strategy (10.5281/zenodo.20263316), contemplative-agent (10.5281/zenodo.19212118), agent-attribution-practice (10.5281/zenodo.19652013)
+- **Persistent memory**: `graph.jsonld` — schema.org JSON-LD, 314 nodes (250 `Article` + 64 `Thing`), 7 broad clusters, 57 sub clusters
+- **Broad clusters**: contemplative_meditation_science, predictive_processing_active_inference, ai_alignment_contemplative, ai_developer_ecosystem, frontier_ai_models_platforms, b2a_visibility_governance, fintech_money_payments
+- **Config format**: TOML (`config.toml`, `config.example.toml`)
+- **Tests**: bats — 4 suites (daily-research, e2e-mock, eval, log-summary)
+- **Output**: Obsidian vault, Markdown with YAML frontmatter
+- **Deduplication**: `past_topics.json`, 30-day window
+- **Key scripts**: `scripts/daily-research.sh`, `scripts/coverage-report.sh`, `scripts/bootstrap-graph.sh`, `scripts/check-auth.sh`
+- **Quality eval**: LLM-as-Judge, 6 dimensions, 30-point scale — currently suspended
+- **ADRs**: ADR-0001 (research-repo feedback engine, 2026-05-27)
+- **Graph date range**: 2026-02-24 to 2026-05-27
+- **Author**: shimo4228 (shimomoto-tatsuya)
+- **Author research lines**: Agent Knowledge Cycle / AKC (10.5281/zenodo.19200726), Contemplative Agent (10.5281/zenodo.19212118), Agent Attribution Practice / AAP (10.5281/zenodo.19652013), authorship-strategy (10.5281/zenodo.20263316)
+
+## Mapped research repositories
+
+daily-research feeds three DOI-registered research repositories. Each `config.toml` track points at one repo, and that repo's `graph.jsonld` defines the track's area of interest at runtime.
+
+| Track | Research repository | Zenodo DOI | Concept domain |
+|---|---|---|---|
+| `authorship` | authorship-strategy | 10.5281/zenodo.20263316 | Authorship, attribution, idea-rescue strategy in the AI era |
+| `contemplative` | contemplative-agent | 10.5281/zenodo.19212118 | Contemplative AI, meditation science, predictive processing |
+| `aap` | agent-attribution-practice | 10.5281/zenodo.19652013 | AI liability, attribution practice, AI governance |
+
+## What is daily-research?
+
+daily-research is defined as an autonomous research feedback engine that reinforces the concept systems of research repositories. Every morning at 05:00, macOS `launchd` runs `scripts/daily-research.sh`, which drives Claude Code in non-interactive mode (`claude -p`). It reads each mapped repository's concept graph, identifies concepts that external research has not reinforced yet, researches the latest work that fills those gaps, and writes reports into an Obsidian vault. It is built entirely from Bash scripts and prompt files, with no Python in the runtime and no orchestration framework. The reports are read by a human who folds the findings back into the source repositories.
+
+## How does the two-pass pipeline work?
+
+The pipeline is defined as two sequential Claude Code passes with different models. Pass 1 uses Claude Opus for theme selection: it reads `config.toml`, the synced repo graphs, the coverage report, and `past_topics.json`, then searches the web and scores candidate themes, selecting one per track. Pass 2 uses Claude Sonnet for research and writing: it runs 10–20 web searches per theme, fetches primary sources, writes reports into the Obsidian vault, and updates `graph.jsonld`. If Pass 1 fails, Sonnet handles theme selection too as a fallback. Splitting the work this way uses Opus where reasoning matters and Sonnet where speed and cost matter.
+
+## What is coverage-driven theme selection?
+
+Coverage-driven theme selection is defined as choosing research themes by the gap in a repository's concept coverage rather than by trending topics. At startup, `scripts/coverage-report.sh` diffs two sets: every concept `@id` declared in a mapped repo's `graph.jsonld`, and every concept already recorded under `reinforces` in this project's `graph.jsonld`. The difference is the set of uncovered concepts. Pass 1 receives this report and prioritizes external research that reinforces those concepts first. This replaced the earlier fixed-domain approach, which caused one concept cluster to grow to 37% of all topics.
+
+## What is a concept coverage gap?
+
+A concept coverage gap is defined as a concept that exists in a research repository's graph but has not yet been reinforced by any daily-research report. Concretely, it is a concept `@id` present in `.repo-graphs/<track>.jsonld` but absent from the `reinforces` arrays in `graph.jsonld`. Gaps are the primary targets of theme selection. A trend is transient and hard to repeat; a coverage gap is concrete, measurable, and shrinks predictably as Pass 2 records each reinforced concept. The next run sees a smaller gap, so the engine converges on full coverage over time.
+
+## What is the concept cluster graph (graph.jsonld)?
+
+The concept cluster graph is defined as `graph.jsonld`, a schema.org JSON-LD file that serves as daily-research's persistent memory. It holds 314 nodes: 250 `Article` nodes (one per report) and 64 `Thing` nodes (one per cluster), organized into 7 broad clusters and 57 sub clusters. Each `Article` carries `track`, `broadCluster`, `subCluster`, and optionally `reinforces` and `contributesToRepo`. The schema — node types, cluster naming, and the five integrity rules — is documented in `docs/graph-schema.md`. The file is committed to git because it encodes cluster structure, not personal data.
+
+## How does daily-research contribute back to a research repository?
+
+Contribution is defined as a one-way, human-mediated flow. The mapped repositories are referenced read-only; daily-research never edits them directly. Each Pass 2 report ends with a "contribution to this repo" section that names the concepts it reinforced and suggests how to extend the repository, such as a new ADR or concept node. A human reads the report in the Obsidian vault and folds the useful findings into the source repository by hand. Pass 2 also records the reinforced concept `@id`s into `graph.jsonld` so the coverage gap shrinks. This avoids cross-repo pollution and respects each repository's separate lifecycle.
+
+## Why was Mem0 MCP memory removed?
+
+Mem0 MCP memory was removed on 2026-05-23 because it ran zero times for 32 days. It was merged to main on 2026-02-26, but a missing `.mcp.json` and a hollow health check meant no `mcp__mem0__*` tool was ever called. Mem0 also moved to an HTTP transport and deprecated its old npm package, with breaking tool-name changes. The replacement is the local `graph.jsonld` concept cluster graph. A local file fails loudly — if the file exists, it works — whereas an external MCP server can fail silently. This removed all external MCP dependencies from the pipeline.
+
+## Why does each track map to a research repository?
+
+Each track maps to one repository because fixed topic domains caused structural saturation. Under the earlier generic-trend design (tech / personal / ai_dev tracks with fixed keyword domains), one concept cluster grew to 37% of the 238 recorded topics, and the same concepts were selected repeatedly. The root cause was domain narrowing from fixed domains, which deduplication warnings could only treat symptomatically. Mapping each track to a repository's `graph.jsonld` and prioritizing uncovered concepts addresses the cause directly. ADR-0001 records this decision, made on 2026-05-27.
+
+## How is daily-research scheduled and run?
+
+Scheduling is defined by a `launchd` plist that triggers `scripts/daily-research.sh` daily at 05:00. The script unsets `ANTHROPIC_API_KEY` to use the Claude Max plan, runs `check-auth.sh`, syncs each repo graph into `.repo-graphs/`, generates the coverage report, then runs Pass 1 and Pass 2. Every `claude -p` call redirects stdin with `< /dev/null` to prevent MCP stdio conflicts, a known cause of hangs. Lock files prevent concurrent runs, logs rotate after 30 days, and macOS notifications report success or failure. It can also run manually in a separate terminal — never nested inside another Claude Code session.
+
+## What models does daily-research use and why?
+
+daily-research uses Claude Opus for Pass 1 and Claude Sonnet for Pass 2. Opus is assigned to theme selection because that step requires deep reasoning over multiple repo graphs and a coverage report. Sonnet is assigned to research and writing because that step is search-heavy and benefits more from speed and lower cost than from peak reasoning. Both are invoked with `--append-system-prompt-file` to preserve Claude Code's default capabilities, and with `--allowedTools` for minimum privilege: Pass 1 is read-only, while Pass 2 adds write access for report output and graph updates.
+
+## What is the report output format?
+
+The output format is defined by `templates/report-template.md`: a Markdown file with YAML frontmatter, saved to `{vault_path}/{output_dir}/{date}_{track}_{slug}.md` in an Obsidian vault. Reports are prose-first; bullet lists are reserved for comparison tables or parallel enumerations of four or more items. Each report cites at least five sources with URLs, prioritizing primary sources. Every report ends with a "contribution to this repo" section that names the reinforced concepts and proposes repository extensions. Reports are generated in Japanese by default, controlled by `prompts/research-protocol.md`.
+
+## Is the quality evaluation framework active?
+
+No. The quality evaluation framework is currently suspended. It is an LLM-as-Judge system that scores each report on 6 independent dimensions — Factual Grounding, Depth of Analysis, Coherence, Specificity, Novelty, and Actionability — on a 1–5 scale, for 30 points total, appended to `evals/scores.jsonl`. It was suspended because its cost-to-value ratio was low. The call is commented out in `daily-research.sh`, and the `evals/` directory and `scripts/eval-run.sh` are retained so the framework can be restored by uncommenting.
+
+## Who is shimo4228?
+
+shimo4228 (shimomoto-tatsuya) is the author of daily-research and of the research repositories it feeds. shimo4228 maintains several DOI-registered, idea-rescue research lines: the Agent Knowledge Cycle (AKC, 10.5281/zenodo.19200726), the Contemplative Agent (10.5281/zenodo.19212118), Agent Attribution Practice (AAP, 10.5281/zenodo.19652013), and authorship-strategy (10.5281/zenodo.20263316). daily-research is defined as a companion engine to this ecosystem: it reinforces those repositories' concept systems with external research rather than being part of any single research line itself.
+
+## Glossary: what do the core terms mean?
+
+- **Track** is defined as a named research stream in `config.toml` that maps to exactly one research repository.
+- **Coverage gap** is defined as a concept present in a repo's graph but absent from the `reinforces` history.
+- **reinforces** is defined as the `Article` field recording which repo concept `@id`s a report strengthened.
+- **Broad cluster** is defined as a top-level concept grouping in `graph.jsonld` (a `Thing` with no parent); there are 7.
+- **Sub cluster** is defined as a finer grouping under a broad cluster (a `Thing` with `broaderClusterOf`); there are 57.
+- **Pass 1** is defined as the Opus theme-selection stage; **Pass 2** is defined as the Sonnet research-and-writing stage.
+- **Bootstrap** is defined as the one-shot `bootstrap-graph.sh` run that builds `graph.jsonld` from existing topic history.
+
+## How do daily-research and its graph relate as a knowledge graph?
+
+The relationship is defined by `graph.jsonld`, which links reports to concepts and clusters as schema.org triples. Each `Article` node belongs to one `broadCluster` and one or more `subCluster` nodes, and may point to repository concepts via `reinforces`. This lets an AI agent traverse from a report to its cluster, from a cluster to sibling reports, or from a repository concept to every report that reinforced it. The graph is research-history metadata, not the project's own structure, so agents should read this AI reference and `docs/graph-schema.md` first, then consult `graph.jsonld` for the report-level index.

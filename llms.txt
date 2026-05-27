@@ -1,0 +1,35 @@
+# daily-research
+
+> An autonomous research feedback engine. Every morning at 05:00, macOS launchd runs Claude Code (`claude -p`) to read the concept graph of each mapped research repository, find concepts external research has not reinforced yet, research the gap-filling work, and write reports into an Obsidian vault. Two-pass pipeline (Opus theme selection → Sonnet research). Zero Python; Bash + prompt files only.
+
+## Core documentation
+
+- [Full AI Reference](llms-full.txt): self-contained project facts, Q&A, and glossary for AI agents — read this first
+- [README](README.md): human-facing narrative (English)
+- [README (日本語)](README.ja.md): human-facing narrative (Japanese)
+- [Project & contributor guide](CLAUDE.md): how the system is structured and how to work in this repo
+
+## Architecture
+
+- [graph.jsonld schema](docs/graph-schema.md): node types, cluster naming, integrity rules
+- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md): why each track maps to a research repository
+- [Theme selection prompt](prompts/theme-selection-prompt.md): Pass 1 (Opus) coverage-driven theme selection
+- [Research protocol](prompts/research-protocol.md): Pass 2 (Sonnet) research quality core
+- [Main entry point](scripts/daily-research.sh): pipeline orchestration and fallback logic
+- [Coverage report](scripts/coverage-report.sh): uncovered-concept computation injected into Pass 1
+
+## Operations
+
+- [RUNBOOK](docs/RUNBOOK.md): monitoring, troubleshooting, common issues
+- [Contributor guide](docs/CONTRIB.md): testing, CLI flags, environment variables
+
+## Data
+
+- [graph.jsonld](graph.jsonld): concept cluster graph — 250 article nodes across 7 broad and 57 sub clusters; schema.org JSON-LD research-history metadata, updated incrementally by Pass 2
+
+## Related
+
+- [authorship-strategy](https://doi.org/10.5281/zenodo.20263316): mapped research repo (track: authorship)
+- [contemplative-agent](https://doi.org/10.5281/zenodo.19212118): mapped research repo (track: contemplative)
+- [agent-attribution-practice](https://doi.org/10.5281/zenodo.19652013): mapped research repo (track: aap)
+- [llmstxt.org](https://llmstxt.org/): the llms.txt standard this file follows
