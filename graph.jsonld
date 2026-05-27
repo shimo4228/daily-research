@@ -2885,6 +2885,42 @@
       ]
     },
     {
+      "@id": "dr:topic/2026-05-24_tech_webgpu-browser-ai-runtime-on-device-inference",
+      "@type": "Article",
+      "name": "ブラウザがAIランタイムになった日 — WebGPU 全主要ブラウザ既定化後、Transformers.js / WebLLM が実現する「サーバーレス・オンデバイス推論」の実用ライン",
+      "datePublished": "2026-05-24",
+      "track": "tech",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai",
+        "dr:cluster/browser_webgpu_inference"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-24_personal_ansception-autonomic-nervous-system-interoception",
+      "@type": "Article",
+      "name": "ANSception — 内受容を「臓器ごと」から「自律神経系まるごと」へ：Nackley & Friedman 2026 が提示する身体感覚の新しい測り方とウェアラブル設計への含意",
+      "datePublished": "2026-05-24",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/interoception_neuroscience",
+        "dr:cluster/somatic_intelligence_wearables"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-24_ai_dev_akc-promote-phase-intrinsic-metacognitive-learning",
+      "@type": "Article",
+      "name": "AKC の「Promote」phase は外部メモリでは埋まらない — 内発的メタ認知学習の研究が示す、Dreaming 以後のエージェント自己改善の限界線",
+      "datePublished": "2026-05-24",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/agent_self_improvement"
+      ]
+    },
+    {
       "@id": "dr:cluster/contemplative_meditation_science",
       "@type": "Thing",
       "name": "Contemplative meditation science / 瞑想・意識・神経科学"
@@ -3212,6 +3248,172 @@
       "@type": "Thing",
       "name": "World models & neuromorphic architectures",
       "broaderClusterOf": "dr:cluster/frontier_ai_models_platforms"
+    },
+    {
+      "@id": "dr:cluster/browser_webgpu_inference",
+      "@type": "Thing",
+      "name": "Browser-native WebGPU AI inference",
+      "broaderClusterOf": "dr:cluster/frontier_ai_models_platforms"
+    },
+    {
+      "@id": "dr:cluster/agent_self_improvement",
+      "@type": "Thing",
+      "name": "Agent self-improvement & metacognitive learning",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:cluster/sdk_api_toolchain",
+      "@type": "Thing",
+      "name": "SDK & API toolchain generation",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/diverse_intelligence_morphogenesis",
+      "@type": "Thing",
+      "name": "Diverse intelligence & morphogenesis / 多様な知能・形態形成",
+      "broaderClusterOf": "dr:cluster/predictive_processing_active_inference"
+    },
+    {
+      "@id": "dr:cluster/agentic_commerce_optimization",
+      "@type": "Thing",
+      "name": "Agentic commerce optimization (ACO/AOO)",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:topic/2026-05-25_tech_anthropic-stainless-mcp-sdk-vertical-integration",
+      "@type": "Article",
+      "name": "Anthropic が Stainless を買収した日（$300M+）— 全 Claude 公式 SDK を生成し OpenAPI→MCP サーバー自動生成を担う『SDK ファクトリ』の垂直統合とエコシステム・ロックイン",
+      "datePublished": "2026-05-25",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/mcp_server_ecosystem",
+        "dr:cluster/sdk_api_toolchain"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-25_personal_levin-multiscale-competency-diverse-intelligence-agents",
+      "@type": "Article",
+      "name": "Michael Levin の『多様な知能』と多スケール・コンピテンシー・アーキテクチャ — 身体性なき LLM 論争の対極にある『あらゆるスケールが目標指向エージェント』という急進的フロンティアと AI エージェント設計への含意",
+      "datePublished": "2026-05-25",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/embodied_cognition_4e",
+        "dr:cluster/diverse_intelligence_morphogenesis"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-25_ai_dev_agent-actionable-geo-aoo-citations-to-transactions",
+      "@type": "Article",
+      "name": "Agent-Actionable GEO（AOO）の登場 — 『引用』から『取引』へ、エージェント可読カタログと MCP サーバー品質が新しいランキングシグナルになる時代と AKC Diffuse 戦略の取引層拡張",
+      "datePublished": "2026-05-25",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/agent_payments_commerce_protocols",
+        "dr:cluster/mcp_server_ecosystem",
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/agentic_commerce_optimization"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-26_tech_github-copilot-usage-based-billing-ai-credits",
+      "@type": "Article",
+      "name": "AIコーディング従量課金時代の幕開け — GitHub Copilot の AI Credits 移行（6/1）が開発者ツール選択とコスト最適化に迫る構造転換",
+      "datePublished": "2026-05-26",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/coding_agents_ide",
+        "dr:cluster/ai_tool_billing_cost"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-26_personal_aphantasia-conscious-mental-imagery-predictive-coding",
+      "@type": "Article",
+      "name": "アファンタジアが暴く「意識的イメージ」の予測符号化モデル（2026）— 視覚野の再活性化だけでは足りず、内受容・島皮質によるトップダウン変調と統合が心象を意識に上らせる",
+      "datePublished": "2026-05-26",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/predictive_coding_neural_networks",
+        "dr:cluster/interoception_neuroscience",
+        "dr:cluster/computational_phenomenology"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-26_ai_dev_agent-societies-intellectual-elites-power-laws",
+      "@type": "Article",
+      "name": "エージェント社会は「知的エリート」を生むか — Venkatesh & Cui が150万インタラクションで暴いた power-law 集中・統合ボトルネックと、Contemplative 非二元性 / AKC が示す対抗設計",
+      "datePublished": "2026-05-26",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/agent_evaluation_benchmarks",
+        "dr:cluster/agent_framework_runtime",
+        "dr:cluster/contemplative_ai_alignment",
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/multiagent_power_law_dynamics"
+      ]
+    },
+    {
+      "@id": "dr:cluster/ai_tool_billing_cost",
+      "@type": "Thing",
+      "name": "AI tool billing & cost optimization / AIツール課金・コスト最適化",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/multiagent_power_law_dynamics",
+      "@type": "Thing",
+      "name": "Multi-agent power-law dynamics & elite formation",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:topic/2026-05-27_tech_agent-eval-observability-local-first-stack",
+      "@type": "Article",
+      "name": "エージェント評価がボトルネックになった2026 — local-first eval/observability スタック（Langfuse×ClickHouse・MLflow・Arize Phoenix・Opik）が個人開発者の検証基盤になる",
+      "datePublished": "2026-05-27",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_observability_debugging",
+        "dr:cluster/agent_evaluation_benchmarks"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-27_personal_closed-loop-haptic-biofeedback-active-inference",
+      "@type": "Article",
+      "name": "心拍に同期する振動が覚醒を鎮める — クローズドループ・ハプティック・バイオフィードバック（ACM ISWC 2025）が能動的推論を「身につけられる介入」に変える",
+      "datePublished": "2026-05-27",
+      "track": "personal",
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/somatic_intelligence_wearables",
+        "dr:cluster/interoception_neuroscience",
+        "dr:cluster/active_inference_theory"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-27_ai_dev_human-content-provenance-authenticity-infrastructure",
+      "@type": "Article",
+      "name": "オーセンティシティが「インフラ」になる — AI slop 飽和点で立ち上がる human-content provenance（Veriff 生体スタンプ・コンテンツ指紋）と開発者ブランディングの再定義",
+      "datePublished": "2026-05-27",
+      "track": "ai_dev",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/developer_authenticity_ai_slop",
+        "dr:cluster/content_provenance_c2pa",
+        "dr:cluster/ai_regulation_policy"
+      ]
+    },
+    {
+      "@id": "dr:cluster/content_provenance_c2pa",
+      "@type": "Thing",
+      "name": "Content provenance standards (C2PA, Content Credentials)",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
     }
   ]
 }
