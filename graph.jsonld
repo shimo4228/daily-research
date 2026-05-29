@@ -3464,6 +3464,70 @@
       "subCluster": [
         "dr:cluster/ai_regulation_policy"
       ]
+    },
+    {
+      "@id": "dr:topic/2026-05-29_authorship_llms-txt-2026-adoption-vs-jsonld-dual-entry",
+      "@type": "Article",
+      "name": "llms.txt の 2026 年採用実態と AI クローラー無視問題が示す Dual Entry Point 戦略の重心移動 — llms.txt から JSON-LD 構造化データへ",
+      "datePublished": "2026-05-29",
+      "track": "authorship",
+      "contributesToRepo": "authorship",
+      "reinforces": [
+        "concept/llms-txt-convention",
+        "concept/dual-entry-point",
+        "concept/jsonld-knowledge-graph"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/llms_txt_b2a_protocols",
+        "dr:cluster/geo_llm_citation_optimization"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-29_contemplative_contemplative-superalignment-wise-world-model-2026",
+      "@type": "Article",
+      "name": "Contemplative Superalignment (Springer/AGI 2025, 2026刊) — 四公理を能動的推論で『Wise World Model』に深化させ AILuminate d=.96・囚人ジレンマ d=7+ の効果量を実証",
+      "datePublished": "2026-05-29",
+      "track": "contemplative",
+      "contributesToRepo": "contemplative",
+      "reinforces": [
+        "concept/four-contemplative-axioms"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/contemplative_ai_alignment",
+        "dr:cluster/wise_world_model_superalignment"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-29_aap_agentgov-sc-eu-ai-act-attribution-gap-2026",
+      "@type": "Article",
+      "name": "EU AI Act が除外する自律エージェント帰責 — AgentGov-SC (arXiv 2605.01091) の四残余経路分析と 25 統制措置による attribution gap の構造化",
+      "datePublished": "2026-05-29",
+      "track": "aap",
+      "contributesToRepo": "aap",
+      "reinforces": [
+        "aap/concept/attribution-gap",
+        "aap/concept/accountability-distribution"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_regulation_policy",
+        "dr:cluster/agent_identity_governance",
+        "dr:cluster/cross_agency_attribution_gap"
+      ]
+    },
+    {
+      "@id": "dr:cluster/wise_world_model_superalignment",
+      "@type": "Thing",
+      "name": "Wise World Model & contemplative superalignment",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:cluster/cross_agency_attribution_gap",
+      "@type": "Thing",
+      "name": "Cross-agency attribution gap & multi-system accountability",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
     }
   ]
 }
