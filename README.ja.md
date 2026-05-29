@@ -22,7 +22,6 @@ launchd (AM 5:00)
        ├── Pass 1: Opus (テーマ選定)
        │     ├── config.toml を読み込み      # track → repo マッピング
        │     ├── repo graph + coverage report を読み込み
-       │     ├── past_topics.json を読み込み  # 30日重複排除
        │     ├── WebSearch                    # 未補強 concept を補強する研究
        │     └── スコアリング & トラックごと 1 テーマ選定
        │
@@ -31,6 +30,7 @@ launchd (AM 5:00)
        │     ├── WebFetch (一次ソース)
        │     ├── レポートを執筆            # → Obsidian vault
        │     ├── 「この repo への寄与」節を追記
+       │     ├── past_topics.json を更新   # トピック履歴
        │     └── graph.jsonld を更新       # 補強した concept を記録
        │
        └── (Eval: LLM-as-Judge — 現在運用停止中、後述)
@@ -48,7 +48,7 @@ launchd (AM 5:00)
 - **repo マッピング型リサーチトラック** -- 各トラックを 1 つの研究リポジトリにマッピング; 関心領域は固定キーワードドメインではなく、その repo の `graph.jsonld` から導出
 - **coverage 駆動のテーマ選定** -- `coverage-report.sh` が repo ごとの未補強・薄い concept を列挙し Pass 1 に注入
 - **concept cluster graph** -- `graph.jsonld`、schema.org JSON-LD の永続メモリ（250 記事、7 broad + 57 sub クラスタ）; Pass 2 が実行ごとに増分更新
-- **トピック重複排除** -- `past_topics.json` により 30 日以内に同じテーマを扱うことを防止
+- **トピック履歴** -- `past_topics.json` は選定されたテーマの履歴を蓄積（Pass 2 が更新; Pass 1 での重複排除役は `coverage-report.sh` に移行）
 - **多段階ディープリサーチ** -- 単なる要約ではなく、リサーチクエスチョンを生成し、10〜20 回検索し、ソースを相互検証
 - **repo フィードバックループ** -- 各レポート末尾の「この repo への寄与」節で、補強した concept 名と repo の拡張方法を提案
 - **Obsidian ネイティブ出力** -- YAML フロントマター付きレポート、Vault にそのまま配置可能

@@ -22,7 +22,6 @@ launchd (AM 5:00)
        ├── Pass 1: Opus (theme selection)
        │     ├── Read config.toml          # track → repo mapping
        │     ├── Read repo graphs + coverage report
-       │     ├── Read past_topics.json     # 30-day dedup
        │     ├── WebSearch                 # research reinforcing uncovered concepts
        │     └── Score & select one theme per track
        │
@@ -31,6 +30,7 @@ launchd (AM 5:00)
        │     ├── WebFetch (primary sources)
        │     ├── Write reports             # → Obsidian vault
        │     ├── Append "contribution to this repo" section
+       │     ├── Update past_topics.json   # topic history
        │     └── Update graph.jsonld       # record reinforced concepts
        │
        └── (Eval: LLM-as-Judge — currently suspended, see below)
@@ -48,7 +48,7 @@ The key insight: Claude Code's `-p` flag turns it into a fully autonomous resear
 - **Repo-mapped research tracks** -- each track maps to one research repository; the area of interest is derived from that repo's `graph.jsonld`, not from fixed keyword domains
 - **Coverage-driven theme selection** -- `coverage-report.sh` lists the uncovered / thinly-supported concepts per repo and injects them into Pass 1
 - **Concept cluster graph** -- `graph.jsonld`, a schema.org JSON-LD persistent memory (250 articles across 7 broad and 57 sub clusters); Pass 2 updates it incrementally each run
-- **Topic deduplication** -- `past_topics.json` prevents covering the same theme twice within 30 days
+- **Topic history** -- `past_topics.json` accumulates a chronological log of selected themes (Pass 2 updates it; Pass 1's de-duplication role moved to `coverage-report.sh`)
 - **Multi-stage deep research** -- not just a summary; generates research questions, searches 10-20 times, cross-validates sources
 - **Repo feedback loop** -- each report ends with a "contribution to this repo" section naming the reinforced concepts and suggesting how to extend the repo
 - **Obsidian-native output** -- reports with YAML frontmatter, ready for your vault
