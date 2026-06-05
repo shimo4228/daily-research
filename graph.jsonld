@@ -3528,6 +3528,379 @@
       "@type": "Thing",
       "name": "Cross-agency attribution gap & multi-system accountability",
       "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:topic/2026-05-31_authorship_geo-ghost-citation-measurement-2026",
+      "@type": "Article",
+      "name": "GEO 2026 の ghost citation 問題と引用測定フレームワーク: parametric/retrieval 2 チャネルと LLM 経由リーチ測定の外部実証",
+      "datePublished": "2026-05-31",
+      "track": "authorship",
+      "contributesToRepo": "authorship",
+      "reinforces": [
+        "https://github.com/shimo4228/authorship-strategy#concept/two-channel-attribution-diffusion",
+        "https://github.com/shimo4228/authorship-strategy#concept/human-attention-signal-rejection"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/content_provenance_c2pa",
+        "dr:cluster/developer_authenticity_ai_slop"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-31_contemplative_llm-metacognition-introspection-2026",
+      "@type": "Article",
+      "name": "LLM の限定的メタ認知・内省能力をめぐる 2026 年研究: エージェントが自らの内部状態を捉える機構と mindfulness 公理の実証的基盤",
+      "datePublished": "2026-05-31",
+      "track": "contemplative",
+      "contributesToRepo": "contemplative",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#ca/concept/moment-of-recognition",
+        "https://shimo4228.github.io/shimo4228/vocab#concept/four-contemplative-axioms"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/contemplative_ai_alignment",
+        "dr:cluster/llm_metacognition_introspection"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-31_aap_agentic-ai-architectural-tactics-oversight-2026",
+      "@type": "Article",
+      "name": "規制文脈における agentic AI のアーキテクチャ戦術と人間監視義務化 (EU AI Act 2026): 承認ゲートと禁止強度階層の外部裏付け",
+      "datePublished": "2026-05-31",
+      "track": "aap",
+      "contributesToRepo": "aap",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/approval-gate",
+        "https://shimo4228.github.io/shimo4228/vocab#concept/prohibition-strength-hierarchy"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_regulation_policy",
+        "dr:cluster/agent_identity_governance",
+        "dr:cluster/agentic_ai_architectural_tactics"
+      ]
+    },
+    {
+      "@id": "dr:cluster/llm_metacognition_introspection",
+      "@type": "Thing",
+      "name": "LLM metacognition & introspection research",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:cluster/agentic_ai_architectural_tactics",
+      "@type": "Thing",
+      "name": "Agentic AI architectural tactics & regulated autonomy",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:topic/2026-05-30_authorship_llm-citation-selection-empirics-2026",
+      "@type": "Article",
+      "name": "LLMが引用元を選ぶ機構の実証研究（2026）— Google検索とAI引用の重複が70%→20%に低下、権威性が支配的信号、3ヶ月以内の新鮮さで被引用67%増",
+      "datePublished": "2026-05-30",
+      "track": "authorship",
+      "contributesToRepo": "authorship",
+      "reinforces": [
+        "https://github.com/shimo4228/authorship-strategy#concept/three-axis-inversion",
+        "https://github.com/shimo4228/authorship-strategy#concept/scarcity-to-diffusion-axis",
+        "https://github.com/shimo4228/authorship-strategy#concept/enclosure-to-openness-axis",
+        "https://github.com/shimo4228/authorship-strategy#concept/attribution-diffusion"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/content_provenance_c2pa",
+        "dr:cluster/developer_authenticity_ai_slop"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-30_contemplative_least-privilege-absence-agent-security-2026",
+      "@type": "Article",
+      "name": "LLMエージェントの最小権限・excessive agency抑制（OWASP AI Agent Top 10 / Least-Privilege Language Models, 2026）— 危険能力を制限でなく不在にする防御姿勢の外部検証",
+      "datePublished": "2026-05-30",
+      "track": "contemplative",
+      "contributesToRepo": "contemplative",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#concept/security-by-absence"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/ai_security_research",
+        "dr:cluster/agent_sandbox_isolation",
+        "dr:cluster/agent_identity_governance"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-05-30_aap_agentic-accountability-gap-empirics-2026",
+      "@type": "Article",
+      "name": "エージェント帰責ギャップの実態（2026）— 組織の28%しかエージェント行動を人間スポンサーに遡行できず、user token再利用が承認なき個人へ責任を転嫁する構造",
+      "datePublished": "2026-05-30",
+      "track": "aap",
+      "contributesToRepo": "aap",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/externalized-accountability",
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/moral-crumple-zone",
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/pre-named-gap-bearer",
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/accountability-distribution"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/cross_agency_attribution_gap",
+        "dr:cluster/agent_identity_governance",
+        "dr:cluster/ai_regulation_policy"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-02_authorship_llm-neologism-propagation-distinctive-terminology",
+      "@type": "Article",
+      "name": "LLM による造語(neologism)の記憶・伝播メカニズム — 2026 年の neologism learning 研究と LREC NeoLLM2026 が、coined term が token レベルで著者へ逆参照される条件を解明する",
+      "datePublished": "2026-06-02",
+      "track": "authorship",
+      "contributesToRepo": "authorship",
+      "reinforces": [
+        "https://github.com/shimo4228/authorship-strategy#concept/distinctive-terminology"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/developer_authenticity_ai_slop",
+        "dr:cluster/content_provenance_c2pa",
+        "dr:cluster/neologism_parametric_attribution"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-02_contemplative_local-moe-stack-apple-silicon-2026",
+      "@type": "Article",
+      "name": "2026 年の小型 MoE モデル(active 3–17B)と Apple Silicon MLX/M5 推論の進展 — local 9B dense スタックの競争力と pluggable LLMBackend 切替の再評価",
+      "datePublished": "2026-06-02",
+      "track": "contemplative",
+      "contributesToRepo": "contemplative",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#ca/concept/local-9b-stack"
+      ],
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai",
+        "dr:cluster/pluggable_llm_backend_protocol"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-02_aap_compound-ai-llm-as-function-workflow-quadrant",
+      "@type": "Article",
+      "name": "Compound AI Systems における LLM-as-function — code が制御フローを持ち LLM を境界づけられた leaf として呼ぶパターンの 2026 サーベイと structured LLM routing 研究",
+      "datePublished": "2026-06-02",
+      "track": "aap",
+      "contributesToRepo": "aap",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/llm-function",
+        "https://shimo4228.github.io/shimo4228/vocab#concept/four-business-ai-quadrants"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_framework_runtime",
+        "dr:cluster/compound_ai_orchestration"
+      ]
+    },
+    {
+      "@id": "dr:cluster/neologism_parametric_attribution",
+      "@type": "Thing",
+      "name": "Neologism learning & parametric attribution in LLMs",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:cluster/pluggable_llm_backend_protocol",
+      "@type": "Thing",
+      "name": "Pluggable LLM backend protocol & local MoE inference",
+      "broaderClusterOf": "dr:cluster/frontier_ai_models_platforms"
+    },
+    {
+      "@id": "dr:cluster/compound_ai_orchestration",
+      "@type": "Thing",
+      "name": "Compound AI orchestration & LLM-as-function patterns",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:topic/2026-06-04_authorship_opennovelty-origin-claim-scope",
+      "@type": "Article",
+      "name": "OpenNovelty — contribution claimを先行研究と全文照合するエージェントが示す、origin claimを狭く保つ規律の機械的検証",
+      "datePublished": "2026-06-04",
+      "track": "authorship",
+      "contributesToRepo": "authorship",
+      "reinforces": [
+        "https://github.com/shimo4228/authorship-strategy#concept/origin-claim-scope-discipline"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/content_provenance_c2pa",
+        "dr:cluster/autonomous_research_agents",
+        "dr:cluster/scholarly_novelty_verification"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-04_contemplative_hyperagents-akc-metacognitive-loop",
+      "@type": "Article",
+      "name": "HyperAgents/DGM-H — 自己改善のmeta機構自体を学習・転移するrecursive metacognitive self-improvementとAKC 6相ループの対比",
+      "datePublished": "2026-06-04",
+      "track": "contemplative",
+      "contributesToRepo": "contemplative",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#concept/six-phase-loop",
+        "https://shimo4228.github.io/shimo4228/vocab#ca/concept/approval-gate-chain"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/agent_self_improvement",
+        "dr:cluster/llm_metacognition_introspection"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-04_aap_human-control-anchor-phase-crossing",
+      "@type": "Article",
+      "name": "Human Control Is the Anchor — agentic AIのoversightが役割ごとに分岐する構造と、phase-crossing decisionの外部裏付け",
+      "datePublished": "2026-06-04",
+      "track": "aap",
+      "contributesToRepo": "aap",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/phase-crossing-decision"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/agent_identity_governance",
+        "dr:cluster/ai_regulation_policy",
+        "dr:cluster/cross_agency_attribution_gap"
+      ]
+    },
+    {
+      "@id": "dr:cluster/scholarly_novelty_verification",
+      "@type": "Thing",
+      "name": "Scholarly novelty verification & automated peer review",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:topic/2026-06-05_authorship_memorization-generalization-idea-scaffold",
+      "@type": "Article",
+      "name": "LLM の記憶と汎化を分離する 2026 年の訓練データ帰属メトリクス — scaffold は消え idea が重みに残るという Layer 3 の賭けを白箱で検証する",
+      "datePublished": "2026-06-05",
+      "track": "authorship",
+      "contributesToRepo": "authorship",
+      "reinforces": [
+        "https://github.com/shimo4228/authorship-strategy#concept/idea-vs-scaffold-separation",
+        "https://github.com/shimo4228/authorship-strategy#concept/abstract-doctrine-worked-implementation-pair"
+      ],
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/llm_memorization_attribution",
+        "dr:cluster/frontier_model_releases"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-05_contemplative_hierarchical-active-inference-aspect-split",
+      "@type": "Article",
+      "name": "階層的能動推論の三層モデル — 相分(表象内容)と見分(弁別作用)を分離する classification-as-query への認知科学的接地",
+      "datePublished": "2026-06-05",
+      "track": "contemplative",
+      "contributesToRepo": "contemplative",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#ca/concept/yogacara-aspect-split"
+      ],
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/active_inference_theory",
+        "dr:cluster/predictive_processing_meditation",
+        "dr:cluster/computational_phenomenology"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-05_aap_governance-opacity-scaffolding-visibility",
+      "@type": "Article",
+      "name": "自律エージェントのガバナンス不透明性ギャップと scaffolding 可視性 — 2026 年エージェント・ガバナンス研究が前提とする artifact 層の可視性フロア",
+      "datePublished": "2026-06-05",
+      "track": "aap",
+      "contributesToRepo": "aap",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/scaffolding"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_regulation_policy",
+        "dr:cluster/agent_identity_governance"
+      ]
+    },
+    {
+      "@id": "dr:cluster/llm_memorization_attribution",
+      "@type": "Thing",
+      "name": "LLM memorization, generalization & training-data attribution",
+      "broaderClusterOf": "dr:cluster/frontier_ai_models_platforms"
+    },
+    {
+      "@id": "dr:topic/2026-06-06_authorship_human-provenance-labor-infrastructure",
+      "@type": "Article",
+      "name": "AI飽和市場における人間 provenance の「労働インフラ」化：オーセンシティを贅沢ラベルではなく構造として捉え直す 2026 研究",
+      "datePublished": "2026-06-06",
+      "track": "authorship",
+      "contributesToRepo": "authorship",
+      "reinforces": [
+        "https://github.com/shimo4228/authorship-strategy#concept/authenticity"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/developer_authenticity_ai_slop",
+        "dr:cluster/content_provenance_c2pa",
+        "dr:cluster/human_labor_provenance_market"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-06_contemplative_agent-drift-worldview-integrity-stability-index",
+      "@type": "Article",
+      "name": "長期稼働する自律エージェントの worldview/value drift を定量検出する：Agent Stability Index と value-conflict goal drift の 2026 研究",
+      "datePublished": "2026-06-06",
+      "track": "contemplative",
+      "contributesToRepo": "contemplative",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#ca/concept/worldview-integrity-check"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/agent_self_improvement",
+        "dr:cluster/wise_world_model_superalignment",
+        "dr:cluster/agent_drift_stability_index"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-06_aap_non-invasion-posture-vs-interpretability-control",
+      "@type": "Article",
+      "name": "interpretability 駆動の内部介入 (activation steering / concept erasure / weight editing) が標準化する 2026、エージェントの内面に踏み込まない安全性をどう保つか",
+      "datePublished": "2026-06-06",
+      "track": "aap",
+      "contributesToRepo": "aap",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/non-invasion-posture"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/cross_agency_attribution_gap",
+        "dr:cluster/ai_regulation_policy",
+        "dr:cluster/interpretability_model_control"
+      ]
+    },
+    {
+      "@id": "dr:cluster/human_labor_provenance_market",
+      "@type": "Thing",
+      "name": "Human labor provenance & market infrastructure",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:cluster/agent_drift_stability_index",
+      "@type": "Thing",
+      "name": "Agent behavioral drift & stability metrics",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:cluster/interpretability_model_control",
+      "@type": "Thing",
+      "name": "Interpretability-driven model auditing & control",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
     }
   ]
 }
