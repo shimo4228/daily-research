@@ -118,7 +118,7 @@ tail -f logs/$(date +%Y-%m-%d).log
 
 - 本番稼働中。毎朝 AM 5:00 に launchd で自動実行
 - Opus テーマ選定 + Sonnet リサーチ・執筆の2パス方式（E2E 検証済み、2026-02-20）
-- **3トラック構成 (各 track = 1 DOI 登録済み研究 repo)**: `authorship` (authorship-strategy) / `contemplative` (contemplative-agent) / `aap` (agent-attribution-practice)。トラック数・マッピングは config.toml から動的取得
+- **4トラック構成 (各 track = 1 DOI 登録済み研究 repo)**: `authorship` (authorship-strategy) / `contemplative` (contemplative-agent) / `aap` (agent-attribution-practice) / `akc` (agent-knowledge-cycle)。トラック数・マッピングは config.toml から動的取得
 - 永続メモリ層: JSON-LD concept cluster graph (`graph.jsonld`) 稼働中。Pass 2 が日次増分更新、起動時 health check
 - repo graph の未補強 concept を補強する R&D フィードバックエンジンとして稼働（2026-05-27 転換、Pass 1/2 の E2E は翌朝 launchd で検証予定）
 - Pass 1 失敗時は Sonnet 一括フォールバックで継続稼働
