@@ -90,7 +90,8 @@ tail -f logs/$(date +%Y-%m-%d).log
 - vault_path は `config.toml` の `[general].vault_path` で指定
 - レポートは散文主体。箇条書きは比較表や4項目以上の並列列挙のみ
 - 出典は最低5件、URL 必須
-- 各レポート末尾に「この repo への寄与」節（補強 concept と repo への提案）
+- 「未解決の問い」「反証・緊張関係」節で外部研究側の gap と repo concept への挑戦を記録（開発アイデア節は 2026-06-06 廃止 — repo 内部状態を知らないため的外れになりやすく、寄与節と重複していた）
+- 各レポート末尾に「この repo への寄与」節（補強 concept / 拡張・挑戦 / 取り込み提案の 3 点構造）
 - **repo は read-only 参照のみ**。寄与は vault レポート経由で人間が手で取り込む（daily-research は repo を直接編集しない）
 
 ### プロンプト編集時の注意

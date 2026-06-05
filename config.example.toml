@@ -26,8 +26,7 @@ sources = [
 scoring_criteria = [
   { name = "Concept reinforcement", weight = 35, desc = "Reinforces an uncovered / thinly-supported concept (see coverage-report)" },
   { name = "Research recency", weight = 25, desc = "Latest 2026 research or development" },
-  { name = "Repo frontier fit", weight = 25, desc = "Serves the repo's next direction / open questions" },
-  { name = "Buildability", weight = 15, desc = "Leads to implementation in Python/Swift/TypeScript" },
+  { name = "Repo frontier fit", weight = 40, desc = "Serves the repo's next direction / open questions" },
 ]
 
 [tracks.repo_b]
@@ -43,8 +42,7 @@ sources = [
 scoring_criteria = [
   { name = "Concept reinforcement", weight = 35, desc = "Reinforces an uncovered / thinly-supported concept (see coverage-report)" },
   { name = "Research recency", weight = 25, desc = "Latest 2026 research or development" },
-  { name = "Repo frontier fit", weight = 25, desc = "Serves the repo's next direction / open questions" },
-  { name = "Buildability", weight = 15, desc = "Leads to implementation in Python/Swift/TypeScript" },
+  { name = "Repo frontier fit", weight = 40, desc = "Serves the repo's next direction / open questions" },
 ]
 
 [tracks.repo_c]
@@ -60,8 +58,7 @@ sources = [
 scoring_criteria = [
   { name = "Concept reinforcement", weight = 35, desc = "Reinforces an uncovered / thinly-supported concept (see coverage-report)" },
   { name = "Research recency", weight = 25, desc = "Latest 2026 research or development" },
-  { name = "Repo frontier fit", weight = 25, desc = "Serves the repo's next direction / open questions" },
-  { name = "Buildability", weight = 15, desc = "Leads to implementation in Python/Swift/TypeScript" },
+  { name = "Repo frontier fit", weight = 40, desc = "Serves the repo's next direction / open questions" },
 ]
 
 [user_profile]

@@ -175,8 +175,7 @@ sources = [
 scoring_criteria = [
   { name = "Concept reinforcement", weight = 35, desc = "Reinforces an uncovered / thinly-supported concept" },
   { name = "Research recency", weight = 25, desc = "Latest research or development" },
-  { name = "Repo frontier fit", weight = 25, desc = "Serves the repo's next direction" },
-  { name = "Buildability", weight = 15, desc = "Leads to implementation" },
+  { name = "Repo frontier fit", weight = 40, desc = "Serves the repo's next direction" },
 ]
 ```
 
