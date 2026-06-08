@@ -68,7 +68,7 @@ The key insight: Claude Code's `-p` flag turns it into a fully autonomous resear
 ## Install as a Claude Code skill
 
 ```bash
-git clone https://github.com/shimo4228/claude-skill-daily-research.git \
+git clone https://github.com/shimo4228/daily-research.git \
   ~/.claude/skills/daily-research
 ```
 
@@ -78,7 +78,7 @@ The repo ships a [`SKILL.md`](SKILL.md) manifest at root, so Claude Code recogni
 
 ```bash
 # 1. Clone
-git clone https://github.com/shimo4228/claude-skill-daily-research.git daily-research
+git clone https://github.com/shimo4228/daily-research.git daily-research
 cd daily-research
 
 # 2. Configure

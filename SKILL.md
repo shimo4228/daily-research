@@ -1,6 +1,7 @@
 ---
 name: daily-research
 description: Automated daily signal-first research digest — cron-driven pipeline that selects themes, researches with web tools, and writes reports to an Obsidian vault. Zero Python, just prompts and a shell wrapper over claude -p.
+compatibility: Requires the Claude Code CLI (claude -p) and a cron/launchd scheduler. Shell + prompts, no Python.
 user-invocable: true
 origin: original
 ---
@@ -31,7 +32,7 @@ Prerequisites, configuration, and scheduling are documented in the main [README]
 ## Install as a Claude Code skill
 
 ```bash
-git clone https://github.com/shimo4228/claude-skill-daily-research.git \
+git clone https://github.com/shimo4228/daily-research.git \
   ~/.claude/skills/daily-research
 ```
 

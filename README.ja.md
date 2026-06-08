@@ -68,7 +68,7 @@ launchd (AM 5:00)
 ## Claude Code skill としてインストール
 
 ```bash
-git clone https://github.com/shimo4228/claude-skill-daily-research.git \
+git clone https://github.com/shimo4228/daily-research.git \
   ~/.claude/skills/daily-research
 ```
 
@@ -78,7 +78,7 @@ git clone https://github.com/shimo4228/claude-skill-daily-research.git \
 
 ```bash
 # 1. クローン
-git clone https://github.com/shimo4228/claude-skill-daily-research.git daily-research
+git clone https://github.com/shimo4228/daily-research.git daily-research
 cd daily-research
 
 # 2. 設定

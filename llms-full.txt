@@ -6,7 +6,7 @@ This is the self-contained AI reference for **daily-research**, an autonomous re
 
 ## Project Facts
 
-- **Repository**: github.com/shimo4228/claude-skill-daily-research
+- **Repository**: github.com/shimo4228/daily-research
 - **License**: MIT
 - **Scheduler**: macOS `launchd`, daily at 05:00
 - **Runtime**: Bash + Claude Code CLI (`claude -p`); zero Python
