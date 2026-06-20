@@ -1,0 +1,15 @@
+# daily-research は shell + stdlib python のプロジェクト (build 対象ではない)。
+# この pyproject.toml は test 層 (pytest) の設定だけを持つ。
+# ランタイム本体は launchd 上で stdlib python のみで動く (pytest は dev/test 専用)。
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["*_test.py", "test_*.py"]
+pythonpath = ["scripts/lib"]
+addopts = [
+    "--strict-markers",
+    "--cov=dr_pipeline",
+    "--cov-report=term-missing",
+]
+markers = [
+    "unit: unit tests for dr_pipeline subcommands",
+]

@@ -1,0 +1,2 @@
+[general]
+vault_path = "/tmp/fixture-vault"

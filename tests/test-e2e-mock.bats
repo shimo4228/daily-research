@@ -23,6 +23,8 @@ setup() {
   # スクリプト・プロンプト・テンプレートをコピー
   cp "$REAL_PROJECT_DIR/scripts/daily-research.sh" "$MOCK_PROJECT/scripts/"
   cp "$REAL_PROJECT_DIR/scripts/coverage-report.sh" "$MOCK_PROJECT/scripts/"
+  mkdir -p "$MOCK_PROJECT/scripts/lib"
+  cp "$REAL_PROJECT_DIR/scripts/lib/dr_pipeline.py" "$MOCK_PROJECT/scripts/lib/"
   cp "$REAL_PROJECT_DIR/prompts/theme-selection-prompt.md" "$MOCK_PROJECT/prompts/"
   cp "$REAL_PROJECT_DIR/prompts/task-prompt.md" "$MOCK_PROJECT/prompts/"
   cp "$REAL_PROJECT_DIR/prompts/research-protocol.md" "$MOCK_PROJECT/prompts/"
