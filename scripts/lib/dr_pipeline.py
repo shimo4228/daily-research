@@ -243,18 +243,22 @@ def cmd_past_themes(argv):
     return 0
 
 
-# --- graph-health <path>: graph.jsonld の健全性を区別して判定 (missing=2, parse=3, ok=0) ---
+# --- graph-health <path>: graph.jsonld の健全性を区別して判定
+#     (missing=2, parse=3, schema=4, ok=0) ---
 def cmd_graph_health(argv):
     path = argv[0]
     try:
         with open(path) as f:
-            json.load(f)
+            g = json.load(f)
     except FileNotFoundError:
         print(f'graph not found: {path}', file=sys.stderr)
         return 2
     except json.JSONDecodeError as e:
         print(f'graph JSON parse error: {e}', file=sys.stderr)
         return 3
+    if not isinstance(g, dict) or '@graph' not in g:
+        print('graph schema invalid: missing @graph', file=sys.stderr)
+        return 4
     return 0
 
 

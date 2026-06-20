@@ -10,7 +10,8 @@ LIB_DIR="$SCRIPT_DIR/lib"
 DATE=$(date +%Y-%m-%d)
 LOG_DIR="$PROJECT_DIR/logs"
 LOG_FILE="$LOG_DIR/$DATE.log"
-LOCK_FILE="$PROJECT_DIR/.daily-research.lock"
+# shellcheck disable=SC2034  # LOCK_DIR は source した lib/lock.sh で使用
+LOCK_DIR="$PROJECT_DIR/.daily-research.lock"  # mkdir アトミックロック (ディレクトリ)
 # JSON/TOML 解析層の単一モジュール (旧 inline python3 -c を集約)
 DR_PY="$LIB_DIR/dr_pipeline.py"
 
@@ -18,6 +19,8 @@ DR_PY="$LIB_DIR/dr_pipeline.py"
 source "$LIB_DIR/env.sh"      # 環境サニタイズ + PATH (homebrew python3 優先)
 source "$LIB_DIR/log.sh"      # log() / log_init()
 source "$LIB_DIR/notify.sh"   # notify() (osascript ガード付き)
+source "$LIB_DIR/lock.sh"     # acquire_lock() / release_lock() (mkdir アトミック)
+source "$LIB_DIR/graph.sh"    # check_graph_health() / sync_repo_graphs()
 
 log_init  # logs/ 作成 + 権限 600/700 (作成時) + 30日ローテーション
 
@@ -59,25 +62,13 @@ validate_theme_json() {
   echo "$result"
 }
 
-# === 同時実行ガード ===
-cleanup() {
-  rm -f "$LOCK_FILE"
-}
-trap cleanup EXIT
-
-if [ -f "$LOCK_FILE" ]; then
-  LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
-  if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
-    log "ERROR: Another instance is running (PID: $LOCK_PID). Skipping."
-    notify "前回のリサーチがまだ実行中です" "Daily Research Skipped"
-    exit 1
-  else
-    log "WARN: Stale lock file found, removing"
-    rm -f "$LOCK_FILE"
-  fi
+# === 同時実行ガード (mkdir アトミックロック。lib/lock.sh) ===
+trap release_lock EXIT
+if ! acquire_lock; then
+  log "ERROR: Another instance is running. Skipping."
+  notify "前回のリサーチがまだ実行中です" "Daily Research Skipped"
+  exit 1
 fi
-echo $$ > "$LOCK_FILE"
-chmod 600 "$LOCK_FILE"
 
 log "=== Starting daily research ==="
 
@@ -119,19 +110,9 @@ if [ "$PROBE_CODE" = "401" ] || [ "$PROBE_ERR" = "true" ]; then
 fi
 log "Auth probe passed"
 
-# === graph.jsonld 健全性チェック ===
+# === graph.jsonld 健全性チェック (lib/graph.sh, missing/parse/schema を区別) ===
 # 飽和警告のソース。不在 or 破損なら Pass 1 飽和判断ができないため fatal。
-if [ ! -f "$PROJECT_DIR/graph.jsonld" ]; then
-  log "ERROR: graph.jsonld not found at $PROJECT_DIR/graph.jsonld"
-  notify "graph.jsonld が不在。bootstrap-graph.sh を実行してください" "Daily Research Error"
-  exit 1
-fi
-if ! python3 "$DR_PY" graph-health "$PROJECT_DIR/graph.jsonld" >> "$LOG_FILE" 2>&1; then
-  log "ERROR: graph.jsonld JSON parse failed"
-  notify "graph.jsonld の JSON 構造が壊れています" "Daily Research Error"
-  exit 1
-fi
-log "graph.jsonld health check passed"
+check_graph_health || exit 1
 
 # === 実行 ===
 cd "$PROJECT_DIR"
@@ -142,22 +123,11 @@ if [ -f "$PROJECT_DIR/past_topics.json" ]; then
   log "Backed up past_topics.json"
 fi
 
-# === repo graph sync ===
+# === repo graph sync (lib/graph.sh) ===
 # 各 track の target_repo (config.toml) から graph.jsonld を .repo-graphs/ へコピー。
 # Pass 1 がこれを読んで未補強 concept を判定する。repo 不在は WARN (該当 track の扱いは Pass 1 に委ねる)。
 log "=== Repo graph sync ==="
-mkdir -p "$PROJECT_DIR/.repo-graphs"
-while IFS=$'\t' read -r track repo; do
-  [ -z "$track" ] && continue
-  src="$repo/graph.jsonld"
-  dst="$PROJECT_DIR/.repo-graphs/$track.jsonld"
-  if [ -f "$src" ]; then
-    cp "$src" "$dst"
-    log "Synced repo graph: $track <- $src"
-  else
-    log "WARN: repo graph not found for track '$track': $src"
-  fi
-done < <(python3 "$DR_PY" tracks "$PROJECT_DIR/config.toml" 2>> "$LOG_FILE")
+sync_repo_graphs
 
 # === Pass 1: テーマ選定 (Opus) ===
 log "=== Pass 1: Theme selection (Opus) ==="

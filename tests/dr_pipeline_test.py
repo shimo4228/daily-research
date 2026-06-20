@@ -345,6 +345,15 @@ def test_graph_health_bad_json(monkeypatch, capsys, tmp_path):
     assert "parse error" in err
 
 
+@pytest.mark.unit
+def test_graph_health_schema_invalid_missing_graph_key(monkeypatch, capsys, tmp_path):
+    g = tmp_path / "noatgraph.jsonld"
+    g.write_text('{"@context": {}}')  # valid JSON だが @graph が無い
+    rc, _, err = run_cmd(monkeypatch, capsys, ["graph-health", str(g)])
+    assert rc == 4
+    assert "@graph" in err
+
+
 # === dispatcher ===
 
 @pytest.mark.unit

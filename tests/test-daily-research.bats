@@ -92,25 +92,14 @@ teardown() {
 }
 
 # === Lock mechanism ===
+# acquire_lock / release_lock の振る舞いテストは tests/test-lib.bats に集約 (S4)。
+# ここでは orchestrator が mkdir アトミックロックを採用していることを静的確認する。
 
-@test "lock file can be created and removed" {
-  local lock_file="$TEST_TMPDIR/.daily-research.lock"
-
-  echo "12345" > "$lock_file"
-  [ -f "$lock_file" ]
-
-  rm -f "$lock_file"
-  [ ! -f "$lock_file" ]
-}
-
-@test "stale lock file with dead PID is detected" {
-  local lock_file="$TEST_TMPDIR/.daily-research.lock"
-
-  # Create lock with non-existent PID
-  echo "999999999" > "$lock_file"
-
-  # kill -0 should fail for non-existent process
-  ! kill -0 999999999 2>/dev/null
+@test "orchestrator uses mkdir-atomic lock via lib/lock.sh" {
+  grep -q 'source.*lock.sh' "$SCRIPT"
+  grep -q 'acquire_lock' "$SCRIPT"
+  # check-then-write の旧パターン (echo \$\$ > LOCK_FILE) が残っていない
+  ! grep -q 'echo \$\$ > "\$LOCK_FILE"' "$SCRIPT"
 }
 
 # === Log directory ===
@@ -158,8 +147,8 @@ teardown() {
   head -3 "$SCRIPT" | grep -q "set -euo pipefail"
 }
 
-@test "trap cleanup is registered on EXIT" {
-  grep -q 'trap cleanup EXIT' "$SCRIPT"
+@test "trap release_lock is registered on EXIT" {
+  grep -q 'trap release_lock EXIT' "$SCRIPT"
 }
 
 @test "max-turns is configured for both passes" {

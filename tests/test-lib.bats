@@ -59,6 +59,82 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
+# === lock.sh (mkdir アトミックロック) ===
+
+@test "acquire_lock succeeds when no lock exists and records pid" {
+  LOCK_DIR="$TMP/lock"
+  source "$LIB_DIR/lock.sh"
+  run acquire_lock
+  [ "$status" -eq 0 ]
+  [ -d "$LOCK_DIR" ]
+  [ -f "$LOCK_DIR/pid" ]
+}
+
+@test "acquire_lock fails when a live lock is held" {
+  LOCK_DIR="$TMP/lock"
+  mkdir "$LOCK_DIR"
+  echo $$ > "$LOCK_DIR/pid"   # 自プロセス = 生きている PID
+  source "$LIB_DIR/lock.sh"
+  run acquire_lock
+  [ "$status" -ne 0 ]
+}
+
+@test "acquire_lock steals a stale lock (dead pid)" {
+  LOCK_DIR="$TMP/lock"
+  mkdir "$LOCK_DIR"
+  echo "999999999" > "$LOCK_DIR/pid"   # 存在しない PID
+  source "$LIB_DIR/lock.sh"
+  run acquire_lock
+  [ "$status" -eq 0 ]
+  [ "$(cat "$LOCK_DIR/pid")" = "$$" ]   # 自分の PID に置き換わる
+}
+
+@test "release_lock removes only own lock" {
+  LOCK_DIR="$TMP/lock"
+  source "$LIB_DIR/lock.sh"
+  acquire_lock
+  [ -d "$LOCK_DIR" ]
+  release_lock
+  [ ! -d "$LOCK_DIR" ]
+}
+
+@test "release_lock does not remove a lock owned by another pid" {
+  LOCK_DIR="$TMP/lock"
+  mkdir "$LOCK_DIR"
+  echo "999999999" > "$LOCK_DIR/pid"   # 他プロセス所有
+  source "$LIB_DIR/lock.sh"
+  release_lock
+  [ -d "$LOCK_DIR" ]   # 自分のものでないので消さない
+}
+
+# === graph.sh ===
+
+@test "check_graph_health passes for valid graph with @graph" {
+  PROJECT_DIR="$TMP/proj"
+  mkdir -p "$PROJECT_DIR"
+  echo '{"@graph": []}' > "$PROJECT_DIR/graph.jsonld"
+  LOG_FILE="$TMP/test.log"; : > "$LOG_FILE"
+  DR_PY="$(cd "$(dirname "$BATS_TEST_FILENAME")/../scripts/lib" && pwd)/dr_pipeline.py"
+  source "$LIB_DIR/log.sh"
+  source "$LIB_DIR/notify.sh"
+  source "$LIB_DIR/graph.sh"
+  run check_graph_health
+  [ "$status" -eq 0 ]
+  grep -q "health check passed" "$LOG_FILE"
+}
+
+@test "check_graph_health fails (non-zero) for missing graph" {
+  PROJECT_DIR="$TMP/proj-missing"
+  mkdir -p "$PROJECT_DIR"   # graph.jsonld は作らない
+  LOG_FILE="$TMP/test.log"; : > "$LOG_FILE"
+  DR_PY="$(cd "$(dirname "$BATS_TEST_FILENAME")/../scripts/lib" && pwd)/dr_pipeline.py"
+  source "$LIB_DIR/log.sh"
+  source "$LIB_DIR/notify.sh"
+  source "$LIB_DIR/graph.sh"
+  run check_graph_health
+  [ "$status" -ne 0 ]
+}
+
 # === env.sh ===
 
 @test "env.sh unsets ANTHROPIC_API_KEY" {
