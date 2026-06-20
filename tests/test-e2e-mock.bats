@@ -22,10 +22,19 @@ setup() {
 
   # スクリプト・プロンプト・テンプレートをコピー
   cp "$REAL_PROJECT_DIR/scripts/daily-research.sh" "$MOCK_PROJECT/scripts/"
+  cp "$REAL_PROJECT_DIR/scripts/coverage-report.sh" "$MOCK_PROJECT/scripts/"
   cp "$REAL_PROJECT_DIR/prompts/theme-selection-prompt.md" "$MOCK_PROJECT/prompts/"
   cp "$REAL_PROJECT_DIR/prompts/task-prompt.md" "$MOCK_PROJECT/prompts/"
   cp "$REAL_PROJECT_DIR/prompts/research-protocol.md" "$MOCK_PROJECT/prompts/"
   cp "$REAL_PROJECT_DIR/templates/report-template.md" "$MOCK_PROJECT/templates/"
+
+  # graph.jsonld のミニマル版（起動時の健全性チェックが fatal のため必須）
+  cat > "$MOCK_PROJECT/graph.jsonld" << 'EOF'
+{
+  "@context": {"@vocab": "https://schema.org/"},
+  "@graph": []
+}
+EOF
 
   # config.toml のミニマル版（vault_path を temp に向ける）
   cat > "$MOCK_PROJECT/config.toml" << 'EOF'
@@ -87,10 +96,19 @@ for arg in "$@"; do
   PREV="$arg"
 done
 
-# --- Haiku (MCP health check) ---
+# --- Haiku (auth probe / health check) ---
 if [[ "$MODEL" == "haiku" ]]; then
-  echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.001,"num_turns":1,"duration_ms":2000,"usage":{"input_tokens":100,"output_tokens":10}}'
-  exit 0
+  case "$SCENARIO" in
+    auth-fail|auth-401)
+      # OAuth 期限切れを模す: is_error/api_error_status:401 + 非ゼロ exit
+      echo '{"type":"result","subtype":"error","is_error":true,"api_error_status":401,"total_cost_usd":0,"result":"Failed to authenticate. API Error: 401 Invalid authentication credentials"}'
+      exit 1
+      ;;
+    *)
+      echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.001,"num_turns":1,"duration_ms":2000,"usage":{"input_tokens":100,"output_tokens":10}}'
+      exit 0
+      ;;
+  esac
 fi
 
 # --- Opus (Pass 1: theme selection) ---
@@ -114,6 +132,13 @@ JSON
 {"type":"result","subtype":"success","is_error":false,"duration_ms":1000,"result":"This is not valid theme JSON at all"}
 JSON
       exit 0
+      ;;
+    pass1-401)
+      # auth probe は通過するが Pass 1 (Opus) が 401。Sonnet フォールバックしてはならない
+      cat << 'JSON'
+{"type":"result","subtype":"error","is_error":true,"api_error_status":401,"duration_ms":2700,"result":"Failed to authenticate. API Error: 401 Invalid authentication credentials"}
+JSON
+      exit 1
       ;;
   esac
 fi
@@ -168,8 +193,8 @@ get_log() {
   # 成功完了
   echo "$log_content" | grep -q "Completed successfully"
 
-  # MCP ヘルスチェック通過
-  echo "$log_content" | grep -q "MCP health check passed"
+  # graph.jsonld ヘルスチェック通過 (Mem0 MCP は 2026-05-23 撤去済み)
+  echo "$log_content" | grep -q "graph.jsonld health check passed"
 
   # CLAUDE_CMD がログに記録されている
   echo "$log_content" | grep -q "DEBUG: CLAUDE_CMD="
@@ -249,6 +274,42 @@ get_log() {
 
   # 成功完了
   echo "$log_content" | grep -q "Completed successfully"
+}
+
+# === Test: Auth probe (real API check, not `claude --version`) ===
+
+@test "E2E auth: failed auth probe stops before Pass 1 (no Opus, no Sonnet)" {
+  echo "auth-fail" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -ne 0 ]
+
+  local log_content
+  log_content=$(get_log)
+
+  # 認証 probe 失敗が loud にログされる
+  echo "$log_content" | grep -q "Auth probe failed"
+
+  # Pass 1 (Opus) も Pass 2 (Sonnet) も実行されない
+  ! echo "$log_content" | grep -q "Pass 1: Theme selection (Opus)"
+  [ ! -f "$MOCK_HOME/.sonnet_prompt" ]
+}
+
+@test "E2E auth: Pass 1 401 does NOT fall back to Sonnet (no double-401)" {
+  echo "pass1-401" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -ne 0 ]
+
+  local log_content
+  log_content=$(get_log)
+
+  # 401 を検出してフォールバックを抑止
+  echo "$log_content" | grep -q "skipping Sonnet fallback"
+
+  # Sonnet フォールバックは起動しない
+  ! echo "$log_content" | grep -q "Fallback: Sonnet handles"
+  [ ! -f "$MOCK_HOME/.sonnet_prompt" ]
 }
 
 # === Test: Absolute path resolution ===

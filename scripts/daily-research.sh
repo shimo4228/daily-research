@@ -53,6 +53,23 @@ run_claude() {
   fi
 }
 
+# stdin の claude -p JSON 出力 (dict / result イベント / array いずれも可) から
+# "api_error_status<TAB>is_error" を出力する。auth/401 判定に使う。
+# 解析不能時は "<TAB>parse-fail" を返す (呼び出し側は OK 扱いで本編へ進む)。
+claude_error_fields() {
+  python3 -c "
+import sys, json
+try:
+    d = json.loads(sys.stdin.read() or 'null')
+    if isinstance(d, list):
+        d = next((e for e in d if isinstance(e, dict) and e.get('type') == 'result'), {})
+    d = d or {}
+    print(f\"{d.get('api_error_status', '')}\t{str(bool(d.get('is_error'))).lower()}\")
+except Exception:
+    print('\tparse-fail')
+"
+}
+
 # stream-json の NDJSON を集約するパーサー（python3 -c 用コード）
 # assistant イベントの tool_use ブロックをカウントし、result イベントに tool_counts を付加して出力
 # シングルクォートなし・インデント保持のため変数に格納して python3 -c "$PARSE_STREAM_PY" で使用
@@ -227,11 +244,24 @@ fi
 CLAUDE_CMD=$(command -v claude)
 [ "${DEBUG:-}" = "1" ] && log "DEBUG: CLAUDE_CMD=$CLAUDE_CMD"
 
+# --version は binary が壊れていないかの liveness 確認のみ (OAuth は検証しない)
 if ! "$CLAUDE_CMD" --version >> "$LOG_FILE" 2>&1; then
-  log "ERROR: Claude authentication may have expired"
-  notify "Claude認証の更新が必要です。claude を起動してください。" "Daily Research Auth Error"
+  log "ERROR: claude --version failed (binary broken?)"
+  notify "claude バイナリが実行できません" "Daily Research Error"
   exit 1
 fi
+
+# 実 auth probe: `claude --version` は OAuth 期限切れを検出できない (formalized check)。
+# 安価な Haiku 呼び出しで実 API を叩き、is_error/api_error_status を検査する。
+# 401/is_error を確認した時のみ STOP (probe 自体の transient/parse 失敗では本編に進む)。
+PROBE_JSON=$(run_claude -p ok --max-turns 1 --model haiku --output-format json 2>> "$LOG_FILE") || true
+IFS=$'\t' read -r PROBE_CODE PROBE_ERR < <(printf '%s' "$PROBE_JSON" | claude_error_fields) || true
+if [ "$PROBE_CODE" = "401" ] || [ "$PROBE_ERR" = "true" ]; then
+  log "ERROR: Auth probe failed (api_error_status=${PROBE_CODE:-none} is_error=${PROBE_ERR}) — OAuth likely expired"
+  notify "Claude認証エラー。claude を起動して再認証してください。" "Daily Research Auth Error"
+  exit 1
+fi
+log "Auth probe passed"
 
 # === graph.jsonld 健全性チェック ===
 # 飽和警告のソース。不在 or 破損なら Pass 1 飽和判断ができないため fatal。
@@ -286,11 +316,49 @@ log "=== Pass 1: Theme selection (Opus) ==="
 
 # 未補強 concept レポートを生成し prompt に concat (concept coverage gap 駆動)
 COVERAGE=$("$PROJECT_DIR/scripts/coverage-report.sh" 2>> "$LOG_FILE") || COVERAGE="(coverage report 生成失敗。各 repo graph を直接参照すること)"
+
+# 過去テーマ履歴 (track 別直近 10 件) を prompt に concat (テーマ・主ソース単位の重複防止)
+PAST_THEMES=$(python3 <<'PYEOF' 2>> "$LOG_FILE"
+import json, tomllib
+from collections import defaultdict
+
+try:
+    with open('past_topics.json') as f:
+        topics = json.load(f).get('topics', [])
+except (FileNotFoundError, json.JSONDecodeError):
+    topics = []
+
+with open('config.toml', 'rb') as f:
+    active_tracks = set(tomllib.load(f).get('tracks', {}))
+
+by_track = defaultdict(list)
+for t in topics:
+    if t.get('track') in active_tracks and t.get('title'):
+        by_track[t['track']].append(t)
+
+print("=== 過去テーマ履歴 (track 別直近 10 件) ===")
+print("以下と同じテーマ・同じ主ソース (論文・プロジェクト) の再選定は禁止。")
+print("後続研究・新展開を扱う場合のみ可 (rationale に何が新展開かを明記すること)。")
+print()
+for track, items in by_track.items():
+    items.sort(key=lambda t: t.get('date', ''))
+    print(f"Track: {track}")
+    for t in items[-10:]:
+        title = t['title'][:120] + ('…' if len(t['title']) > 120 else '')
+        print(f"  - {t.get('date', '?')} {title}")
+    print()
+PYEOF
+) || PAST_THEMES="(過去テーマ履歴の生成失敗。past_topics.json を直接 Read して重複を確認すること)"
+
 THEME_PROMPT="$(cat prompts/theme-selection-prompt.md)
 
 ---
 
-$COVERAGE"
+$COVERAGE
+
+---
+
+$PAST_THEMES"
 PASS1_JSON=""
 THEME_RAW=""
 PASS1_EXIT=0
@@ -321,6 +389,14 @@ fi
 USE_FALLBACK=false
 
 if [ $PASS1_EXIT -ne 0 ]; then
+  # 401/auth 失敗なら Sonnet フォールバックも同じ認証で失敗する (今朝の double-401)。
+  # フォールバックを抑止し、再認証を促して STOP する。
+  IFS=$'\t' read -r P1_CODE _P1_ERR < <(printf '%s' "$PASS1_JSON" | claude_error_fields) || true
+  if [ "$P1_CODE" = "401" ]; then
+    log "ERROR: Pass 1 returned 401 — skipping Sonnet fallback (same auth failure would recur)"
+    notify "Claude認証エラー(401)。claude を起動して再認証してください。" "Daily Research Auth Error"
+    exit 1
+  fi
   log "WARN: Pass 1 failed (exit code $PASS1_EXIT), falling back to Sonnet"
   USE_FALLBACK=true
 fi
@@ -378,7 +454,7 @@ log "=== Pass 2: Research & writing (Sonnet) ==="
 
 PASS2_EXIT=0
 PASS2_JSON=""
-PASS2_JSON=$(CLAUDE_TIMEOUT=900 run_claude -p "$TASK_PROMPT" \
+PASS2_JSON=$(CLAUDE_TIMEOUT=1800 run_claude -p "$TASK_PROMPT" \
   --permission-mode default \
   --append-system-prompt-file prompts/research-protocol.md \
   --allowedTools "WebSearch,WebFetch,Read,Write,Edit,Glob,Grep" \
@@ -435,6 +511,28 @@ if [ $PASS2_EXIT -eq 0 ]; then
 else
   log "=== Failed with exit code $PASS2_EXIT ==="
   notify "リサーチ実行に失敗しました。ログを確認してください。" "Daily Research Error"
+fi
+
+# === Pass 3: Obsidian wiki 自動 ingest (vault 側スクリプト。non-fatal) ===
+# Pass 2 の exit に依らず実行する。Pass 2 が timeout (124) でも当日レポートは生成済みのことが多く、
+# ingest スクリプト側が「当日レポートが無ければ skip」を自己判定するため、ここでは無条件に呼ぶ。
+# 失敗しても生成ジョブの成否 (exit $PASS2_EXIT) には影響させない。
+# vault パスは config.toml の [general].vault_path から取得 (個人パスのハードコード禁止)。
+VAULT_PATH=$(python3 -c "
+import tomllib
+with open('config.toml', 'rb') as f:
+    print(tomllib.load(f).get('general', {}).get('vault_path', ''))
+" 2>> "$LOG_FILE") || VAULT_PATH=""
+if [ -z "$VAULT_PATH" ]; then
+  log "WARN: vault_path が config.toml に未設定。Pass 3 wiki ingest を skip"
+else
+  VAULT_INGEST="$VAULT_PATH/scripts/daily_wiki_ingest.sh"
+  if [ -x "$VAULT_INGEST" ]; then
+    log "=== Pass 3: wiki ingest ==="
+    bash "$VAULT_INGEST" >> "$LOG_FILE" 2>&1 || log "WARN: wiki ingest failed (non-fatal)"
+  else
+    log "WARN: wiki ingest スクリプトが見つからない/実行不可: $VAULT_INGEST"
+  fi
 fi
 
 exit $PASS2_EXIT
