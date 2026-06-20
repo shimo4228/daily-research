@@ -177,9 +177,9 @@ def test_parse_stream_skips_unparseable_lines(monkeypatch, capsys):
 def _valid_themes():
     return json.dumps({
         "themes": [
-            {"track": "authorship", "topic": "T", "slug": "a-slug", "score": 80, "rationale": "r"},
-            {"track": "contemplative", "topic": "T", "slug": "b-slug", "score": 80, "rationale": "r"},
-            {"track": "akc", "topic": "T", "slug": "c-slug", "score": 80, "rationale": "r"},
+            {"track": "authorship", "topic": "T", "slug": "a-slug", "score": 80, "rationale": "r", "reinforces": ["concept/x"]},
+            {"track": "contemplative", "topic": "T", "slug": "b-slug", "score": 80, "rationale": "r", "reinforces": ["concept/y"]},
+            {"track": "akc", "topic": "T", "slug": "c-slug", "score": 80, "rationale": "r", "reinforces": ["concept/z"]},
         ]
     })
 
@@ -209,8 +209,10 @@ def test_validate_theme_strips_code_fence(monkeypatch, capsys):
         (lambda d: d["themes"][0].pop("rationale"), "missing-key"),
         (lambda d: d["themes"][0].__setitem__("topic", "x" * 201), "topic-too-long"),
         (lambda d: d["themes"][0].__setitem__("rationale", "x" * 501), "rationale-too-long"),
+        (lambda d: d["themes"][0].pop("reinforces"), "missing-reinforces"),
+        (lambda d: d["themes"][0].__setitem__("reinforces", []), "empty-reinforces"),
     ],
-    ids=["wrong-count", "invalid-track", "invalid-slug", "missing-key", "topic-too-long", "rationale-too-long"],
+    ids=["wrong-count", "invalid-track", "invalid-slug", "missing-key", "topic-too-long", "rationale-too-long", "missing-reinforces", "empty-reinforces"],
 )
 def test_validate_theme_rejects(monkeypatch, capsys, mutate, reason):
     d = json.loads(_valid_themes())

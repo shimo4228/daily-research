@@ -145,10 +145,15 @@ def cmd_validate_theme(argv):
         return 1
 
     for i, t in enumerate(themes):
-        for k in ('track', 'topic', 'slug', 'score', 'rationale'):
+        for k in ('track', 'topic', 'slug', 'score', 'rationale', 'reinforces'):
             if k not in t:
                 print(f'Theme {i}: missing key "{k}"', file=sys.stderr)
                 return 1
+        # reinforces は補強対象 concept の @id 配列。coverage gap 駆動の中核なので
+        # 非空のリストであることを要求する (missing-reinforces-validation)
+        if not isinstance(t['reinforces'], list) or not t['reinforces']:
+            print(f'Theme {i}: reinforces must be a non-empty list', file=sys.stderr)
+            return 1
         if t['track'] not in valid_tracks:
             print(f'Theme {i}: invalid track "{t["track"]}" (valid: {sorted(valid_tracks)})', file=sys.stderr)
             return 1

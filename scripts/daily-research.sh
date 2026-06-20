@@ -274,7 +274,12 @@ else
   VAULT_INGEST="$VAULT_PATH/scripts/daily_wiki_ingest.sh"
   if [ -x "$VAULT_INGEST" ]; then
     log "=== Pass 3: wiki ingest ==="
-    bash "$VAULT_INGEST" >> "$LOG_FILE" 2>&1 || log "WARN: wiki ingest failed (non-fatal)"
+    # Pass 3 の exit は握り潰さず distinct にログ (ctl-010)。非 fatal なので FINAL_EXIT は変えない。
+    PASS3_EXIT=0
+    bash "$VAULT_INGEST" >> "$LOG_FILE" 2>&1 || PASS3_EXIT=$?
+    if [ "$PASS3_EXIT" != "0" ]; then
+      log "WARN: wiki ingest failed (non-fatal, exit $PASS3_EXIT)"
+    fi
   else
     log "WARN: wiki ingest スクリプトが見つからない/実行不可: $VAULT_INGEST"
   fi
