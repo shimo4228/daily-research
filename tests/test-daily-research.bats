@@ -137,8 +137,9 @@ teardown() {
 
 # === Security checks ===
 
-@test "script unsets ANTHROPIC_API_KEY" {
-  grep -q "unset ANTHROPIC_API_KEY" "$SCRIPT"
+@test "env.sh unsets ANTHROPIC_API_KEY" {
+  # 環境サニタイズは lib/env.sh に集約 (S3)
+  grep -q "unset ANTHROPIC_API_KEY" "$PROJECT_DIR/scripts/lib/env.sh"
 }
 
 @test "no hardcoded API keys in script" {
@@ -147,7 +148,8 @@ teardown() {
 }
 
 @test "log file permissions are restricted (chmod 600)" {
-  grep -q 'chmod 600 "$LOG_FILE"' "$SCRIPT"
+  # ログ権限制限は lib/log.sh の log_init() に集約 (作成時 chmod, S3)
+  grep -q 'chmod 600 "$LOG_FILE"' "$PROJECT_DIR/scripts/lib/log.sh"
 }
 
 # === Defensive programming ===

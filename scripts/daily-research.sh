@@ -1,47 +1,27 @@
 #!/bin/bash
 set -euo pipefail
 
-# === 環境サニタイズ ===
-# APIキーが設定されていると従量課金になるため確実に除去
-unset ANTHROPIC_API_KEY
-# CLAUDECODEが残っているとネストチェックや起動挙動が変わるため除去
-unset CLAUDECODE 2>/dev/null || true
-
-# launchd環境はPATHが最小限。必要なパスを明示的に設定
-export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-# claude コマンドのパスを直接確認して追加
-if [ -d "$HOME/.claude/local" ]; then
-  export PATH="$HOME/.claude/local:$PATH"
-fi
+# === パス解決 (PROJECT_DIR は script の位置から導出。$HOME ハードコード廃止) ===
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+LIB_DIR="$SCRIPT_DIR/lib"
 
 # === 変数 ===
 DATE=$(date +%Y-%m-%d)
-PROJECT_DIR="$HOME/MyAI_Lab/daily-research"
 LOG_DIR="$PROJECT_DIR/logs"
 LOG_FILE="$LOG_DIR/$DATE.log"
 LOCK_FILE="$PROJECT_DIR/.daily-research.lock"
 # JSON/TOML 解析層の単一モジュール (旧 inline python3 -c を集約)
-DR_PY="$PROJECT_DIR/scripts/lib/dr_pipeline.py"
+DR_PY="$LIB_DIR/dr_pipeline.py"
 
-mkdir -p "$LOG_DIR"
-chmod 700 "$LOG_DIR"
+# === ライブラリ (source) ===
+source "$LIB_DIR/env.sh"      # 環境サニタイズ + PATH (homebrew python3 優先)
+source "$LIB_DIR/log.sh"      # log() / log_init()
+source "$LIB_DIR/notify.sh"   # notify() (osascript ガード付き)
+
+log_init  # logs/ 作成 + 権限 600/700 (作成時) + 30日ローテーション
 
 # === ヘルパー関数 ===
-
-log() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
-}
-
-notify() {
-  local body="$1"
-  local title="$2"
-  # AppleScript インジェクション防止: バックスラッシュ → ダブルクォートの順でエスケープ
-  body="${body//\\/\\\\}"
-  body="${body//\"/\\\"}"
-  title="${title//\\/\\\\}"
-  title="${title//\"/\\\"}"
-  osascript -e "display notification \"$body\" with title \"$title\"" 2>/dev/null || true
-}
 
 # claude -p の実行ラッパー
 # CLAUDE_CMD は認証チェック時に絶対パスへ解決済み
@@ -98,9 +78,6 @@ if [ -f "$LOCK_FILE" ]; then
 fi
 echo $$ > "$LOCK_FILE"
 chmod 600 "$LOCK_FILE"
-
-# === ログローテーション ===
-find "$LOG_DIR" -name "*.log" -mtime +30 -delete 2>/dev/null || true
 
 log "=== Starting daily research ==="
 
@@ -305,9 +282,6 @@ if [ -n "$PASS1_JSON" ] && [ -n "$PASS2_JSON" ]; then
   printf '%s\n%s\n' "$PASS1_JSON" "$PASS2_JSON" | python3 "$DR_PY" total-summary 2>/dev/null \
     | while IFS= read -r line; do log "$line"; done || true
 fi
-
-# ログファイルの権限を制限
-chmod 600 "$LOG_FILE" 2>/dev/null || true
 
 if [ $PASS2_EXIT -eq 0 ]; then
   log "=== Completed successfully ==="
