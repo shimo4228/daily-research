@@ -135,6 +135,42 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
+# === auth.sh (real_auth_probe) ===
+
+_dr_py() {
+  echo "$(cd "$(dirname "$BATS_TEST_FILENAME")/../scripts/lib" && pwd)/dr_pipeline.py"
+}
+
+@test "real_auth_probe returns 0 when API responds without error" {
+  cat > "$TMP/claude" <<'EOF'
+#!/bin/bash
+[[ "$1" == "--version" ]] && { echo mock; exit 0; }
+echo '{"type":"result","is_error":false}'
+exit 0
+EOF
+  chmod +x "$TMP/claude"
+  CLAUDE_CMD="$TMP/claude"
+  DR_PY="$(_dr_py)"
+  source "$LIB_DIR/auth.sh"
+  run real_auth_probe
+  [ "$status" -eq 0 ]
+}
+
+@test "real_auth_probe returns 1 on 401/is_error" {
+  cat > "$TMP/claude" <<'EOF'
+#!/bin/bash
+[[ "$1" == "--version" ]] && { echo mock; exit 0; }
+echo '{"type":"result","is_error":true,"api_error_status":401}'
+exit 1
+EOF
+  chmod +x "$TMP/claude"
+  CLAUDE_CMD="$TMP/claude"
+  DR_PY="$(_dr_py)"
+  source "$LIB_DIR/auth.sh"
+  run real_auth_probe
+  [ "$status" -eq 1 ]
+}
+
 # === env.sh ===
 
 @test "env.sh unsets ANTHROPIC_API_KEY" {

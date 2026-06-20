@@ -27,6 +27,15 @@ teardown() {
   bash -n "$PROJECT_DIR/scripts/check-auth.sh"
 }
 
+@test "all 3 entrypoints share real_auth_probe (no formalized --version auth)" {
+  # auth-002: check-auth.sh は本 flow に未配線だった。lib/auth.sh で正本化し 3 つが共有
+  grep -q 'real_auth_probe' "$SCRIPT"
+  grep -q 'real_auth_probe' "$PROJECT_DIR/scripts/check-auth.sh"
+  grep -q 'real_auth_probe' "$PROJECT_DIR/scripts/bootstrap-graph.sh"
+  # 形骸化した「--version で認証確認」が残っていない
+  ! grep -qi 'version.*authentication\|authentication.*version' "$PROJECT_DIR/scripts/check-auth.sh"
+}
+
 @test "coverage-report.sh has valid syntax" {
   bash -n "$PROJECT_DIR/scripts/coverage-report.sh"
 }

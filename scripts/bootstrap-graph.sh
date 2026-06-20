@@ -12,6 +12,10 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
+LIB_DIR="$PROJECT_DIR/scripts/lib"
+# shellcheck disable=SC2034  # DR_PY は source した lib/auth.sh で使用
+DR_PY="$LIB_DIR/dr_pipeline.py"
+
 LOG_FILE="$PROJECT_DIR/logs/bootstrap-graph-$(date +%Y-%m-%d).log"
 mkdir -p "$PROJECT_DIR/logs"
 
@@ -19,9 +23,9 @@ log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
 }
 
-# 環境サニタイズ (daily-research.sh と同等)
-unset ANTHROPIC_API_KEY
-unset CLAUDECODE
+# 環境サニタイズ + PATH + 実 auth probe を lib から取得 (daily-research.sh と共有)
+source "$LIB_DIR/env.sh"
+source "$LIB_DIR/auth.sh"
 
 log "=== bootstrap-graph: 開始 ==="
 
@@ -39,9 +43,9 @@ fi
 CLAUDE_CMD=$(command -v claude)
 log "Using claude: $CLAUDE_CMD"
 
-# 認証確認
-if ! "$CLAUDE_CMD" --version >> "$LOG_FILE" 2>&1; then
-  log "ERROR: Claude authentication may have expired. Run 'claude' interactively first."
+# 認証確認 (実 auth probe。--version は OAuth 期限切れを検出できないため使わない)
+if ! real_auth_probe; then
+  log "ERROR: Claude authentication expired. Run 'claude' interactively first."
   exit 1
 fi
 

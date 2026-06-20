@@ -21,6 +21,7 @@ source "$LIB_DIR/log.sh"      # log() / log_init()
 source "$LIB_DIR/notify.sh"   # notify() (osascript ガード付き)
 source "$LIB_DIR/lock.sh"     # acquire_lock() / release_lock() (mkdir アトミック)
 source "$LIB_DIR/graph.sh"    # check_graph_health() / sync_repo_graphs()
+source "$LIB_DIR/auth.sh"     # real_auth_probe() (実 OAuth probe、3 entrypoint 共有)
 
 log_init  # logs/ 作成 + 権限 600/700 (作成時) + 30日ローテーション
 
@@ -98,13 +99,10 @@ if ! "$CLAUDE_CMD" --version >> "$LOG_FILE" 2>&1; then
   exit 1
 fi
 
-# 実 auth probe: `claude --version` は OAuth 期限切れを検出できない (formalized check)。
-# 安価な Haiku 呼び出しで実 API を叩き、is_error/api_error_status を検査する。
-# 401/is_error を確認した時のみ STOP (probe 自体の transient/parse 失敗では本編に進む)。
-PROBE_JSON=$(run_claude -p ok --max-turns 1 --model haiku --output-format json 2>> "$LOG_FILE") || true
-IFS=$'\t' read -r PROBE_CODE PROBE_ERR < <(printf '%s' "$PROBE_JSON" | claude_error_fields) || true
-if [ "$PROBE_CODE" = "401" ] || [ "$PROBE_ERR" = "true" ]; then
-  log "ERROR: Auth probe failed (api_error_status=${PROBE_CODE:-none} is_error=${PROBE_ERR}) — OAuth likely expired"
+# 実 auth probe (lib/auth.sh)。`claude --version` は OAuth 期限切れを検出できないため、
+# 安価な Haiku 呼び出しで実 API を叩き is_error/api_error_status を検査する。
+if ! real_auth_probe; then
+  log "ERROR: Auth probe failed — OAuth likely expired"
   notify "Claude認証エラー。claude を起動して再認証してください。" "Daily Research Auth Error"
   exit 1
 fi
