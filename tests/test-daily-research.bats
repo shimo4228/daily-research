@@ -135,8 +135,8 @@ teardown() {
 
 # === Security checks ===
 
-@test "env.sh unsets ANTHROPIC_API_KEY" {
-  # 環境サニタイズは lib/env.sh に集約 (S3)
+@test "env.sh source declares unset ANTHROPIC_API_KEY (static)" {
+  # 環境サニタイズは lib/env.sh に集約 (S3)。挙動テストは test-lib.bats 側
   grep -q "unset ANTHROPIC_API_KEY" "$PROJECT_DIR/scripts/lib/env.sh"
 }
 

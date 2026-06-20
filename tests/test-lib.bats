@@ -211,7 +211,7 @@ _fixtures() {
   [ "$output" = "E_TRANSIENT" ]
 }
 
-@test "classify_exit: exit 0 but is_error -> E_FATAL (success masking 防止)" {
+@test "classify_exit: exit 0 but is_error -> E_FATAL (success masking guard)" {
   DR_PY="$(_dr_py)"; source "$LIB_DIR/claude.sh"
   run classify_exit 0 '{"is_error":true}'
   [ "$output" = "E_FATAL" ]
