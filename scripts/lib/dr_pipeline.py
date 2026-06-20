@@ -154,6 +154,12 @@ def cmd_validate_theme(argv):
         if not isinstance(t['reinforces'], list) or not t['reinforces']:
             print(f'Theme {i}: reinforces must be a non-empty list', file=sys.stderr)
             return 1
+        # 各要素は URI / fragment。Sonnet が graph.jsonld に転記するため、JSON-LD を
+        # 壊しうる文字 (引用符 / 制御文字 / 空白) を許さない allowlist で検証する。
+        for r in t['reinforces']:
+            if not isinstance(r, str) or not re.fullmatch(r'[A-Za-z0-9_./:~#-]+', r):
+                print(f'Theme {i}: invalid reinforces entry "{r}"', file=sys.stderr)
+                return 1
         if t['track'] not in valid_tracks:
             print(f'Theme {i}: invalid track "{t["track"]}" (valid: {sorted(valid_tracks)})', file=sys.stderr)
             return 1
@@ -174,9 +180,14 @@ def cmd_validate_theme(argv):
 
 # --- result-field: stdin の claude -p JSON から result フィールド文字列を出力 ---
 def cmd_result_field(argv):
-    d = json.loads(sys.stdin.read())
-    d = _result_dict(d)
-    print(d.get('result', ''))
+    # 他 subcommand と同様、解析不能でも traceback を出さず空文字を返す
+    # (呼び出し側は空 → fallback / validation 失敗で正しく処理する)
+    try:
+        d = json.loads(sys.stdin.read())
+        d = _result_dict(d) or {}
+        print(d.get('result', ''))
+    except Exception:
+        pass
     return 0
 
 

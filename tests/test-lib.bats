@@ -59,6 +59,11 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
+@test "notify does not crash with embedded newlines (multi-statement injection guard)" {
+  run /bin/bash -c "source '$LIB_DIR/notify.sh'; notify \$'line1\nline2' \$'ti\ntle'"
+  [ "$status" -eq 0 ]
+}
+
 # === lock.sh (mkdir アトミックロック) ===
 
 @test "acquire_lock succeeds when no lock exists and records pid" {

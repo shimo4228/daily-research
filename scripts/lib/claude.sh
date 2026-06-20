@@ -29,7 +29,7 @@ classify_exit() {
   # error-fields は "api_error_status<TAB>is_error" を返す。api_error_status が空のとき
   # 先頭フィールドが空になるが、`IFS=$'\t' read` は TAB が IFS 空白扱いのため先頭の空を
   # 潰してしまう。パラメータ展開で TAB の前後を取り出し、空の先頭フィールドを保持する。
-  fields=$(printf '%s' "$json" | python3 "$DR_PY" error-fields)
+  fields=$(printf '%s' "$json" | python3 "$DR_PY" error-fields) || fields=""
   acode="${fields%%$'\t'*}"
   aerr="${fields#*$'\t'}"
   if [ "$acode" = "401" ]; then

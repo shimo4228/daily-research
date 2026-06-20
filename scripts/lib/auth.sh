@@ -24,7 +24,7 @@ real_auth_probe() {
   fi
   # error-fields の "api_error_status<TAB>is_error" を取り出す。api_error_status が空でも
   # 先頭フィールドを保持するためパラメータ展開を使う (TAB は IFS 空白で read が潰すため)。
-  fields=$(printf '%s' "$probe_json" | python3 "$DR_PY" error-fields)
+  fields=$(printf '%s' "$probe_json" | python3 "$DR_PY" error-fields) || fields=""
   code="${fields%%$'\t'*}"
   err="${fields#*$'\t'}"
   if [ "$code" = "401" ] || [ "$err" = "true" ]; then

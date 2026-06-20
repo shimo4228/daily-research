@@ -211,8 +211,11 @@ def test_validate_theme_strips_code_fence(monkeypatch, capsys):
         (lambda d: d["themes"][0].__setitem__("rationale", "x" * 501), "rationale-too-long"),
         (lambda d: d["themes"][0].pop("reinforces"), "missing-reinforces"),
         (lambda d: d["themes"][0].__setitem__("reinforces", []), "empty-reinforces"),
+        (lambda d: d["themes"][0].__setitem__("reinforces", ['bad "quote"']), "reinforces-bad-char"),
+        (lambda d: d["themes"][0].__setitem__("reinforces", [123]), "reinforces-non-string"),
     ],
-    ids=["wrong-count", "invalid-track", "invalid-slug", "missing-key", "topic-too-long", "rationale-too-long", "missing-reinforces", "empty-reinforces"],
+    ids=["wrong-count", "invalid-track", "invalid-slug", "missing-key", "topic-too-long",
+         "rationale-too-long", "missing-reinforces", "empty-reinforces", "reinforces-bad-char", "reinforces-non-string"],
 )
 def test_validate_theme_rejects(monkeypatch, capsys, mutate, reason):
     d = json.loads(_valid_themes())

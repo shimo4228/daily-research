@@ -19,7 +19,11 @@ acquire_lock() {
   if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
     return 1  # 実行中
   fi
-  # stale ロック: 奪取を試みる
+  # stale ロック: 奪取を試みる。
+  # 注: rm→mkdir の間に残存 race がある (2 プロセスが同時に stale を検出すると両方が
+  # rm し mkdir を競う)。ただし mkdir はアトミックで勝者は 1 つ、敗者は return 1 で
+  # 弾かれるため「二重実行」は起きない (最大で 1 プロセスが余分に拒否されるだけ)。
+  # launchd の単一ジョブでは実害なし。完全な atomic steal が要る場合は mv -n を使う。
   rm -rf "$LOCK_DIR"
   if mkdir "$LOCK_DIR" 2>/dev/null; then
     echo $$ > "$LOCK_DIR/pid"
