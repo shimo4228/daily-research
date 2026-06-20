@@ -22,28 +22,12 @@ source "$LIB_DIR/notify.sh"   # notify() (osascript ガード付き)
 source "$LIB_DIR/lock.sh"     # acquire_lock() / release_lock() (mkdir アトミック)
 source "$LIB_DIR/graph.sh"    # check_graph_health() / sync_repo_graphs()
 source "$LIB_DIR/auth.sh"     # real_auth_probe() (実 OAuth probe、3 entrypoint 共有)
+source "$LIB_DIR/claude.sh"   # run_claude() / classify_exit() (E_AUTH/E_TRANSIENT/E_FATAL)
 
 log_init  # logs/ 作成 + 権限 600/700 (作成時) + 30日ローテーション
 
 # === ヘルパー関数 ===
-
-# claude -p の実行ラッパー
-# CLAUDE_CMD は認証チェック時に絶対パスへ解決済み
-# < /dev/null: MCP の stdio 通信とターミナル stdin の競合を防止
-# CLAUDE_TIMEOUT: 0 以外を設定すると timeout コマンドで制限（秒）
-run_claude() {
-  if [ "${CLAUDE_TIMEOUT:-0}" -gt 0 ] 2>/dev/null; then
-    timeout "$CLAUDE_TIMEOUT" "$CLAUDE_CMD" "$@" < /dev/null
-  else
-    "$CLAUDE_CMD" "$@" < /dev/null
-  fi
-}
-
-# stdin の claude -p JSON 出力から "api_error_status<TAB>is_error" を出力 (auth/401 判定)。
-# 解析不能時は "<TAB>parse-fail" (呼び出し側は OK 扱いで本編へ進む)。
-claude_error_fields() {
-  python3 "$DR_PY" error-fields
-}
+# run_claude() / classify_exit() は lib/claude.sh、auth/lock/graph/log/notify も各 lib に集約。
 
 # claude -p の JSON 出力からサマリー行を生成してログに記録
 # 例: SUMMARY Pass1: cost=$0.25 turns=8 duration=162s tokens_in=5000 tokens_out=1200 searches=3
@@ -171,16 +155,15 @@ fi
 # Pass 1 の結果を評価し、フォールバック判定
 USE_FALLBACK=false
 
-if [ $PASS1_EXIT -ne 0 ]; then
-  # 401/auth 失敗なら Sonnet フォールバックも同じ認証で失敗する (今朝の double-401)。
-  # フォールバックを抑止し、再認証を促して STOP する。
-  IFS=$'\t' read -r P1_CODE _P1_ERR < <(printf '%s' "$PASS1_JSON" | claude_error_fields) || true
-  if [ "$P1_CODE" = "401" ]; then
-    log "ERROR: Pass 1 returned 401 — skipping Sonnet fallback (same auth failure would recur)"
-    notify "Claude認証エラー(401)。claude を起動して再認証してください。" "Daily Research Auth Error"
-    exit 1
-  fi
-  log "WARN: Pass 1 failed (exit code $PASS1_EXIT), falling back to Sonnet"
+# classify_exit で 401/timeout/その他失敗を区別。
+# 401 は Sonnet フォールバックも同じ認証で失敗する (今朝の double-401) ため STOP。
+PASS1_CLASS=$(classify_exit "$PASS1_EXIT" "$PASS1_JSON")
+if [ "$PASS1_CLASS" = "E_AUTH" ]; then
+  log "ERROR: Pass 1 returned 401 — skipping Sonnet fallback (same auth failure would recur)"
+  notify "Claude認証エラー(401)。claude を起動して再認証してください。" "Daily Research Auth Error"
+  exit 1
+elif [ "$PASS1_CLASS" != "OK" ]; then
+  log "WARN: Pass 1 failed ($PASS1_CLASS, exit code $PASS1_EXIT), falling back to Sonnet"
   USE_FALLBACK=true
 fi
 
@@ -251,7 +234,11 @@ if [ -n "$PASS1_JSON" ] && [ -n "$PASS2_JSON" ]; then
     | while IFS= read -r line; do log "$line"; done || true
 fi
 
-if [ $PASS2_EXIT -eq 0 ]; then
+# classify_exit で Pass 2 の成否を判定。
+# exit 0 でも is_error:true (max-turns 空振り等, ctl-003) なら失敗扱いにする = 成功化け防止。
+PASS2_CLASS=$(classify_exit "$PASS2_EXIT" "$PASS2_JSON")
+if [ "$PASS2_CLASS" = "OK" ]; then
+  FINAL_EXIT=0
   log "=== Completed successfully ==="
   notify "今朝のリサーチレポートが完成しました" "Daily Research"
 
@@ -265,14 +252,20 @@ if [ $PASS2_EXIT -eq 0 ]; then
   #   log "WARN: eval-run.sh not found or not executable, skipping evaluation"
   # fi
 else
-  log "=== Failed with exit code $PASS2_EXIT ==="
+  # timeout(124) 等は元の exit コードを保持、exit 0 だが is_error の場合は 1
+  if [ "$PASS2_EXIT" != "0" ]; then
+    FINAL_EXIT=$PASS2_EXIT
+  else
+    FINAL_EXIT=1
+  fi
+  log "=== Failed ($PASS2_CLASS, exit code $PASS2_EXIT) ==="
   notify "リサーチ実行に失敗しました。ログを確認してください。" "Daily Research Error"
 fi
 
 # === Pass 3: Obsidian wiki 自動 ingest (vault 側スクリプト。non-fatal) ===
 # Pass 2 の exit に依らず実行する。Pass 2 が timeout (124) でも当日レポートは生成済みのことが多く、
 # ingest スクリプト側が「当日レポートが無ければ skip」を自己判定するため、ここでは無条件に呼ぶ。
-# 失敗しても生成ジョブの成否 (exit $PASS2_EXIT) には影響させない。
+# 失敗しても生成ジョブの成否 (FINAL_EXIT) には影響させない。
 # vault パスは config.toml の [general].vault_path から取得 (個人パスのハードコード禁止)。
 VAULT_PATH=$(python3 "$DR_PY" vault-path "$PROJECT_DIR/config.toml" 2>> "$LOG_FILE") || VAULT_PATH=""
 if [ -z "$VAULT_PATH" ]; then
@@ -287,4 +280,4 @@ else
   fi
 fi
 
-exit $PASS2_EXIT
+exit "$FINAL_EXIT"

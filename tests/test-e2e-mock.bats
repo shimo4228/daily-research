@@ -115,7 +115,7 @@ fi
 # --- Opus (Pass 1: theme selection) ---
 if [[ "$MODEL" == "opus" ]]; then
   case "$SCENARIO" in
-    normal)
+    normal|pass2-iserror)
       # --output-format stream-json --verbose の NDJSON 形式。parse-stream.py が処理する
       cat << 'JSON'
 {"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"tool_use","name":"WebSearch","id":"toolu_mock01","input":{"query":"mock search"}}]}}
@@ -154,6 +154,12 @@ if [[ "$MODEL" == "sonnet" ]]; then
     fi
     PREV="$arg"
   done
+
+  # pass2-iserror: exit 0 だが is_error:true (max-turns 空振り等)。成功化けを防げるか検証
+  if [[ "$SCENARIO" == "pass2-iserror" ]]; then
+    echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"error","is_error":true,"total_cost_usd":0.05,"num_turns":55,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}}]'
+    exit 0
+  fi
 
   # --output-format json は JSON array を返す場合がある
   echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.05,"num_turns":3,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}}]'
@@ -311,6 +317,23 @@ get_log() {
   # Sonnet フォールバックは起動しない
   ! echo "$log_content" | grep -q "Fallback: Sonnet handles"
   [ ! -f "$MOCK_HOME/.sonnet_prompt" ]
+}
+
+# === Test: Pass 2 success masking (exit 0 but is_error) ===
+
+@test "E2E: Pass 2 exit 0 with is_error is reported as Failed (no success masking)" {
+  echo "pass2-iserror" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -ne 0 ]   # FINAL_EXIT は非ゼロ (exit 0 だが is_error)
+
+  local log_content
+  log_content=$(get_log)
+
+  # 「完成しました」と誤報告しない
+  ! echo "$log_content" | grep -q "Completed successfully"
+  # E_FATAL として失敗報告される
+  echo "$log_content" | grep -q "Failed (E_FATAL"
 }
 
 # === Test: Absolute path resolution ===

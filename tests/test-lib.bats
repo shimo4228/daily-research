@@ -171,6 +171,65 @@ EOF
   [ "$status" -eq 1 ]
 }
 
+@test "real_auth_probe returns 1 on is_error WITHOUT api_error_status (leading empty field)" {
+  # api_error_status が無い is_error:true。error-fields は "\ttrue" を返すため、
+  # 先頭の空フィールドを潰さない parse でないと取りこぼす (回帰防止)
+  cat > "$TMP/claude" <<'EOF'
+#!/bin/bash
+[[ "$1" == "--version" ]] && { echo mock; exit 0; }
+echo '{"type":"result","is_error":true}'
+exit 1
+EOF
+  chmod +x "$TMP/claude"
+  CLAUDE_CMD="$TMP/claude"
+  DR_PY="$(_dr_py)"
+  source "$LIB_DIR/auth.sh"
+  run real_auth_probe
+  [ "$status" -eq 1 ]
+}
+
+# === claude.sh (classify_exit) ===
+
+_fixtures() {
+  echo "$(cd "$(dirname "$BATS_TEST_FILENAME")" && pwd)/fixtures"
+}
+
+@test "classify_exit: api_error_status 401 -> E_AUTH" {
+  DR_PY="$(_dr_py)"; source "$LIB_DIR/claude.sh"
+  run classify_exit 1 '{"is_error":true,"api_error_status":401}'
+  [ "$output" = "E_AUTH" ]
+}
+
+@test "classify_exit: timeout (124) -> E_TRANSIENT" {
+  DR_PY="$(_dr_py)"; source "$LIB_DIR/claude.sh"
+  run classify_exit 124 '{"is_error":false}'
+  [ "$output" = "E_TRANSIENT" ]
+}
+
+@test "classify_exit: exit 0 but is_error -> E_FATAL (success masking 防止)" {
+  DR_PY="$(_dr_py)"; source "$LIB_DIR/claude.sh"
+  run classify_exit 0 '{"is_error":true}'
+  [ "$output" = "E_FATAL" ]
+}
+
+@test "classify_exit: non-zero exit -> E_FATAL" {
+  DR_PY="$(_dr_py)"; source "$LIB_DIR/claude.sh"
+  run classify_exit 1 '{"is_error":false}'
+  [ "$output" = "E_FATAL" ]
+}
+
+@test "classify_exit: exit 0 no error -> OK (real success fixture)" {
+  DR_PY="$(_dr_py)"; source "$LIB_DIR/claude.sh"
+  run classify_exit 0 "$(cat "$(_fixtures)/result-success.json")"
+  [ "$output" = "OK" ]
+}
+
+@test "classify_exit: real 401 fixture -> E_AUTH" {
+  DR_PY="$(_dr_py)"; source "$LIB_DIR/claude.sh"
+  run classify_exit 1 "$(cat "$(_fixtures)/result-401.json")"
+  [ "$output" = "E_AUTH" ]
+}
+
 # === env.sh ===
 
 @test "env.sh unsets ANTHROPIC_API_KEY" {

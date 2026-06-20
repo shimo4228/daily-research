@@ -14,7 +14,7 @@
 # real_auth_probe: OAuth 有効なら 0、401/is_error を検出したら 1 を返す。
 # probe 自体が transient/parse 失敗した場合は 0 (本編に進ませ、実呼び出しで顕在化させる)。
 real_auth_probe() {
-  local probe_json code err
+  local probe_json fields code err
   if command -v timeout >/dev/null 2>&1; then
     probe_json=$(timeout 60 "$CLAUDE_CMD" -p ok --max-turns 1 --model haiku \
       --output-format json < /dev/null 2>/dev/null) || true
@@ -22,7 +22,11 @@ real_auth_probe() {
     probe_json=$("$CLAUDE_CMD" -p ok --max-turns 1 --model haiku \
       --output-format json < /dev/null 2>/dev/null) || true
   fi
-  IFS=$'\t' read -r code err < <(printf '%s' "$probe_json" | python3 "$DR_PY" error-fields) || true
+  # error-fields の "api_error_status<TAB>is_error" を取り出す。api_error_status が空でも
+  # 先頭フィールドを保持するためパラメータ展開を使う (TAB は IFS 空白で read が潰すため)。
+  fields=$(printf '%s' "$probe_json" | python3 "$DR_PY" error-fields)
+  code="${fields%%$'\t'*}"
+  err="${fields#*$'\t'}"
   if [ "$code" = "401" ] || [ "$err" = "true" ]; then
     return 1
   fi
