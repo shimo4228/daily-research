@@ -27,6 +27,33 @@ teardown() {
   bash -n "$PROJECT_DIR/scripts/check-auth.sh"
 }
 
+@test "coverage-report.sh has valid syntax" {
+  bash -n "$PROJECT_DIR/scripts/coverage-report.sh"
+}
+
+# === Theme dedup (重複テーマ防止) ===
+
+@test "coverage-report shows reinforcing source history" {
+  run "$PROJECT_DIR/scripts/coverage-report.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"既出:"* ]]
+}
+
+@test "coverage-report lists repo ExternalReference as forbidden sources" {
+  run "$PROJECT_DIR/scripts/coverage-report.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo 取り込み済み外部文献"* ]]
+}
+
+@test "daily-research.sh injects past themes into Pass 1 prompt" {
+  grep -q "過去テーマ履歴" "$SCRIPT"
+  grep -q 'PAST_THEMES' "$SCRIPT"
+}
+
+@test "theme-selection-prompt forbids reusing the same primary source" {
+  grep -q "ソース単位の重複禁止" "$PROJECT_DIR/prompts/theme-selection-prompt.md"
+}
+
 # === Config files exist ===
 
 @test "config.toml exists" {

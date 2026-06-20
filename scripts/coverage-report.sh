@@ -23,7 +23,7 @@ def norm_cid(cid):
     # fragment (concept/foo) で記録されるため、# 以降で揃える。# がなければ全体。
     return cid.split('#', 1)[1] if '#' in cid else cid
 
-# daily-research graph の reinforces 履歴: 正規化 concept キー -> [datePublished, ...]
+# daily-research graph の reinforces 履歴: 正規化 concept キー -> [(datePublished, article name), ...]
 reinforced = {}
 try:
     with open('graph.jsonld') as f:
@@ -31,8 +31,9 @@ try:
     for n in dg.get('@graph', []):
         if n.get('@type') == 'Article':
             d = n.get('datePublished', '')
+            name = n.get('name', n.get('@id', ''))
             for cid in n.get('reinforces', []):
-                reinforced.setdefault(norm_cid(cid), []).append(d)
+                reinforced.setdefault(norm_cid(cid), []).append((d, name))
 except FileNotFoundError:
     pass
 
@@ -47,7 +48,12 @@ today = date.today().isoformat()
 print(f"=== Concept coverage report (as of {today}) ===")
 print("各 repo の concept を補強回数で分類。Pass 1 は『未補強』『薄い』concept を")
 print("優先的に補強する外部研究テーマを選ぶこと (厚い concept の再訪は新展開がある時のみ)。")
+print("各 concept の『既出:』はその concept を補強した過去レポート。同じ外部研究 (論文・")
+print("プロジェクト) を主ソースとする再補強は禁止 (別 concept 宛てでも不可)。")
 print()
+
+def trunc(s, n=72):
+    return s if len(s) <= n else s[:n] + '…'
 
 for track, v in cfg.get('tracks', {}).items():
     graph_path = v.get('target_graph', f'.repo-graphs/{track}.jsonld')
@@ -65,26 +71,39 @@ for track, v in cfg.get('tracks', {}).items():
     for c in concepts:
         cid = c.get('@id')
         name = c.get('name', cid)
-        hits = reinforced.get(norm_cid(cid), [])
+        hits = sorted(reinforced.get(norm_cid(cid), []))
         cnt = len(hits)
         if cnt == 0:
-            unc.append(f"{name}  [{cid}]")
+            unc.append([f"{name}  [{cid}]"])
         elif cnt <= 2:
-            thin.append(f"{name} (補強 {cnt} 回, 最終 {max(hits)})  [{cid}]")
+            lines = [f"{name} (補強 {cnt} 回, 最終 {hits[-1][0]})  [{cid}]"]
+            lines += [f"    既出: {d} {trunc(t)}" for d, t in hits]
+            thin.append(lines)
         else:
-            thick.append(f"{name} (補強 {cnt} 回)")
+            lines = [f"{name} (補強 {cnt} 回)"]
+            lines += [f"    既出: {d} {trunc(t)}" for d, t in hits[-3:]]
+            thick.append(lines)
 
-    if unc:
-        print(f"  未補強 (0 件) — 最優先:")
-        for it in unc:
-            print(f"    - {it}")
-    if thin:
-        print(f"  薄い (1-2 件):")
-        for it in thin:
-            print(f"    - {it}")
-    if thick:
-        print(f"  厚い (3+ 件) — 再訪は新展開時のみ:")
-        for it in thick:
-            print(f"    - {it}")
+    for label, group in [("未補強 (0 件) — 最優先:", unc),
+                         ("薄い (1-2 件):", thin),
+                         ("厚い (3+ 件) — 再訪は新展開時のみ:", thick)]:
+        if group:
+            print(f"  {label}")
+            for lines in group:
+                print(f"    - {lines[0]}")
+                for ln in lines[1:]:
+                    print(f"  {ln}")
+
+    # repo が既に取り込んだ外部文献 (ExternalReference)。
+    # これらを主ソースとするテーマは選定禁止 (repo にとって新規性がない)。
+    refs = [n for n in rg.get('@graph', []) if has_type(n, 'ExternalReference')]
+    if refs:
+        print(f"  repo 取り込み済み外部文献 ({len(refs)} 件) — これらを主ソースとするテーマは選定禁止:")
+        for r in refs:
+            rname = r.get('name', '')
+            rid = r.get('@id', '')
+            url = rid if rid.startswith('http') and 'vocab#' not in rid else (r.get('url') or '')
+            suffix = f"  [{url}]" if url else ""
+            print(f"    - {trunc(rname, 80)}{suffix}")
     print()
 PYEOF

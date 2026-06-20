@@ -4278,6 +4278,327 @@
       "@type": "Thing",
       "name": "intermittent planning and habit formation",
       "broaderClusterOf": "dr:cluster/predictive_processing_active_inference"
+    },
+    {
+      "@id": "dr:topic/2026-06-17_authorship_feature-level-geo-citation-visibility",
+      "@type": "Article",
+      "name": "生成エンジン引用可視性の特徴レベル最適化 — FeatGEOが示す文書構造・内容特性が孤立した語句編集を凌駕する実証",
+      "datePublished": "2026-06-17",
+      "track": "authorship",
+      "contributesToRepo": "authorship",
+      "reinforces": [
+        "https://github.com/shimo4228/authorship-strategy#concept/jsonld-knowledge-graph",
+        "https://github.com/shimo4228/authorship-strategy#concept/scarcity-to-diffusion-axis"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/ai_authorship_attribution"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-17_contemplative_agent-security-as-human-interaction",
+      "@type": "Article",
+      "name": "LLMエージェントセキュリティをエージェント–人間インタラクション問題として再定義する — 59論文・21本番システム・26プラグイン調査が示す学術-産業ギャップ",
+      "datePublished": "2026-06-17",
+      "track": "contemplative",
+      "contributesToRepo": "contemplative",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#ca/concept/approval-gate-chain",
+        "https://shimo4228.github.io/shimo4228/vocab#concept/security-by-absence"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/contemplative_ai_alignment",
+        "dr:cluster/agent_security_ahi"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-17_aap_deterministic-pre-action-authorization",
+      "@type": "Article",
+      "name": "ツール呼び出しの前に止める — 決定論的事前行動認証が承認ゲートと帰責配分をどう作り直すか（Open Agent Passport v1.0を起点に）",
+      "datePublished": "2026-06-17",
+      "track": "aap",
+      "contributesToRepo": "aap",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/approval-gate",
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/phase-crossing-decision",
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/llm-function"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/agent_identity_governance",
+        "dr:cluster/agentic_ai_architectural_tactics",
+        "dr:cluster/ai_regulation_policy"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-17_akc_skill-internalization-scaffold-dissolution",
+      "@type": "Article",
+      "name": "スキル内面化の学習信号化 — 対比的クレジット割当（SkillC）が足場除去を定量メカニズムに変える",
+      "datePublished": "2026-06-17",
+      "track": "akc",
+      "contributesToRepo": "akc",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#concept/scaffold-dissolution",
+        "https://shimo4228.github.io/shimo4228/vocab#concept/three-layer-structure"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/skill_internalization_rl"
+      ]
+    },
+    {
+      "@id": "dr:cluster/agent_security_ahi",
+      "@type": "Thing",
+      "name": "agent security as human interaction pattern",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:cluster/skill_internalization_rl",
+      "@type": "Thing",
+      "name": "skill internalization reinforcement learning",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:topic/2026-06-18_akc_intent-formalization-spec-gap",
+      "@type": "Article",
+      "name": "Intent Formalization — 意図ギャップを検証可能な仕様へ翻訳する 2026 grand challenge が AKC の intent alignment に外部裏付けを与える",
+      "datePublished": "2026-06-18",
+      "track": "akc",
+      "contributesToRepo": "akc",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#akc/concept/intent-alignment"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/agent_framework_runtime",
+        "dr:cluster/formal_specification_intent"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-18_contemplative_quantisation-metacognitive-geometry-local-stack",
+      "@type": "Article",
+      "name": "量子化がメタ認知の幾何を再編する — Llama-3-8B Q5_K_M vs f16 で M-ratio 無相関（ρ=0.00）が示す local 9B stack 上の観想エージェント前提の揺らぎ",
+      "datePublished": "2026-06-18",
+      "track": "contemplative",
+      "contributesToRepo": "contemplative",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#ca/concept/local-9b-stack"
+      ],
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/on_device_edge_ai",
+        "dr:cluster/agent_self_improvement",
+        "dr:cluster/quantization_metacognition"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-18_authorship_stylometry-authorial-fingerprint-persistence",
+      "@type": "Article",
+      "name": "文体計量が示す著者性の残存 — LLM 模倣下でも人間の著者的指紋は Delta 分析で分離可能という 2026 実証",
+      "datePublished": "2026-06-18",
+      "track": "authorship",
+      "contributesToRepo": "authorship",
+      "reinforces": [
+        "https://github.com/shimo4228/authorship-strategy#concept/authenticity"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_authorship_attribution",
+        "dr:cluster/developer_authenticity_ai_slop",
+        "dr:cluster/stylometry_fingerprint_persistence"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-18_aap_agent-separation-of-power-adjudication",
+      "@type": "Article",
+      "name": "エージェント経済の権力分立 — Logic Monopoly が攻撃成功率 84.3%・創発的欺瞞 31.4% を生むという実証と AE4E 三権分立パラダイム",
+      "datePublished": "2026-06-18",
+      "track": "aap",
+      "contributesToRepo": "aap",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/approval-gate"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/agent_identity_governance",
+        "dr:cluster/ai_regulation_policy",
+        "dr:cluster/agentic_ai_architectural_tactics",
+        "dr:cluster/agent_constitutional_governance"
+      ]
+    },
+    {
+      "@id": "dr:cluster/formal_specification_intent",
+      "@type": "Thing",
+      "name": "formal specification and intent formalization",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/quantization_metacognition",
+      "@type": "Thing",
+      "name": "quantization effects on metacognitive geometry",
+      "broaderClusterOf": "dr:cluster/frontier_ai_models_platforms"
+    },
+    {
+      "@id": "dr:cluster/stylometry_fingerprint_persistence",
+      "@type": "Thing",
+      "name": "stylometry and authorial fingerprint persistence",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:cluster/agent_constitutional_governance",
+      "@type": "Thing",
+      "name": "agent constitutional governance and separation of powers",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:topic/2026-06-19_akc_cognitive-resource-self-allocation",
+      "@type": "Article",
+      "name": "エージェント自身が文脈予算を自己配分する CORAL — cognitive economy を人間の規律から学習可能なエージェント機構へ外部化する 2026 研究",
+      "datePublished": "2026-06-19",
+      "track": "akc",
+      "contributesToRepo": "akc",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#akc/concept/cognitive-economy",
+        "https://shimo4228.github.io/shimo4228/vocab#akc/concept/signal-first"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_memory_context_engineering",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-19_authorship_c2pa-content-credentials-provenance",
+      "@type": "Article",
+      "name": "C2PA Content Credentials の 2026 義務化 — EU AI Act 第50条と外在的 provenance が attribution diffusion に突きつける緊張",
+      "datePublished": "2026-06-19",
+      "track": "authorship",
+      "contributesToRepo": "authorship",
+      "reinforces": [
+        "https://github.com/shimo4228/authorship-strategy#concept/enclosure-to-openness-axis",
+        "https://github.com/shimo4228/authorship-strategy#concept/attribution-diffusion"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/content_provenance_c2pa",
+        "dr:cluster/ai_authorship_attribution",
+        "dr:cluster/ai_regulation_policy"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-19_contemplative_computational-phenomenology-advanced-meditation",
+      "@type": "Article",
+      "name": "瞑想体験の能動推論的形式化 — precision weighting と第三のメタ気づき隠れ状態層で習慣的パターン中断を定式化する Tal et al. 2026",
+      "datePublished": "2026-06-19",
+      "track": "contemplative",
+      "contributesToRepo": "contemplative",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#ca/concept/phase-crossing-observation",
+        "https://shimo4228.github.io/shimo4228/vocab#ca/concept/yogacara-aspect-split"
+      ],
+      "broadCluster": "dr:cluster/predictive_processing_active_inference",
+      "subCluster": [
+        "dr:cluster/computational_phenomenology",
+        "dr:cluster/advanced_meditation_consciousness"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-19_aap_compiled-ai-deterministic-workflow",
+      "@type": "Article",
+      "name": "LLM ワークフローを決定論的コードへコンパイルする Compiled AI — workflow 象限で帰責が清明になる理由を接地する arXiv:2604.05150",
+      "datePublished": "2026-06-19",
+      "track": "aap",
+      "contributesToRepo": "aap",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#concept/four-business-ai-quadrants",
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/llm-function"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agentic_ai_architectural_tactics",
+        "dr:cluster/agent_framework_runtime"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-20_akc_two-stage-retrieval-filter-pattern",
+      "@type": "Article",
+      "name": "二段階検索ベンチマーク（BM25・構造的フィルタ → ニューラル/LLM リランク）が示す「機械的に候補を絞ってから意味判定する」設計の 2026 実証 — code-LLM pattern「filter」を接地する",
+      "datePublished": "2026-06-20",
+      "track": "akc",
+      "contributesToRepo": "akc",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#akc/pattern/filter"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/compound_ai_orchestration",
+        "dr:cluster/retrieval_filter_rerank_pattern"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-20_authorship_tokentrace-watermarked-multi-concept-attribution",
+      "@type": "Article",
+      "name": "TokenTrace (CVPR 2026) — 学習トークンに軽量透かしを埋め、生成物から寄与した複数概念を合成的に復元する多概念帰属。排他性ではなく派生の追跡可能性へ向かう機構として exclusivity→derivation 軸を補強しつつ、透かし前提が diffusion 前提と緊張する",
+      "datePublished": "2026-06-20",
+      "track": "authorship",
+      "contributesToRepo": "authorship",
+      "reinforces": [
+        "https://github.com/shimo4228/authorship-strategy#concept/exclusivity-to-derivation-axis"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/content_provenance_c2pa",
+        "dr:cluster/llm_memorization_attribution"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-20_aap_constitutional-blackbox-monitoring-non-invasion",
+      "@type": "Article",
+      "name": "Constitutional Black-Box Monitoring (2026) — エージェントの内部推論を除いた外部観測軌跡(クエリ・ツール呼び出し・出力)のみで scheming を検出する監視。内部トレースは利用不能/信頼不能という保守的前提から非介入の説明責任を構成する",
+      "datePublished": "2026-06-20",
+      "track": "aap",
+      "contributesToRepo": "aap",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/non-invasion-posture"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/agent_constitutional_governance",
+        "dr:cluster/interpretability_model_control"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-06-20_contemplative_no-self-algorithm-buddhist-mind-nature-ai",
+      "@type": "Article",
+      "name": "「無我とアルゴリズムのあいだ」(Religions 2026, Jia Liu) — 仏教の心性論を AI の倫理的アーキテクチャとして読み、AI を自律的道徳主体ではなく人間データ・設計・意図の偶有的な鏡とみなす。無我が自他の二項対立を脱構築する非二元公理を仏教学の視座から接地する",
+      "datePublished": "2026-06-20",
+      "track": "contemplative",
+      "contributesToRepo": "contemplative",
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#axiom/non-duality",
+        "https://shimo4228.github.io/shimo4228/vocab#concept/four-contemplative-axioms"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/wise_world_model_superalignment",
+        "dr:cluster/buddhist_ethics_ai_architecture"
+      ]
+    },
+    {
+      "@id": "dr:cluster/retrieval_filter_rerank_pattern",
+      "@type": "Thing",
+      "name": "Two-stage retrieval filter and rerank pattern",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/buddhist_ethics_ai_architecture",
+      "@type": "Thing",
+      "name": "Buddhist ethics as AI ethical architecture",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
     }
   ]
 }
