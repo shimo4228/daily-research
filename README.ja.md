@@ -4,7 +4,7 @@ Language: [English](README.md) | 日本語
 
 自分の研究リポジトリのためのリサーチフィードバックエンジン。[Claude Code](https://docs.anthropic.com/en/docs/claude-code) の非対話モードと macOS `launchd` で動きます。
 
-**Python 不要。シェルスクリプト + プロンプトファイルだけ。**
+**Shell オーケストレーション + stdlib のみの Python 解析層。ランタイムに pip 依存なし。**
 
 毎朝 5:00 に Claude が、あなたが管理する各研究リポジトリの concept graph を読み込み、外部研究でまだ補強されていない concept を特定し、そのギャップを埋める最新研究をリサーチして、レポートを [Obsidian](https://obsidian.md) Vault に直接書き出します。各レポートの末尾には「この repo への寄与」節が付くので、発見した内容を人間が手で元リポジトリに取り込めます。
 
@@ -40,14 +40,14 @@ launchd (AM 5:00)
 
 **concept coverage が検索を駆動します。** トレンドを追うのではなく、「repo の graph にある全 concept `@id` から `graph.jsonld` で補強済みの concept を引いた差分」を計算し、Pass 1 にそのギャップを埋める外部研究を優先させます。トレンドは移ろいますが、未補強 concept は具体的で反復可能なターゲットです。
 
-重要なポイント: Claude Code の `-p` フラグにより、完全自律型のリサーチエージェントとして動作します。API の配管も Python もオーケストレーションフレームワークも不要。知性はプロンプトに宿ります。
+重要なポイント: Claude Code の `-p` フラグにより、完全自律型のリサーチエージェントとして動作します。API の配管もオーケストレーションフレームワークも不要 — shell の orchestrator が各 Pass を駆動し、小さな stdlib のみの Python モジュール (`scripts/lib/dr_pipeline.py`) が JSON/TOML 解析を担います。知性はプロンプトに宿ります。
 
 ## 特徴
 
 - **2パスモデルルーティング** -- テーマ選定に Opus、リサーチと執筆に Sonnet
 - **repo マッピング型リサーチトラック** -- 各トラックを 1 つの研究リポジトリにマッピング; 関心領域は固定キーワードドメインではなく、その repo の `graph.jsonld` から導出
 - **coverage 駆動のテーマ選定** -- `coverage-report.sh` が repo ごとの未補強・薄い concept を列挙し Pass 1 に注入
-- **concept cluster graph** -- `graph.jsonld`、schema.org JSON-LD の永続メモリ（250 記事、7 broad + 57 sub クラスタ）; Pass 2 が実行ごとに増分更新
+- **concept cluster graph** -- `graph.jsonld`、schema.org JSON-LD の永続メモリ（310 記事、7 broad + 82 sub クラスタ）; Pass 2 が実行ごとに増分更新
 - **トピック履歴** -- `past_topics.json` は選定されたテーマの履歴を蓄積（Pass 2 が更新; Pass 1 での重複排除役は `coverage-report.sh` に移行）
 - **多段階ディープリサーチ** -- 単なる要約ではなく、リサーチクエスチョンを生成し、10〜20 回検索し、ソースを相互検証
 - **repo フィードバックループ** -- 各レポート末尾の「この repo への寄与」節で、補強した concept 名と repo の拡張方法を提案
@@ -61,6 +61,7 @@ launchd (AM 5:00)
 |------|------|
 | [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) | `brew install claude` または npm 経由 |
 | [Claude Max プラン](https://claude.ai) | 非対話モードをコスト0で利用するため |
+| `python3` >= 3.11 | JSON/TOML 解析層に stdlib のみ（`json` / `tomllib` / `re`）を使用。macOS system 3.9 は `tomllib` 非対応のため Homebrew の `python3` を使う |
 | macOS | スケジューリングに `launchd` を使用（Linux の場合は `cron` や `systemd` に適宜変更） |
 | Obsidian (任意) | Markdown 対応ツールなら何でも可 |
 | 研究リポジトリ | `graph.jsonld` concept graph を持つ repo を 1 つ以上（[graph-schema.md](docs/graph-schema.md) 参照） |
@@ -111,10 +112,19 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 ```
 daily-research/
 ├── scripts/
-│   ├── daily-research.sh       # メインエントリポイント (repo graph 同期 → Opus テーマ → Sonnet リサーチ)
+│   ├── daily-research.sh       # オーケストレータ (lib/ を source、preflight → Pass 1/2/3)
+│   ├── lib/                    # sourced shell ライブラリ + Python 解析モジュール
+│   │   ├── env.sh              # 環境サニタイズ + PATH
+│   │   ├── log.sh              # log() / log_init() (作成時 chmod、ローテーション)
+│   │   ├── notify.sh           # notify() (osascript ガード)
+│   │   ├── lock.sh             # acquire_lock()/release_lock() (mkdir アトミック)
+│   │   ├── graph.sh            # check_graph_health()/sync_repo_graphs()
+│   │   ├── auth.sh             # real_auth_probe() (実 OAuth probe、3 entrypoint 共有)
+│   │   ├── claude.sh           # run_claude()/classify_exit() (E_AUTH/E_TRANSIENT/E_FATAL)
+│   │   └── dr_pipeline.py      # JSON/TOML 解析の単一 stdlib モジュール (subcommand)
 │   ├── bootstrap-graph.sh      # graph.jsonld 初回 bootstrap (Opus clustering、ワンショット)
 │   ├── coverage-report.sh      # 未補強 concept レポート、Pass 1 へ注入
-│   └── check-auth.sh           # OAuth トークンヘルスチェック
+│   └── check-auth.sh           # 実 OAuth probe ヘルスチェック (lib/auth.sh を共有)
 ├── prompts/
 │   ├── theme-selection-prompt.md  # Pass 1: repo graph 駆動のテーマ選定 (Opus)
 │   ├── task-prompt.md             # Pass 2: リサーチ・執筆指示 (Sonnet)
@@ -127,7 +137,7 @@ daily-research/
 ├── past_topics.example.json    # トピック履歴のスキーマ参照用
 ├── evals/                      # LLM-as-Judge 評価 (運用停止中; コード保持)
 │   └── scores.example.jsonl    # スコアログのスキーマ参照用
-├── tests/                      # bats テスト (daily-research / e2e-mock / eval / log-summary)
+├── tests/                      # bats (daily-research / e2e-mock / lib / eval) + pytest (dr_pipeline_test.py) + fixtures/
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md   # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md   # 開発ガイド
@@ -221,7 +231,8 @@ plist の `StartCalendarInterval` を編集:
 | `--append-system-prompt-file`（`--system-prompt-file` ではなく） | Claude Code のデフォルト機能を維持しつつリサーチ指示を追加 |
 | `--allowedTools`（`--dangerously-skip-permissions` ではなく） | 最小権限: Pass 1 は読み取り専用、Pass 2 で書き込みを追加 |
 | タイムアウト制御に `--max-turns` | プロセス外タイムアウト (gtimeout) はシグナルで claude を kill し、データ損失を引き起こす |
-| シェルスクリプトのみ | Claude Code CLI 以外の依存ゼロ; 理解と変更が容易 |
+| Shell オーケストレーション + stdlib Python 解析 | ランタイムに pip 依存なし; JSON/TOML 解析を散在 inline `python3 -c` から単一のテスト可能な `dr_pipeline.py` に集約 (test/source のコピペ drift を解消) |
+| `claude --version` でなく実 auth probe | `--version` は OAuth 期限切れでも成功する; 安価な Haiku probe が `is_error`/`api_error_status` を検査し、期限切れを loud に失敗させて double-401 の連鎖を防ぐ |
 | TOML 設定 | 人間が読みやすく、トラック・基準のネスト構造をサポート |
 | `< /dev/null` stdin リダイレクト | MCP の stdio 通信がターミナルの stdin と競合するのを防止（MCP ハングの根本原因） |
 
@@ -236,10 +247,10 @@ plist の `StartCalendarInterval` を編集:
   }
   ```
   インストール済みプラグインを全て列挙し `false` に設定します。インストール済みプラグインは `claude plugin list` で確認できます。現時点では一括無効化オプションはありません（[tracking issue](https://github.com/anthropics/claude-code/issues/20873)）。
-- **OAuth トークンは約4日で期限切れ** -- 定期的に `claude` を対話的に実行してリフレッシュしてください
+- **OAuth トークンは約4日で期限切れ** -- 定期的に `claude` を対話的に実行してリフレッシュしてください。Pass 1 の前に実 Haiku auth probe を走らせるため、期限切れは再認証通知とともに loud に失敗し（無駄な Sonnet フォールバックも skip）、サイレントな double-fail にはなりません
 - **`ANTHROPIC_API_KEY` は未設定であること** -- 設定されていると Max プランではなくトークン単位の課金になります。スクリプトは `unset ANTHROPIC_API_KEY` で対処しています
 - **launchd + シェルプロファイル** -- `launchd` は `.zshrc` を読み込みません。全ての PATH エントリはスクリプトと plist に明示的に記述する必要があります
-- **`--max-turns`** -- Pass 1 は15ターン（テーマ選定）、Pass 2 は40ターン（リサーチ）。これらはガイドラインであり厳密な上限ではありません
+- **`--max-turns`** -- Pass 1 は15ターン（テーマ選定）、Pass 2 は55ターン（リサーチ）。これらはガイドラインであり厳密な上限ではありません
 - **Claude Code 内から実行しないこと** -- `claude -p` は別の Claude Code セッション内からネストして実行できません; 別ターミナルで実行してください
 
 ## ドキュメント

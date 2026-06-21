@@ -4,7 +4,7 @@ Language: English | [日本語](README.ja.md)
 
 A research feedback engine for your own research repositories, powered by [Claude Code](https://docs.anthropic.com/en/docs/claude-code) non-interactive mode and macOS `launchd`.
 
-**Zero Python. Just shell scripts + prompt files.**
+**Shell orchestration + a stdlib-only Python parsing layer. No pip dependencies at runtime.**
 
 Every morning at 5:00 AM, Claude reads the concept graph of each research repository you maintain, finds the concepts that external research has not reinforced yet, researches the latest work that fills those gaps, and writes reports into your [Obsidian](https://obsidian.md) vault. The reports end with a "contribution to this repo" section so you can fold the findings back into the source repository by hand.
 
@@ -40,14 +40,14 @@ launchd (AM 5:00)
 
 **Concept coverage drives the search.** Instead of chasing trends, the pipeline computes "every concept `@id` in a repo's graph minus the concepts already reinforced in `graph.jsonld`" and asks Pass 1 to prioritize external research that closes those gaps. Trends come and go; an uncovered concept is a concrete, repeatable target.
 
-The key insight: Claude Code's `-p` flag turns it into a fully autonomous research agent. No API plumbing, no Python, no orchestration framework. The intelligence lives in the prompt.
+The key insight: Claude Code's `-p` flag turns it into a fully autonomous research agent. No API plumbing, no orchestration framework — a shell orchestrator drives the passes, and a small stdlib-only Python module (`scripts/lib/dr_pipeline.py`) handles JSON/TOML parsing. The intelligence lives in the prompt.
 
 ## Features
 
 - **2-pass model routing** -- Opus for theme selection, Sonnet for research and writing
 - **Repo-mapped research tracks** -- each track maps to one research repository; the area of interest is derived from that repo's `graph.jsonld`, not from fixed keyword domains
 - **Coverage-driven theme selection** -- `coverage-report.sh` lists the uncovered / thinly-supported concepts per repo and injects them into Pass 1
-- **Concept cluster graph** -- `graph.jsonld`, a schema.org JSON-LD persistent memory (250 articles across 7 broad and 57 sub clusters); Pass 2 updates it incrementally each run
+- **Concept cluster graph** -- `graph.jsonld`, a schema.org JSON-LD persistent memory (310 articles across 7 broad and 82 sub clusters); Pass 2 updates it incrementally each run
 - **Topic history** -- `past_topics.json` accumulates a chronological log of selected themes (Pass 2 updates it; Pass 1's de-duplication role moved to `coverage-report.sh`)
 - **Multi-stage deep research** -- not just a summary; generates research questions, searches 10-20 times, cross-validates sources
 - **Repo feedback loop** -- each report ends with a "contribution to this repo" section naming the reinforced concepts and suggesting how to extend the repo
@@ -61,6 +61,7 @@ The key insight: Claude Code's `-p` flag turns it into a fully autonomous resear
 |-------------|-------|
 | [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) | `brew install claude` or via npm |
 | [Claude Max plan](https://claude.ai) | For zero-cost non-interactive usage |
+| `python3` >= 3.11 | Stdlib only (`json` / `tomllib` / `re`) for the JSON/TOML parsing layer. macOS system 3.9 lacks `tomllib`; use Homebrew's `python3` |
 | macOS | Uses `launchd` for scheduling (Linux users: adapt to `cron` or `systemd`) |
 | Obsidian (optional) | Any markdown-compatible tool works |
 | Research repositories | One or more repos that carry a `graph.jsonld` concept graph (see [graph-schema.md](docs/graph-schema.md)) |
@@ -111,10 +112,19 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 ```
 daily-research/
 ├── scripts/
-│   ├── daily-research.sh       # Main entry point (repo graph sync → Opus theme → Sonnet research)
+│   ├── daily-research.sh       # Orchestrator (sources lib/, preflight → Pass 1/2/3)
+│   ├── lib/                    # Sourced shell libraries + the Python parsing module
+│   │   ├── env.sh              # Env sanitize + PATH
+│   │   ├── log.sh              # log() / log_init() (chmod at creation, rotation)
+│   │   ├── notify.sh           # notify() (osascript guard)
+│   │   ├── lock.sh             # acquire_lock()/release_lock() (mkdir-atomic)
+│   │   ├── graph.sh            # check_graph_health()/sync_repo_graphs()
+│   │   ├── auth.sh             # real_auth_probe() (real OAuth probe, shared by 3 entrypoints)
+│   │   ├── claude.sh           # run_claude()/classify_exit() (E_AUTH/E_TRANSIENT/E_FATAL)
+│   │   └── dr_pipeline.py      # Single stdlib-only JSON/TOML parsing module (subcommands)
 │   ├── bootstrap-graph.sh      # One-shot graph.jsonld bootstrap (Opus clustering)
 │   ├── coverage-report.sh      # Uncovered-concept report, injected into Pass 1
-│   └── check-auth.sh           # OAuth token health check
+│   └── check-auth.sh           # Real OAuth probe health check (shares lib/auth.sh)
 ├── prompts/
 │   ├── theme-selection-prompt.md  # Pass 1: repo-graph-driven theme selection (Opus)
 │   ├── task-prompt.md             # Pass 2: research & writing instruction (Sonnet)
@@ -127,7 +137,7 @@ daily-research/
 ├── past_topics.example.json    # Topic history schema reference
 ├── evals/                      # LLM-as-Judge evaluation (operation suspended; code retained)
 │   └── scores.example.jsonl    # Score log schema reference
-├── tests/                      # bats tests (daily-research / e2e-mock / eval / log-summary)
+├── tests/                      # bats (daily-research / e2e-mock / lib / eval) + pytest (dr_pipeline_test.py) + fixtures/
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md   # Operations guide
 │   ├── CONTRIB.md / CONTRIB.ja.md   # Development guide
@@ -221,7 +231,8 @@ Then reload: `launchctl unload ... && launchctl load ...`
 | `--append-system-prompt-file` (not `--system-prompt-file`) | Preserves Claude Code's default capabilities while adding research instructions |
 | `--allowedTools` (not `--dangerously-skip-permissions`) | Minimum-privilege: Pass 1 is read-only, Pass 2 adds write |
 | `--max-turns` for timeout control | Process-external timeouts (gtimeout) kill claude via signal, causing data loss |
-| Shell scripts only | Zero dependencies beyond Claude Code CLI; trivial to understand and modify |
+| Shell orchestration + stdlib Python parser | No pip dependencies at runtime; JSON/TOML parsing lives in one testable `dr_pipeline.py` module instead of scattered inline `python3 -c` snippets (kills test/source copy-paste drift) |
+| Real auth probe, not `claude --version` | `--version` succeeds even with an expired OAuth token; a cheap Haiku probe inspects `is_error`/`api_error_status` so expiry fails loudly instead of cascading into a double-401 |
 | TOML config | Human-readable, supports nested structures for tracks/criteria |
 | `< /dev/null` stdin redirect | Prevents MCP stdio communication from conflicting with terminal stdin (root cause of MCP hangs) |
 
@@ -236,10 +247,10 @@ Then reload: `launchctl unload ... && launchctl load ...`
   }
   ```
   List each of your installed plugins and set them to `false`. Check installed plugins with `claude plugin list`. There is currently no blanket "disable all" option ([tracking issue](https://github.com/anthropics/claude-code/issues/20873)).
-- **OAuth token expires ~4 days** -- Run `claude` interactively periodically to refresh
+- **OAuth token expires ~4 days** -- Run `claude` interactively periodically to refresh. The pipeline runs a real Haiku auth probe before Pass 1, so an expired token fails loudly with a re-auth notification (and skips the wasteful Sonnet fallback) instead of silently double-failing
 - **`ANTHROPIC_API_KEY` must be unset** -- If set, Claude uses per-token billing instead of Max plan. The script handles this with `unset ANTHROPIC_API_KEY`
 - **launchd + shell profile** -- `launchd` does NOT source `.zshrc`. All PATH entries must be explicit in the script and plist
-- **`--max-turns`** -- Pass 1 uses 15 turns (theme selection), Pass 2 uses 40 turns (research). These are guidelines, not hard limits
+- **`--max-turns`** -- Pass 1 uses 15 turns (theme selection), Pass 2 uses 55 turns (research). These are guidelines, not hard limits
 - **Do NOT run from inside Claude Code** -- `claude -p` cannot be nested inside another Claude Code session; run it in a separate terminal
 
 ## Docs
