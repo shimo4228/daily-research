@@ -143,7 +143,6 @@ daily-research/
 │   ├── CONTRIB.md / CONTRIB.ja.md   # 開発ガイド
 │   ├── graph-schema.md              # graph.jsonld スキーマ仕様
 │   ├── adr/                         # アーキテクチャ決定記録 (ADR)
-│   ├── plans/                       # 今後の拡張計画
 │   └── progress/                    # ポストモーテム・評価レポート
 └── com.example.daily-research.plist  # launchd スケジュールテンプレート
 ```
@@ -157,7 +156,13 @@ daily-research/
 
 その差分が **未補強 concept** の集合です。Pass 1 はこのレポートを受け取り、それらの concept を優先的に補強する外部研究を選びます。Pass 2 がレポートを書くとき、補強した concept を `reinforces` フィールド経由で `graph.jsonld` に書き戻すので、次回の実行ではギャップが小さくなります。
 
+これはテーマ選定を駆動するのと同じ signal-first フィルターの *出力* 側です。レポートは蓄積コンテンツの要約ではなく、各 repo の現在の concept frontier に対する **差分** です（[ADR-0002](docs/adr/0002-reports-as-frontier-diff.md)）。
+
 `graph.jsonld` 自体は schema.org JSON-LD モデル（レポートを表す `Article` ノード、クラスタを表す `Thing` ノード）に従います。完全なスキーマ — ノード型、クラスタ命名、整合性ルール — は [graph-schema.md](docs/graph-schema.md) に記載しています。
+
+## 研究ライン横断の知識循環
+
+著者自身の運用では、daily-research は複数の DOI 登録済み研究ライン（Agent Knowledge Cycle / Agent Attribution Practice / Contemplative Agent / authorship-strategy）が共有する知識循環の *書き込み* 側としても機能します。外部研究をリサーチして共有知識基盤にレポートを書き込み、各研究ラインはその基盤を読み取り専用で参照し、見出した知見を人手で自分の concept graph に取り込みます。あるラインが吸収した概念が、別のラインの次のリサーチ入力になりえます。リンクした concept graph を持つ複数の研究リポジトリを運用していれば、同様のライン横断の循環が自然に生まれます。これはロードマップではなく観察された稼働中のアーキテクチャで、共有基盤はオペレーター固有のままとし、公開ドキュメントでは総称的にのみ記述します。各ラインが書き込み・読み出しする内容を規律するフィルターは signal-first 原則と同一です。その出力側双対が、上述のフロンティア差分にあたります。[ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) を参照。
 
 ## 品質評価（停止中）
 
@@ -224,6 +229,7 @@ plist の `StartCalendarInterval` を編集:
 | 判断 | 理由 |
 |------|------|
 | 各トラック = 1 研究 repo（coverage-gap 駆動） | 固定トピックドメインが構造的飽和を招いた; repo graph にマッピングし未補強 concept を優先することでドメイン狭隘化を防ぐ（[ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)） |
+| レポート = フロンティア差分（signal-first の出力側双対） | レポートは蓄積コンテンツの要約ではなく、各 repo の進化する concept graph に対する差分; テーマ選定を駆動するのと同じフィルターの出力側（[ADR-0002](docs/adr/0002-reports-as-frontier-diff.md)） |
 | 外部 MCP メモリではなくローカル JSON-LD graph | 旧 Mem0 MCP 統合は静かな失敗で 32 日間ゼロ稼働した; ローカル `graph.jsonld` は「ファイルが存在すれば動く」で失敗が顕在化する |
 | repo は read-only 参照 | パイプラインは元 repo を決して編集しない; 寄与は人間が取り込む vault レポート経由で流れ、repo 間汚染を回避 |
 | 2パス (Opus + Sonnet) | テーマ選定は Opus が優位; リサーチ・執筆は Sonnet の方が高速かつ低コスト |
@@ -259,6 +265,8 @@ plist の `StartCalendarInterval` を編集:
 - [CONTRIB.md](docs/CONTRIB.md) / [CONTRIB.ja.md](docs/CONTRIB.ja.md) -- 開発: テスト、CLI フラグ、環境変数
 - [graph-schema.md](docs/graph-schema.md) -- `graph.jsonld` スキーマ: ノード型、クラスタ命名、整合性ルール
 - [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md) -- なぜ各トラックを研究リポジトリにマッピングするか
+- [ADR-0002](docs/adr/0002-reports-as-frontier-diff.md) -- レポート = フロンティア差分: signal-first の出力側適用
+- [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) -- 複数研究ラインにまたがる知識環流の書き込み側として
 
 ## ライセンス
 

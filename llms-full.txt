@@ -21,7 +21,7 @@ This is the self-contained AI reference for **daily-research**, an autonomous re
 - **Deduplication**: `past_topics.json`, 30-day window
 - **Key scripts**: `scripts/daily-research.sh`, `scripts/coverage-report.sh`, `scripts/bootstrap-graph.sh`, `scripts/check-auth.sh`
 - **Quality eval**: LLM-as-Judge, 6 dimensions, 30-point scale — currently suspended
-- **ADRs**: ADR-0001 (research-repo feedback engine, 2026-05-27)
+- **ADRs**: ADR-0001 (research-repo feedback engine, 2026-05-27), ADR-0002 (reports as frontier-diff, 2026-06-29), ADR-0003 (cross-line knowledge cycle, 2026-06-29)
 - **Graph date range**: 2026-02-24 to 2026-05-27
 - **Author**: shimo4228 (shimomoto-tatsuya)
 - **Author research lines**: Agent Knowledge Cycle / AKC (10.5281/zenodo.19200726), Contemplative Agent (10.5281/zenodo.19212118), Agent Attribution Practice / AAP (10.5281/zenodo.19652013), authorship-strategy (10.5281/zenodo.20263316)
@@ -51,6 +51,14 @@ Coverage-driven theme selection is defined as choosing research themes by the ga
 ## What is a concept coverage gap?
 
 A concept coverage gap is defined as a concept that exists in a research repository's graph but has not yet been reinforced by any daily-research report. Concretely, it is a concept `@id` present in `.repo-graphs/<track>.jsonld` but absent from the `reinforces` arrays in `graph.jsonld`. Gaps are the primary targets of theme selection. A trend is transient and hard to repeat; a coverage gap is concrete, measurable, and shrinks predictably as Pass 2 records each reinforced concept. The next run sees a smaller gap, so the engine converges on full coverage over time.
+
+## What is frontier-diff reporting?
+
+Frontier-diff reporting is defined as the output-side dual of the signal-first filter: a daily report's relevance is conditioned on the project's evolving knowledge graph (the frontier), so the report is the delta against each mapped repo's current concept frontier, not a digest of accumulated content. It is the same filter that drives coverage-driven theme selection, applied to the output rather than the intake. It derives from the Agent Knowledge Cycle's signal-first principle (AKC, 10.5281/zenodo.19200726) and is recorded in ADR-0002. This is not a novel contribution — it makes an already-operating behavior explicit.
+
+## How does daily-research participate in a cross-line knowledge cycle?
+
+daily-research is the write side of a knowledge cycle shared across the author's DOI-registered research lines (Agent Knowledge Cycle, Agent Attribution Practice, Contemplative Agent, authorship-strategy). It writes reports into a shared knowledge substrate; each research line consults that substrate read-only and folds findings back into its own concept graph by hand, so a concept one line absorbs can become another line's next research input. This cross-line cycle is current, operating architecture, not a roadmap. The substrate is operator-private and is described only generically in public docs. The filter governing what each line writes and reads is the signal-first principle (AKC, 10.5281/zenodo.19200726), whose output-side dual is frontier-diff reporting. Recorded in ADR-0003.
 
 ## What is the concept cluster graph (graph.jsonld)?
 
@@ -97,6 +105,7 @@ shimo4228 (shimomoto-tatsuya) is the author of daily-research and of the researc
 - **Sub cluster** is defined as a finer grouping under a broad cluster (a `Thing` with `broaderClusterOf`); there are 57.
 - **Pass 1** is defined as the Opus theme-selection stage; **Pass 2** is defined as the Sonnet research-and-writing stage.
 - **Bootstrap** is defined as the one-shot `bootstrap-graph.sh` run that builds `graph.jsonld` from existing topic history.
+- **frontier-diff** is defined as the output-side dual of signal-first: a report is the delta against a repo's current concept frontier, not a digest of accumulated content (see ADR-0002).
 
 ## How do daily-research and its graph relate as a knowledge graph?
 

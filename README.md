@@ -143,7 +143,6 @@ daily-research/
 │   ├── CONTRIB.md / CONTRIB.ja.md   # Development guide
 │   ├── graph-schema.md              # graph.jsonld schema spec
 │   ├── adr/                         # Architecture Decision Records
-│   ├── plans/                       # Future expansion plans
 │   └── progress/                    # Postmortems and evaluation reports
 └── com.example.daily-research.plist  # launchd schedule template
 ```
@@ -157,7 +156,13 @@ Each track points at one research repository. At startup the repo's `graph.jsonl
 
 The difference is the set of **uncovered concepts**. Pass 1 receives this report and selects external research that reinforces those concepts first. When Pass 2 writes a report, it records the concepts it reinforced back into `graph.jsonld` via the `reinforces` field, so the next run sees a smaller gap.
 
+This is the *output* side of the same signal-first filter that drives theme selection: a report is the **delta** against each repo's current concept frontier, not a digest of accumulated content ([ADR-0002](docs/adr/0002-reports-as-frontier-diff.md)).
+
 `graph.jsonld` itself follows a schema.org JSON-LD model (`Article` nodes for reports, `Thing` nodes for clusters). The full schema — node types, cluster naming, and integrity rules — is documented in [graph-schema.md](docs/graph-schema.md).
+
+## Cross-line knowledge cycle
+
+In the author's own use, daily-research is also the *write* side of a knowledge cycle shared across several DOI-registered research lines (Agent Knowledge Cycle, Agent Attribution Practice, Contemplative Agent, authorship-strategy). It writes reports into a shared knowledge substrate; each research line consults that substrate read-only and folds findings back into its own concept graph by hand, so a concept one line absorbs can become another line's next research input. If you maintain several research repositories with linked concept graphs, a similar cross-line cycle emerges naturally. This is observed architecture, not a roadmap, and the substrate stays operator-private, so public docs describe it only generically. The filter governing what each line writes and reads is the same signal-first principle — the frontier-diff above is its output-side dual. See [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md).
 
 ## Quality Evaluation (suspended)
 
@@ -224,6 +229,7 @@ Then reload: `launchctl unload ... && launchctl load ...`
 | Decision | Why |
 |----------|-----|
 | Each track = one research repo (coverage-gap driven) | Fixed topic domains caused structural saturation; mapping to a repo graph and prioritizing uncovered concepts prevents domain narrowing ([ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)) |
+| Reports as frontier-diff (signal-first output dual) | A report is the delta against each repo's evolving concept graph, not a digest — the output side of the same filter that drives theme selection ([ADR-0002](docs/adr/0002-reports-as-frontier-diff.md)) |
 | Local JSON-LD graph instead of external MCP memory | The previous Mem0 MCP integration ran zero times for 32 days due to silent failure; a local `graph.jsonld` is "if the file exists, it works" and fails loudly |
 | Read-only repo reference | The pipeline never edits the source repos; contributions flow through vault reports that a human folds back in, avoiding cross-repo pollution |
 | 2-pass (Opus + Sonnet) | Opus is stronger at theme selection; Sonnet is faster and cheaper for research and writing |
@@ -259,6 +265,8 @@ Then reload: `launchctl unload ... && launchctl load ...`
 - [CONTRIB.md](docs/CONTRIB.md) / [CONTRIB.ja.md](docs/CONTRIB.ja.md) -- Development: testing, CLI flags, environment variables
 - [graph-schema.md](docs/graph-schema.md) -- `graph.jsonld` schema: node types, cluster naming, integrity rules
 - [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md) -- Why each track maps to a research repository
+- [ADR-0002](docs/adr/0002-reports-as-frontier-diff.md) -- Reports as frontier-diff: signal-first applied to output
+- [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) -- daily-research as the write side of a cross-line knowledge cycle
 
 ## License
 
