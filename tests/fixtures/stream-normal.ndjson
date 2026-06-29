@@ -1,0 +1,3 @@
+{"type":"assistant","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","name":"WebSearch","id":"toolu_01","input":{"query":"a"}}]}}
+{"type":"assistant","message":{"model":"claude-opus-4-8","content":[{"type":"tool_use","name":"WebFetch","id":"toolu_02","input":{"url":"http://x"}}]}}
+{"type":"result","subtype":"success","is_error":false,"api_error_status":null,"duration_ms":5000,"num_turns":5,"total_cost_usd":0.25,"usage":{"input_tokens":1000,"output_tokens":500},"result":"{\"themes\": []}"}

@@ -27,6 +27,42 @@ teardown() {
   bash -n "$PROJECT_DIR/scripts/check-auth.sh"
 }
 
+@test "all 3 entrypoints share real_auth_probe (no formalized --version auth)" {
+  # auth-002: check-auth.sh は本 flow に未配線だった。lib/auth.sh で正本化し 3 つが共有
+  grep -q 'real_auth_probe' "$SCRIPT"
+  grep -q 'real_auth_probe' "$PROJECT_DIR/scripts/check-auth.sh"
+  grep -q 'real_auth_probe' "$PROJECT_DIR/scripts/bootstrap-graph.sh"
+  # 形骸化した「--version で認証確認」が残っていない
+  ! grep -qi 'version.*authentication\|authentication.*version' "$PROJECT_DIR/scripts/check-auth.sh"
+}
+
+@test "coverage-report.sh has valid syntax" {
+  bash -n "$PROJECT_DIR/scripts/coverage-report.sh"
+}
+
+# === Theme dedup (重複テーマ防止) ===
+
+@test "coverage-report shows reinforcing source history" {
+  run "$PROJECT_DIR/scripts/coverage-report.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"既出:"* ]]
+}
+
+@test "coverage-report lists repo ExternalReference as forbidden sources" {
+  run "$PROJECT_DIR/scripts/coverage-report.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo 取り込み済み外部文献"* ]]
+}
+
+@test "daily-research.sh injects past themes into Pass 1 prompt" {
+  grep -q "過去テーマ履歴" "$SCRIPT"
+  grep -q 'PAST_THEMES' "$SCRIPT"
+}
+
+@test "theme-selection-prompt forbids reusing the same primary source" {
+  grep -q "ソース単位の重複禁止" "$PROJECT_DIR/prompts/theme-selection-prompt.md"
+}
+
 # === Config files exist ===
 
 @test "config.toml exists" {
@@ -65,25 +101,14 @@ teardown() {
 }
 
 # === Lock mechanism ===
+# acquire_lock / release_lock の振る舞いテストは tests/test-lib.bats に集約 (S4)。
+# ここでは orchestrator が mkdir アトミックロックを採用していることを静的確認する。
 
-@test "lock file can be created and removed" {
-  local lock_file="$TEST_TMPDIR/.daily-research.lock"
-
-  echo "12345" > "$lock_file"
-  [ -f "$lock_file" ]
-
-  rm -f "$lock_file"
-  [ ! -f "$lock_file" ]
-}
-
-@test "stale lock file with dead PID is detected" {
-  local lock_file="$TEST_TMPDIR/.daily-research.lock"
-
-  # Create lock with non-existent PID
-  echo "999999999" > "$lock_file"
-
-  # kill -0 should fail for non-existent process
-  ! kill -0 999999999 2>/dev/null
+@test "orchestrator uses mkdir-atomic lock via lib/lock.sh" {
+  grep -q 'source.*lock.sh' "$SCRIPT"
+  grep -q 'acquire_lock' "$SCRIPT"
+  # check-then-write の旧パターン (echo \$\$ > LOCK_FILE) が残っていない
+  ! grep -q 'echo \$\$ > "\$LOCK_FILE"' "$SCRIPT"
 }
 
 # === Log directory ===
@@ -110,8 +135,9 @@ teardown() {
 
 # === Security checks ===
 
-@test "script unsets ANTHROPIC_API_KEY" {
-  grep -q "unset ANTHROPIC_API_KEY" "$SCRIPT"
+@test "env.sh source declares unset ANTHROPIC_API_KEY (static)" {
+  # 環境サニタイズは lib/env.sh に集約 (S3)。挙動テストは test-lib.bats 側
+  grep -q "unset ANTHROPIC_API_KEY" "$PROJECT_DIR/scripts/lib/env.sh"
 }
 
 @test "no hardcoded API keys in script" {
@@ -120,7 +146,8 @@ teardown() {
 }
 
 @test "log file permissions are restricted (chmod 600)" {
-  grep -q 'chmod 600 "$LOG_FILE"' "$SCRIPT"
+  # ログ権限制限は lib/log.sh の log_init() に集約 (作成時 chmod, S3)
+  grep -q 'chmod 600 "$LOG_FILE"' "$PROJECT_DIR/scripts/lib/log.sh"
 }
 
 # === Defensive programming ===
@@ -129,8 +156,8 @@ teardown() {
   head -3 "$SCRIPT" | grep -q "set -euo pipefail"
 }
 
-@test "trap cleanup is registered on EXIT" {
-  grep -q 'trap cleanup EXIT' "$SCRIPT"
+@test "trap release_lock is registered on EXIT" {
+  grep -q 'trap release_lock EXIT' "$SCRIPT"
 }
 
 @test "max-turns is configured for both passes" {

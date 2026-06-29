@@ -1,14 +1,14 @@
 ---
 name: daily-research
-description: Automated daily signal-first research digest — cron-driven pipeline that selects themes, researches with web tools, and writes reports to an Obsidian vault. Zero Python, just prompts and a shell wrapper over claude -p.
-compatibility: Requires the Claude Code CLI (claude -p) and a cron/launchd scheduler. Shell + prompts, no Python.
+description: Automated daily signal-first research digest — cron-driven pipeline that selects themes, researches with web tools, and writes reports to an Obsidian vault. Bash orchestration with prompts over claude -p; JSON/TOML parsing in stdlib python3 (no pip dependencies).
+compatibility: Requires the Claude Code CLI (claude -p), a cron/launchd scheduler, and python3 >=3.11 (stdlib only). Bash + prompts + stdlib python3.
 user-invocable: true
-origin: original
+origin: shimo4228
 ---
 
 # daily-research
 
-Autonomous daily research powered by `claude -p` (Claude Code's non-interactive mode) — theme selection with Opus, multi-stage web research with Sonnet, LLM-as-Judge quality evaluation, reports written directly to an Obsidian vault.
+Autonomous daily research powered by `claude -p` (Claude Code's non-interactive mode) — theme selection with Opus driven by a per-repo concept-coverage graph, multi-stage web research and writing with Sonnet, reports written directly to an Obsidian vault.
 
 **Skill anatomy**: `prompts/` are the skill's core intelligence. `scripts/daily-research.sh` is a thin wrapper that invokes `claude -p` with those prompts. Everything else (tests, launchd plist, config template) is supporting infrastructure.
 

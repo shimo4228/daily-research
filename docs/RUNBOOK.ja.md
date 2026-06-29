@@ -12,7 +12,6 @@ cd /path/to/daily-research
 
 # 2. スクリプトに実行権限を付与
 chmod +x scripts/daily-research.sh
-chmod +x scripts/eval-run.sh
 chmod +x scripts/check-auth.sh
 
 # 3. 認証を確認
@@ -57,19 +56,18 @@ launchctl start com.daily-research
 
 ```
 daily-research.sh
-├── MCP ヘルスチェック (Haiku, --max-turns 1)
-│   ├── 成功 → Pass 2 で Mem0 有効
-│   └── 失敗 → WARN、Mem0 なしで続行
+├── ロック取得（アトミック mkdir）
+├── 認証 probe（実 OAuth チェック）
+├── graph.jsonld ヘルスチェック
+├── repo graph 同期 → .repo-graphs/
+├── カバレッジレポート（未補強 concept → Pass 1 に注入）
 ├── Pass 1: Opus テーマ選定 (--max-turns 15, stream-json)
 │   ├── 成功 → テーマを Sonnet に渡す
 │   └── 失敗 → Sonnet フォールバック（テーマ選定 + リサーチを一括実行）
-├── Pass 2: Sonnet リサーチ・執筆 (--max-turns 40)
-│   ├── Mem0 search-memories（利用可能時）
-│   ├── WebSearch + WebFetch（多段リサーチ）
-│   ├── レポート書き込み → Obsidian vault
-│   └── Mem0 add-memory（利用可能時）
-└── 品質評価: LLM-as-Judge (non-fatal, 6次元 x Opus)
-    └── スコアを evals/scores.jsonl に追記
+└── Pass 2: Sonnet リサーチ・執筆 (--max-turns 55)
+    ├── WebSearch + WebFetch（多段リサーチ）
+    ├── レポート書き込み → Obsidian vault
+    └── graph.jsonld を更新（補強した concept を記録）
 ```
 
 ## 監視
@@ -104,8 +102,7 @@ launchctl list | grep daily-research
 | 認証有効 | `./scripts/check-auth.sh` | "OK: Claude authentication is valid" |
 | 今日のログが存在 | `ls logs/$(date +%Y-%m-%d).log` | ファイルが存在 |
 | ログに成功メッセージ | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | マッチあり |
-| レポートが生成済み | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | 2ファイル |
-| 評価スコアが保存済み | `grep "$(date +%Y-%m-%d)" evals/scores.jsonl \| wc -l` | 2エントリ |
+| レポートが生成済み | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | 設定したトラック数のファイル |
 
 ### ログメッセージ一覧
 
@@ -113,19 +110,14 @@ launchctl list | grep daily-research
 |---------|------|
 | `SUMMARY Pass1: cost=... turns=... duration=...` | Pass 1 の実行統計（コスト、ターン数、所要時間、トークン数） |
 | `Pass 1 completed: themes selected by Opus` | Opus テーマ選定が成功 |
-| `Pass 1 themes: tech="...", personal="..."` | 選定されたテーマの記録 |
+| `Pass 1 themes: <track>="...", ...` | トラックごとの選定テーマの記録 |
 | `WARN: Pass 1 failed (exit code N), falling back to Sonnet` | Opus 失敗、Sonnet が全処理を担当 |
 | `WARN: Pass 1 output failed JSON validation` | Opus が不正な JSON を返した、Sonnet フォールバック |
 | `Fallback: Sonnet handles theme selection + research` | Sonnet が全作業を実行（正常なフォールバック動作） |
 | `SUMMARY Pass2: cost=... turns=... duration=...` | Pass 2 の実行統計 |
 | `SUMMARY Total: cost=... duration=...` | 両パス合計のコスト・所要時間 |
-| `MCP health check passed` | Mem0 MCP が応答、Pass 2 で有効化 |
-| `WARN: MCP health check failed (exit=N)` | Mem0 MCP 未応答、Mem0 なしで続行 |
+| `graph.jsonld health check passed` | concept graph が有効、パイプライン続行 |
 | `Completed successfully` | 全パス完了 |
-| `[eval] Evaluation start: DATE=...` | 評価フレームワーク開始 |
-| `[eval] Found N report(s)` | 評価対象レポートの検出数 |
-| `[eval] Saved: total=N/30 duration=Ns` | 評価スコアの保存成功 |
-| `WARN: Evaluation failed (non-fatal)` | 評価失敗（パイプラインは継続） |
 
 ## よくある問題と対処法
 
@@ -252,28 +244,6 @@ cat past_topics.json | python3 -m json.tool
 cp past_topics.json.bak past_topics.json
 ```
 
-### 9. MCP ヘルスチェック失敗（Mem0 利用不可）
-
-**症状**: ログに `WARN: MCP health check failed (exit=N). Continuing without Mem0.` が出力される。macOS 通知に「MCP ヘルスチェック失敗（Mem0 なしで続行）」と表示される。
-
-**原因**: Mem0 MCP サーバーが応答しない、未設定、またはハングしている。これは非致命的 — パイプラインは Mem0 のメモリ機能なしで続行する。
-
-**影響**: レポートは通常通り生成されるが、Mem0 の永続メモリ（過去のリサーチからのセッション横断コンテキスト）は利用されない。
-
-**対処**（Mem0 機能を使いたい場合）:
-```bash
-# Mem0 MCP サーバーが起動しているか確認
-# （MCP 設定に依存）
-
-# Claude Code の MCP 設定を確認
-cat ~/.claude.json | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin).get('mcpServers',{}), indent=2))"
-
-# MCP を手動テスト（別のターミナルで）
-claude -p "Search memories for test" --max-turns 1 --model haiku
-```
-
-**備考**: Mem0 を使用していない場合、この警告は無視して問題ない。ヘルスチェック失敗時、パイプラインは自動的に Pass 2 の allowedTools から Mem0 ツールを除外する。
-
 ## ロールバック手順
 
 ### 設定変更の取り消し
@@ -315,7 +285,6 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 |---------------|--------|-------------|
 | Pass 1: テーマ選定 | Opus | ~$0.30 |
 | Pass 2: リサーチ・執筆 | Sonnet | ~$1.50 |
-| 品質評価 (2記事 x 6次元) | Opus | ~$0.50 |
-| **合計** | | **~$2.30** |
+| **合計** | | **~$1.80** |
 
 Claude Max プランでは、これらのコストはサブスクリプションでカバーされる。従量課金は発生しない。
