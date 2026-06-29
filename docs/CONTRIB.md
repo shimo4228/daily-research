@@ -9,7 +9,7 @@
 | Claude Code CLI | Core execution engine | `brew install claude` or [docs.anthropic.com](https://docs.anthropic.com) |
 | Claude Max plan | Zero-cost API usage | Subscription required |
 | macOS (launchd) | Scheduler | Built-in |
-| python3 | JSON schema validation (Pass 1 output) | Pre-installed on macOS |
+| python3 >= 3.11 | JSON/TOML parsing (`scripts/lib/dr_pipeline.py`); stdlib only | Homebrew `python3` (macOS system 3.9 lacks `tomllib`) |
 | bats-core | Shell test framework | `brew install bats-core` |
 | shellcheck | Shell linting | `brew install shellcheck` |
 
@@ -26,18 +26,26 @@ daily-research/
 ├── templates/
 │   └── report-template.md              # Obsidian report format with frontmatter
 ├── scripts/
-│   ├── daily-research.sh               # Main entry point (2-pass: Opus → Sonnet)
-│   └── check-auth.sh                   # OAuth authentication check + notification
+│   ├── daily-research.sh               # Main entry point (2-pass: Opus → Sonnet); sources lib/
+│   ├── coverage-report.sh              # Uncovered-concept report, injected into Pass 1
+│   ├── bootstrap-graph.sh              # One-shot graph.jsonld bootstrap (Opus clustering)
+│   ├── check-auth.sh                   # OAuth check via real_auth_probe() + notification
+│   ├── pre-commit.sh                   # Secret / syntax guard (git pre-commit hook)
+│   └── lib/                             # Sourced shell libs + Python parser
+│       ├── env.sh / log.sh / notify.sh / lock.sh / graph.sh / auth.sh / claude.sh
+│       └── dr_pipeline.py              # Single stdlib-only JSON/TOML parsing module
 ├── com.example.daily-research.plist   # launchd schedule (AM 5:00)
 ├── tests/
 │   ├── test-daily-research.bats        # Unit tests (syntax, config, security)
 │   ├── test-e2e-mock.bats             # E2E mock tests
-│   └── test-lib.bats                  # lib/*.sh unit tests (env, lock, graph, auth, claude)
+│   ├── test-lib.bats                  # lib/*.sh unit tests (env, lock, graph, auth, claude)
+│   └── dr_pipeline_test.py            # pytest for dr_pipeline.py (dev-only, .venv)
 ├── logs/                                # Execution logs (date-stamped, auto-rotated 30d)
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md      # Operations guide
 │   ├── CONTRIB.md / CONTRIB.ja.md      # Development guide (this file)
-│   └── progress/                        # Postmortems and evaluation reports
+│   ├── graph-schema.md                 # graph.jsonld schema spec
+│   └── adr/                             # Architecture Decision Records
 └── .claude/settings.local.json          # Claude Code project permissions
 ```
 
@@ -45,8 +53,11 @@ daily-research/
 
 | Script | Description | Usage |
 |--------|-------------|-------|
-| `scripts/daily-research.sh` | Main entry point. 2-pass execution: Pass 1 (Opus theme selection) → Pass 2 (Sonnet research & writing). Includes env sanitization, auth check, JSON validation, and Sonnet fallback. Called by launchd at AM 5:00. | `./scripts/daily-research.sh` |
-| `scripts/check-auth.sh` | Checks Claude OAuth token validity via `claude --version`. Shows macOS notification on failure. | `./scripts/check-auth.sh` |
+| `scripts/daily-research.sh` | Main entry point. 2-pass execution: Pass 1 (Opus theme selection) → Pass 2 (Sonnet research & writing). Sources `lib/`; includes env sanitization, auth probe, repo-graph sync, coverage report, JSON validation, and Sonnet fallback. Called by launchd at AM 5:00. | `./scripts/daily-research.sh` |
+| `scripts/coverage-report.sh` | Computes uncovered concepts per track (repo graph minus reinforced concepts); injected into Pass 1. | `./scripts/coverage-report.sh` |
+| `scripts/bootstrap-graph.sh` | One-shot `graph.jsonld` bootstrap from existing topic history (Opus clustering). | `./scripts/bootstrap-graph.sh` |
+| `scripts/check-auth.sh` | Checks Claude OAuth token validity via `real_auth_probe()` (shared `lib/auth.sh`; a real Haiku API probe, not `claude --version`, which succeeds even with an expired token). Shows macOS notification on failure. | `./scripts/check-auth.sh` |
+| `scripts/pre-commit.sh` | Secret / syntax guard run as a git pre-commit hook. | (auto-run by git) |
 
 ## Environment Variables
 
@@ -64,9 +75,8 @@ daily-research/
 |---------|---------|
 | `[general]` | Obsidian vault path, output directory, language, date format |
 | `[report]` | Minimum source count |
-| `[tracks.tech]` | Tech trend track: sources, scoring criteria |
-| `[tracks.personal]` | Personal interest track: sources, domains, scoring criteria |
-| `[user_profile]` | Skills, interests, goal |
+| `[tracks.<name>]` | One block per track: `target_repo`, `target_graph`, `sources`, `scoring_criteria` (config.example.toml ships `repo_a` / `repo_b` / `repo_c` templates) |
+| `[user_profile]` | Optional skills / interests / goal hints |
 
 ## Development Workflow
 
@@ -119,7 +129,7 @@ bats tests/
 # - Defensive programming (set -euo pipefail, trap, max-turns)
 # - E2E mock: 2-pass flow, Sonnet fallback, JSON validation
 # - No gtimeout/timeout dependency
-# - log_summary parser: NDJSON, plain JSON, array JSON, malformed input handling
+# - lib/*.sh units: env sanitize, atomic lock, graph health, real auth probe, exit classify
 ```
 
 ## Claude Code CLI Flags
@@ -133,7 +143,7 @@ bats tests/
 | `--allowedTools` | `WebSearch,WebFetch,Read,Glob,Grep` | Read-only tools (no file writing) |
 | `--max-turns` | `15` | Limit theme selection scope |
 | `--model` | `opus` | Deep reasoning for theme quality |
-| `--output-format` | `stream-json` | NDJSON stream, parsed by inline Python to extract result + tool counts |
+| `--output-format` | `stream-json` | NDJSON stream, parsed by `lib/dr_pipeline.py` to extract result + tool counts |
 | `--verbose` | - | Include detailed event stream |
 | `--no-session-persistence` | - | Fresh context each run |
 
@@ -145,7 +155,7 @@ bats tests/
 | `--permission-mode` | `default` | Use default permission handling |
 | `--append-system-prompt-file` | `prompts/research-protocol.md` | Inject research protocol while preserving defaults |
 | `--allowedTools` | `WebSearch,WebFetch,Read,Write,Edit,Glob,Grep` | Full tool access for research and writing |
-| `--max-turns` | `40` | Guideline limit for research depth |
+| `--max-turns` | `55` | Guideline limit for research depth |
 | `--model` | `sonnet` | Speed + cost efficiency |
 | `--output-format` | `json` | Structured output with metadata |
 | `--no-session-persistence` | - | Fresh context each run |
@@ -156,7 +166,7 @@ bats tests/
 
 The 2-pass design was chosen based on a one-time blind evaluation showing Opus produces +28% better theme selection while adding minimal cost (~$0.30 per run).
 
-Timeout is controlled via `--max-turns` rather than external process timeouts (gtimeout/timeout). External timeouts kill the claude process via signals, which can cause data loss. See `docs/progress/postmortem-2026-02-20.md` for details.
+Timeout is controlled via `--max-turns` rather than external process timeouts (gtimeout/timeout). External timeouts kill the claude process via signals, which can cause data loss.
 
 ## Persistent Memory Layer
 

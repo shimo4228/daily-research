@@ -9,7 +9,7 @@
 | Claude Code CLI | コア実行エンジン | `brew install claude` or [docs.anthropic.com](https://docs.anthropic.com) |
 | Claude Max プラン | API追加課金なしで利用 | サブスクリプション契約が必要 |
 | macOS (launchd) | スケジューラ | OS組み込み |
-| python3 | JSON スキーマ検証（Pass 1 出力） | macOS プリインストール |
+| python3 >= 3.11 | JSON/TOML 解析（`scripts/lib/dr_pipeline.py`）; stdlib のみ | Homebrew `python3`（macOS system 3.9 は `tomllib` 非対応） |
 | bats-core | シェルテストフレームワーク | `brew install bats-core` |
 | shellcheck | シェルスクリプト静的解析 | `brew install shellcheck` |
 
@@ -26,18 +26,26 @@ daily-research/
 ├── templates/
 │   └── report-template.md              # Obsidian レポートフォーマット（frontmatter付き）
 ├── scripts/
-│   ├── daily-research.sh               # メインエントリポイント（2パス: Opus → Sonnet）
-│   └── check-auth.sh                   # OAuth 認証チェック + macOS 通知
+│   ├── daily-research.sh               # メインエントリポイント（2パス: Opus → Sonnet）; lib/ を source
+│   ├── coverage-report.sh              # 未補強 concept レポート、Pass 1 へ注入
+│   ├── bootstrap-graph.sh              # graph.jsonld 初回 bootstrap（Opus clustering、ワンショット）
+│   ├── check-auth.sh                   # OAuth チェック（real_auth_probe()）+ macOS 通知
+│   ├── pre-commit.sh                   # secret / 構文ガード（git pre-commit hook）
+│   └── lib/                             # sourced shell ライブラリ + Python 解析モジュール
+│       ├── env.sh / log.sh / notify.sh / lock.sh / graph.sh / auth.sh / claude.sh
+│       └── dr_pipeline.py              # JSON/TOML 解析の単一 stdlib モジュール
 ├── com.example.daily-research.plist   # launchd スケジュール（AM 5:00）
 ├── tests/
 │   ├── test-daily-research.bats        # ユニットテスト（構文、設定、セキュリティ）
 │   ├── test-e2e-mock.bats             # E2E モックテスト
-│   └── test-lib.bats                  # lib/*.sh ユニットテスト（env, lock, graph, auth, claude）
+│   ├── test-lib.bats                  # lib/*.sh ユニットテスト（env, lock, graph, auth, claude）
+│   └── dr_pipeline_test.py            # dr_pipeline.py の pytest（dev 専用、.venv）
 ├── logs/                                # 実行ログ（日付別、30日自動ローテーション）
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md      # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md      # 開発ガイド（本ファイル）
-│   └── progress/                        # ポストモーテム・評価レポート
+│   ├── graph-schema.md                 # graph.jsonld スキーマ仕様
+│   └── adr/                             # アーキテクチャ決定記録 (ADR)
 └── .claude/settings.local.json          # Claude Code プロジェクト権限設定
 ```
 
@@ -45,8 +53,11 @@ daily-research/
 
 | スクリプト | 説明 | 使い方 |
 |-----------|------|--------|
-| `scripts/daily-research.sh` | メインエントリポイント。2パス実行: Pass 1（Opus テーマ選定）→ Pass 2（Sonnet リサーチ・執筆）。環境サニタイズ、認証チェック、JSON バリデーション、Sonnet フォールバックを含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
-| `scripts/check-auth.sh` | `claude --version` で OAuth トークンの有効性を確認。失敗時に macOS 通知を表示。 | `./scripts/check-auth.sh` |
+| `scripts/daily-research.sh` | メインエントリポイント。2パス実行: Pass 1（Opus テーマ選定）→ Pass 2（Sonnet リサーチ・執筆）。`lib/` を source し、環境サニタイズ、認証 probe、repo graph 同期、coverage report、JSON バリデーション、Sonnet フォールバックを含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
+| `scripts/coverage-report.sh` | トラックごとの未補強 concept（repo graph − 補強済み concept）を算出し Pass 1 に注入。 | `./scripts/coverage-report.sh` |
+| `scripts/bootstrap-graph.sh` | 既存トピック履歴から `graph.jsonld` を初回 bootstrap（Opus clustering、ワンショット）。 | `./scripts/bootstrap-graph.sh` |
+| `scripts/check-auth.sh` | `real_auth_probe()`（共有 `lib/auth.sh`; `claude --version` ではなく実 Haiku API probe。`--version` は期限切れトークンでも成功するため）で OAuth トークンの有効性を確認。失敗時に macOS 通知を表示。 | `./scripts/check-auth.sh` |
+| `scripts/pre-commit.sh` | git pre-commit hook として走る secret / 構文ガード。 | （git が自動実行） |
 
 ## 環境変数
 
@@ -64,9 +75,8 @@ daily-research/
 |-----------|------|
 | `[general]` | Obsidian vault パス、出力ディレクトリ、言語、日付フォーマット |
 | `[report]` | 最低出典数 |
-| `[tracks.tech]` | テックトレンド: 情報源、スコアリング基準 |
-| `[tracks.personal]` | パーソナル関心: 情報源、ドメイン、スコアリング基準 |
-| `[user_profile]` | スキル、関心領域、目標 |
+| `[tracks.<name>]` | トラック 1 つにつき 1 ブロック: `target_repo`, `target_graph`, `sources`, `scoring_criteria`（config.example.toml は `repo_a` / `repo_b` / `repo_c` テンプレートを同梱） |
+| `[user_profile]` | 任意のスキル / 関心領域 / 目標ヒント |
 
 ## 開発ワークフロー
 
@@ -119,7 +129,7 @@ bats tests/
 # - 防御的プログラミング（set -euo pipefail, trap, max-turns）
 # - E2E モック: 2パスフロー、Sonnet フォールバック、JSON バリデーション
 # - gtimeout/timeout 非依存の確認
-# - log_summary パーサー: NDJSON、プレーン JSON、配列 JSON、不正入力の処理
+# - lib/*.sh ユニット: env サニタイズ、アトミックロック、graph health、実 auth probe、exit 分類
 ```
 
 ## Claude Code CLI フラグ
@@ -133,7 +143,7 @@ bats tests/
 | `--allowedTools` | `WebSearch,WebFetch,Read,Glob,Grep` | 読み取り専用ツール（ファイル書き込み不可） |
 | `--max-turns` | `15` | テーマ選定のスコープ制限 |
 | `--model` | `opus` | テーマ品質のための深い推論 |
-| `--output-format` | `stream-json` | NDJSON ストリーム。インライン Python で result + ツール使用数を抽出 |
+| `--output-format` | `stream-json` | NDJSON ストリーム。`lib/dr_pipeline.py` で result + ツール使用数を抽出 |
 | `--verbose` | - | 詳細なイベントストリームを含む |
 | `--no-session-persistence` | - | 毎回クリーンなコンテキストで実行 |
 
@@ -145,7 +155,7 @@ bats tests/
 | `--permission-mode` | `default` | デフォルトの権限処理を使用 |
 | `--append-system-prompt-file` | `prompts/research-protocol.md` | デフォルト能力を保持しつつリサーチプロトコルを注入 |
 | `--allowedTools` | `WebSearch,WebFetch,Read,Write,Edit,Glob,Grep` | リサーチ・執筆用のフルツールアクセス |
-| `--max-turns` | `40` | リサーチ深度の目安 |
+| `--max-turns` | `55` | リサーチ深度の目安 |
 | `--model` | `sonnet` | 速度とコスト効率 |
 | `--output-format` | `json` | メタデータ付き構造化出力 |
 | `--no-session-persistence` | - | 毎回クリーンなコンテキストで実行 |
@@ -156,7 +166,7 @@ bats tests/
 
 2パス設計は、一度きりのブラインド評価で Opus のテーマ選定が +28% 優れていたことに基づく。追加コストは ~$0.30/回。
 
-タイムアウトは `--max-turns` で制御する。外部プロセスタイムアウト（gtimeout/timeout）はシグナルで claude を kill し、データ損失を引き起こすため不使用。詳細は `docs/progress/postmortem-2026-02-20.md` 参照。
+タイムアウトは `--max-turns` で制御する。外部プロセスタイムアウト（gtimeout/timeout）はシグナルで claude を kill し、データ損失を引き起こすため不使用。
 
 ## 永続メモリ層
 

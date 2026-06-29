@@ -32,7 +32,8 @@ daily-research/
 │   │   └── dr_pipeline.py      # JSON/TOML 解析の単一モジュール（旧 inline python を集約）
 │   ├── bootstrap-graph.sh      # graph.jsonld 初回 bootstrap（ワンショット、Opus clustering）
 │   ├── coverage-report.sh      # 未補強 concept レポート生成（Pass 1 へ注入）
-│   └── check-auth.sh           # OAuth トークンの実 probe ヘルスチェック（lib/auth.sh を共有）
+│   ├── check-auth.sh           # OAuth トークンの実 probe ヘルスチェック（lib/auth.sh を共有）
+│   └── pre-commit.sh           # secret / 構文ガード（git pre-commit hook）
 ├── prompts/
 │   ├── theme-selection-prompt.md # Pass 1: repo graph 駆動のテーマ選定プロンプト
 │   ├── task-prompt.md            # Pass 2: Sonnet リサーチ・執筆タスク指示
@@ -50,7 +51,7 @@ daily-research/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md   # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md   # 開発ガイド
 │   ├── graph-schema.md              # graph.jsonld スキーマ仕様（concept cluster + reinforces）
-│   └── progress/                    # ポストモーテム・評価レポート
+│   └── adr/                         # アーキテクチャ決定記録（0001-0003 + README）
 └── com.example.daily-research.plist  # launchd plist テンプレート
 ```
 
@@ -119,7 +120,7 @@ tail -f logs/$(date +%Y-%m-%d).log
 ### 過去に試行・棄却した機能
 
 - **評価フレームワーク (LLM-as-Judge)**: 6次元ルーブリック（Factual Grounding / Depth / Coherence / Specificity / Novelty / Actionability、各1-5点）を Pass 2 成功後に Opus judge で採点していた。コスト対効果が低く 2026-02 以降運用停止 → 2026-06-29 に完全削除（`evals/` / `scripts/eval-run.sh` / `tests/test-eval.bats`）。コードは git history で復元可能
-- **エージェントチーム版**: コスト・時間対効果が低く棄却。詳細は `docs/progress/` のポストモーテム参照。コードは git history (`a79074e`) で復元可能
+- **エージェントチーム版**: コスト・時間対効果が低く棄却。詳細は `.notes/progress/` (gitignore、operator-private) のポストモーテム参照。コードは git history (`a79074e`) で復元可能
 - **Mem0 Cloud MCP 統合**: 2026-02-26 に main へマージしたが `.mcp.json` 不在 + ヘルスチェック形骸化により 32 日間ゼロ稼働。2026-05-23 撤去。後継はローカル JSON-LD concept cluster graph (`graph.jsonld`)
 - **汎用トレンドリサーチ (tech/personal/ai_dev)**: 固定 domains が構造的飽和を招いた（contemplative 系 37%）ため 2026-05-27 に廃止。各 track を研究 repo にマッピングする方式へ転換
 

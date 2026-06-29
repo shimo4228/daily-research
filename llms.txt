@@ -25,11 +25,12 @@
 
 ## Data
 
-- [graph.jsonld](graph.jsonld): concept cluster graph — 250 article nodes across 7 broad and 57 sub clusters; schema.org JSON-LD research-history metadata, updated incrementally by Pass 2
+- [graph.jsonld](graph.jsonld): concept cluster graph — schema.org JSON-LD research-history metadata; report nodes grouped into 7 broad concept clusters, updated incrementally by Pass 2 (query the file itself for live node counts)
 
 ## Related
 
 - [authorship-strategy](https://doi.org/10.5281/zenodo.20263316): mapped research repo (track: authorship)
 - [contemplative-agent](https://doi.org/10.5281/zenodo.19212118): mapped research repo (track: contemplative)
 - [agent-attribution-practice](https://doi.org/10.5281/zenodo.19652013): mapped research repo (track: aap)
+- [agent-knowledge-cycle](https://doi.org/10.5281/zenodo.19200726): mapped research repo (track: akc)
 - [llmstxt.org](https://llmstxt.org/): the llms.txt standard this file follows

@@ -64,7 +64,7 @@ daily-research.sh
 ├── Pass 1: Opus theme selection (--max-turns 15, stream-json)
 │   ├── Success → Pass themes to Sonnet
 │   └── Failure → Sonnet fallback (handles theme selection + research)
-└── Pass 2: Sonnet research & writing (--max-turns 40)
+└── Pass 2: Sonnet research & writing (--max-turns 55)
     ├── WebSearch + WebFetch (multi-stage research)
     ├── Write reports → Obsidian vault
     └── Update graph.jsonld (record reinforced concepts)
@@ -102,7 +102,7 @@ launchctl list | grep daily-research
 | Auth valid | `./scripts/check-auth.sh` | "OK: Claude authentication is valid" |
 | Today's log exists | `ls logs/$(date +%Y-%m-%d).log` | File exists |
 | Log shows success | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | Match found |
-| Reports generated | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | 2 files |
+| Reports generated | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | One file per configured track |
 
 ### Log Messages Reference
 
@@ -110,7 +110,7 @@ launchctl list | grep daily-research
 |---------|---------|
 | `SUMMARY Pass1: cost=... turns=... duration=...` | Pass 1 execution statistics (cost, turns, duration, tokens) |
 | `Pass 1 completed: themes selected by Opus` | Opus theme selection succeeded |
-| `Pass 1 themes: tech="...", personal="..."` | Selected themes logged for reference |
+| `Pass 1 themes: <track>="...", ...` | Selected themes per track logged for reference |
 | `WARN: Pass 1 failed (exit code N), falling back to Sonnet` | Opus failed, Sonnet will handle everything |
 | `WARN: Pass 1 output failed JSON validation` | Opus returned invalid JSON, Sonnet fallback |
 | `Fallback: Sonnet handles theme selection + research` | Sonnet is doing all work (normal fallback behavior) |

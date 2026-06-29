@@ -64,7 +64,7 @@ daily-research.sh
 ├── Pass 1: Opus テーマ選定 (--max-turns 15, stream-json)
 │   ├── 成功 → テーマを Sonnet に渡す
 │   └── 失敗 → Sonnet フォールバック（テーマ選定 + リサーチを一括実行）
-└── Pass 2: Sonnet リサーチ・執筆 (--max-turns 40)
+└── Pass 2: Sonnet リサーチ・執筆 (--max-turns 55)
     ├── WebSearch + WebFetch（多段リサーチ）
     ├── レポート書き込み → Obsidian vault
     └── graph.jsonld を更新（補強した concept を記録）
@@ -102,7 +102,7 @@ launchctl list | grep daily-research
 | 認証有効 | `./scripts/check-auth.sh` | "OK: Claude authentication is valid" |
 | 今日のログが存在 | `ls logs/$(date +%Y-%m-%d).log` | ファイルが存在 |
 | ログに成功メッセージ | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | マッチあり |
-| レポートが生成済み | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | 2ファイル |
+| レポートが生成済み | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | 設定したトラック数のファイル |
 
 ### ログメッセージ一覧
 
@@ -110,7 +110,7 @@ launchctl list | grep daily-research
 |---------|------|
 | `SUMMARY Pass1: cost=... turns=... duration=...` | Pass 1 の実行統計（コスト、ターン数、所要時間、トークン数） |
 | `Pass 1 completed: themes selected by Opus` | Opus テーマ選定が成功 |
-| `Pass 1 themes: tech="...", personal="..."` | 選定されたテーマの記録 |
+| `Pass 1 themes: <track>="...", ...` | トラックごとの選定テーマの記録 |
 | `WARN: Pass 1 failed (exit code N), falling back to Sonnet` | Opus 失敗、Sonnet が全処理を担当 |
 | `WARN: Pass 1 output failed JSON validation` | Opus が不正な JSON を返した、Sonnet フォールバック |
 | `Fallback: Sonnet handles theme selection + research` | Sonnet が全作業を実行（正常なフォールバック動作） |

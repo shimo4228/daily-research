@@ -9,11 +9,11 @@ This is the self-contained AI reference for **daily-research**, an autonomous re
 - **Repository**: github.com/shimo4228/daily-research
 - **License**: MIT
 - **Scheduler**: macOS `launchd`, daily at 05:00
-- **Runtime**: Bash + Claude Code CLI (`claude -p`); zero Python
+- **Runtime**: Bash + Claude Code CLI (`claude -p`); stdlib-only python3 (`json` / `tomllib` / `re`) for JSON/TOML parsing — no pip dependencies, no orchestration framework
 - **Models**: Claude Opus (Pass 1, theme selection), Claude Sonnet (Pass 2, research and writing)
-- **Tracks**: 3 — `authorship`, `contemplative`, `aap`
-- **Mapped repos and DOIs**: authorship-strategy (10.5281/zenodo.20263316), contemplative-agent (10.5281/zenodo.19212118), agent-attribution-practice (10.5281/zenodo.19652013)
-- **Persistent memory**: `graph.jsonld` — schema.org JSON-LD, 314 nodes (250 `Article` + 64 `Thing`), 7 broad clusters, 57 sub clusters
+- **Tracks**: 4 — `authorship`, `contemplative`, `aap`, `akc`
+- **Mapped repos and DOIs**: authorship-strategy (10.5281/zenodo.20263316), contemplative-agent (10.5281/zenodo.19212118), agent-attribution-practice (10.5281/zenodo.19652013), agent-knowledge-cycle (10.5281/zenodo.19200726)
+- **Persistent memory**: `graph.jsonld` — schema.org JSON-LD; 439 nodes (342 `Article` + 96 `Thing` + 1 self-node typed Dataset/CreativeWork), 7 broad clusters, 89 sub clusters (snapshot 2026-06-29; Article and sub-cluster counts grow daily — query `graph.jsonld` for the current figure)
 - **Broad clusters**: contemplative_meditation_science, predictive_processing_active_inference, ai_alignment_contemplative, ai_developer_ecosystem, frontier_ai_models_platforms, b2a_visibility_governance, fintech_money_payments
 - **Config format**: TOML (`config.toml`, `config.example.toml`)
 - **Tests**: bats — 3 suites (daily-research, e2e-mock, lib) + pytest (dr_pipeline)
@@ -21,19 +21,20 @@ This is the self-contained AI reference for **daily-research**, an autonomous re
 - **Deduplication**: `past_topics.json`, 30-day window
 - **Key scripts**: `scripts/daily-research.sh`, `scripts/coverage-report.sh`, `scripts/bootstrap-graph.sh`, `scripts/check-auth.sh`
 - **ADRs**: ADR-0001 (research-repo feedback engine, 2026-05-27), ADR-0002 (reports as frontier-diff, 2026-06-29), ADR-0003 (cross-line knowledge cycle, 2026-06-29)
-- **Graph date range**: 2026-02-24 to 2026-05-27
+- **Graph date range**: 2026-02-24 to 2026-06-29
 - **Author**: shimo4228 (shimomoto-tatsuya)
 - **Author research lines**: Agent Knowledge Cycle / AKC (10.5281/zenodo.19200726), Contemplative Agent (10.5281/zenodo.19212118), Agent Attribution Practice / AAP (10.5281/zenodo.19652013), authorship-strategy (10.5281/zenodo.20263316)
 
 ## Mapped research repositories
 
-daily-research feeds three DOI-registered research repositories. Each `config.toml` track points at one repo, and that repo's `graph.jsonld` defines the track's area of interest at runtime.
+daily-research feeds four DOI-registered research repositories. Each `config.toml` track points at one repo, and that repo's `graph.jsonld` defines the track's area of interest at runtime.
 
 | Track | Research repository | Zenodo DOI | Concept domain |
 |---|---|---|---|
 | `authorship` | authorship-strategy | 10.5281/zenodo.20263316 | Authorship, attribution, idea-rescue strategy in the AI era |
 | `contemplative` | contemplative-agent | 10.5281/zenodo.19212118 | Contemplative AI, meditation science, predictive processing |
 | `aap` | agent-attribution-practice | 10.5281/zenodo.19652013 | AI liability, attribution practice, AI governance |
+| `akc` | agent-knowledge-cycle | 10.5281/zenodo.19200726 | Agent knowledge cycle, signal-first research, AI knowledge management |
 
 ## What is daily-research?
 
@@ -61,7 +62,7 @@ daily-research is the write side of a knowledge cycle shared across the author's
 
 ## What is the concept cluster graph (graph.jsonld)?
 
-The concept cluster graph is defined as `graph.jsonld`, a schema.org JSON-LD file that serves as daily-research's persistent memory. It holds 314 nodes: 250 `Article` nodes (one per report) and 64 `Thing` nodes (one per cluster), organized into 7 broad clusters and 57 sub clusters. Each `Article` carries `track`, `broadCluster`, `subCluster`, and optionally `reinforces` and `contributesToRepo`. The schema — node types, cluster naming, and the five integrity rules — is documented in `docs/graph-schema.md`. The file is committed to git because it encodes cluster structure, not personal data.
+The concept cluster graph is defined as `graph.jsonld`, a schema.org JSON-LD file that serves as daily-research's persistent memory. It holds one `Article` node per report and one `Thing` node per cluster, organized into 7 broad clusters and dozens of sub clusters (see Project Facts for a dated node-count snapshot). Each `Article` carries `track`, `broadCluster`, `subCluster`, and optionally `reinforces` and `contributesToRepo`. The schema — node types, cluster naming, and the five integrity rules — is documented in `docs/graph-schema.md`. The file is committed to git because it encodes cluster structure, not personal data.
 
 ## How does daily-research contribute back to a research repository?
 
@@ -101,7 +102,7 @@ shimo4228 (shimomoto-tatsuya) is the author of daily-research and of the researc
 - **Coverage gap** is defined as a concept present in a repo's graph but absent from the `reinforces` history.
 - **reinforces** is defined as the `Article` field recording which repo concept `@id`s a report strengthened.
 - **Broad cluster** is defined as a top-level concept grouping in `graph.jsonld` (a `Thing` with no parent); there are 7.
-- **Sub cluster** is defined as a finer grouping under a broad cluster (a `Thing` with `broaderClusterOf`); there are 57.
+- **Sub cluster** is defined as a finer grouping under a broad cluster (a `Thing` with `broaderClusterOf`).
 - **Pass 1** is defined as the Opus theme-selection stage; **Pass 2** is defined as the Sonnet research-and-writing stage.
 - **Bootstrap** is defined as the one-shot `bootstrap-graph.sh` run that builds `graph.jsonld` from existing topic history.
 - **frontier-diff** is defined as the output-side dual of signal-first: a report is the delta against a repo's current concept frontier, not a digest of accumulated content (see ADR-0002).

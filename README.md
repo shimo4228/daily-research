@@ -2,55 +2,36 @@ Language: English | [日本語](README.ja.md)
 
 # daily-research
 
-A research feedback engine for your own research repositories, powered by [Claude Code](https://docs.anthropic.com/en/docs/claude-code) non-interactive mode and macOS `launchd`.
+**A research feedback engine for your own research repositories.** Every morning, [Claude Code](https://docs.anthropic.com/en/docs/claude-code) reads the concept graph of each repo you maintain, finds the concepts external research hasn't reinforced yet, researches the latest work that closes those gaps, and writes reports into your [Obsidian](https://obsidian.md) vault — each ending with a "contribution to this repo" section you fold back in by hand.
 
-**Shell orchestration + a stdlib-only Python parsing layer. No pip dependencies at runtime.**
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/shimo4228/daily-research) [![GitMCP](https://img.shields.io/endpoint?url=https://gitmcp.io/badge/shimo4228/daily-research)](https://gitmcp.io/shimo4228/daily-research) ![python](https://img.shields.io/badge/python-3.11%2B%20stdlib-3776ab.svg)
 
-Every morning at 5:00 AM, Claude reads the concept graph of each research repository you maintain, finds the concepts that external research has not reinforced yet, researches the latest work that fills those gaps, and writes reports into your [Obsidian](https://obsidian.md) vault. The reports end with a "contribution to this repo" section so you can fold the findings back into the source repository by hand.
+It runs unattended via macOS `launchd`, with no API plumbing and no orchestration framework: a shell script drives Claude Code's non-interactive mode (`claude -p`), and a small stdlib-only Python module parses JSON/TOML. The intelligence lives in the prompts.
 
-This started as a generic trend-research tool (tech / personal / ai_dev tracks). On 2026-05-27 it was reworked: fixed topic domains caused structural saturation (one concept cluster grew to 37% of all topics), so each track is now mapped to one research repository and themes are driven by that repo's concept coverage gaps. See [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md) for the full rationale.
+> **Who it's for:** anyone maintaining one or more research repositories with a `graph.jsonld` concept graph who wants a daily, self-directed stream of external research aimed at the repo's actual coverage gaps — not generic trends.
 
-## How It Works
+## How it works
 
-```
-launchd (AM 5:00)
-  └─ daily-research.sh
-       ├── Auth check (check-auth.sh)
-       ├── Sync each repo's graph → .repo-graphs/<track>.jsonld
-       ├── coverage-report.sh        # uncovered concepts per track
-       │
-       ├── Pass 1: Opus (theme selection)
-       │     ├── Read config.toml          # track → repo mapping
-       │     ├── Read repo graphs + coverage report
-       │     ├── WebSearch                 # research reinforcing uncovered concepts
-       │     └── Score & select one theme per track
-       │
-       ├── Pass 2: Sonnet (research & writing)
-       │     ├── WebSearch x 10-20         # multi-stage research
-       │     ├── WebFetch (primary sources)
-       │     ├── Write reports             # → Obsidian vault
-       │     ├── Append "contribution to this repo" section
-       │     ├── Update past_topics.json   # topic history
-       │     └── Update graph.jsonld       # record reinforced concepts
+```mermaid
+flowchart TD
+    cron["launchd — 05:00 daily"] --> orch["daily-research.sh"]
+    orch --> prep["auth probe · sync repo graphs → .repo-graphs/ · coverage-report.sh"]
+    prep --> p1["Pass 1 · Opus<br/>theme selection (coverage-gap driven)<br/>one theme per track"]
+    p1 -->|themes JSON| p2["Pass 2 · Sonnet<br/>10–20 web searches · fetch sources<br/>write reports · update graph.jsonld"]
+    p1 -.->|Pass 1 fails| p2
+    p2 --> out[("Obsidian vault — reports<br/>+ graph.jsonld history")]
 ```
 
-**2-pass architecture**: Opus handles theme selection (deep reasoning over the repo graphs), Sonnet handles research and writing (faster, cheaper). If Pass 1 fails, Sonnet handles everything as a fallback.
+The pipeline runs two Claude Code passes: **Opus** selects themes (deep reasoning over the repo graphs), then **Sonnet** does the search-heavy research and writing. If Pass 1 fails, Sonnet handles theme selection too. Themes are driven by **concept coverage**, not trends: `coverage-report.sh` computes "every concept in a repo's graph minus the concepts already reinforced in `graph.jsonld`", and Pass 1 prioritizes research that closes that gap. A trend is transient; an uncovered concept is a concrete, repeatable target.
 
-**Concept coverage drives the search.** Instead of chasing trends, the pipeline computes "every concept `@id` in a repo's graph minus the concepts already reinforced in `graph.jsonld`" and asks Pass 1 to prioritize external research that closes those gaps. Trends come and go; an uncovered concept is a concrete, repeatable target.
+This started as a generic trend-research tool. Fixed topic domains caused structural saturation (one concept cluster grew to 37% of all topics), so on 2026-05-27 each track was remapped to one research repository — see [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md).
 
-The key insight: Claude Code's `-p` flag turns it into a fully autonomous research agent. No API plumbing, no orchestration framework — a shell orchestrator drives the passes, and a small stdlib-only Python module (`scripts/lib/dr_pipeline.py`) handles JSON/TOML parsing. The intelligence lives in the prompt.
+## Core concepts
 
-## Features
-
-- **2-pass model routing** -- Opus for theme selection, Sonnet for research and writing
-- **Repo-mapped research tracks** -- each track maps to one research repository; the area of interest is derived from that repo's `graph.jsonld`, not from fixed keyword domains
-- **Coverage-driven theme selection** -- `coverage-report.sh` lists the uncovered / thinly-supported concepts per repo and injects them into Pass 1
-- **Concept cluster graph** -- `graph.jsonld`, a schema.org JSON-LD persistent memory (310 articles across 7 broad and 82 sub clusters); Pass 2 updates it incrementally each run
-- **Topic history** -- `past_topics.json` accumulates a chronological log of selected themes (Pass 2 updates it; Pass 1's de-duplication role moved to `coverage-report.sh`)
-- **Multi-stage deep research** -- not just a summary; generates research questions, searches 10-20 times, cross-validates sources
-- **Repo feedback loop** -- each report ends with a "contribution to this repo" section naming the reinforced concepts and suggesting how to extend the repo
-- **Obsidian-native output** -- reports with YAML frontmatter, ready for your vault
-- **Operational safety nets** -- lock files, log rotation, auth checks, macOS notifications, automatic Sonnet fallback
+- **Coverage gap** — a concept present in a repo's graph but not yet recorded under `reinforces` in `graph.jsonld`. Gaps are the primary targets of theme selection and shrink as Pass 2 records each reinforced concept.
+- **Frontier-diff reporting** — a report is the *delta* against a repo's current concept frontier, not a digest of accumulated content. This is the output-side dual of the same signal-first filter that drives theme selection ([ADR-0002](docs/adr/0002-reports-as-frontier-diff.md)).
+- **Concept cluster graph** — `graph.jsonld`, a schema.org JSON-LD persistent memory whose report nodes are grouped into 7 broad concept clusters; Pass 2 updates it incrementally each run. Schema in [graph-schema.md](docs/graph-schema.md).
+- **Repo feedback loop** — repos are referenced **read-only**; the pipeline never edits them. Contributions flow through vault reports that a human folds back in, avoiding cross-repo pollution.
 
 ## Prerequisites
 
@@ -58,204 +39,110 @@ The key insight: Claude Code's `-p` flag turns it into a fully autonomous resear
 |-------------|-------|
 | [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) | `brew install claude` or via npm |
 | [Claude Max plan](https://claude.ai) | For zero-cost non-interactive usage |
-| `python3` >= 3.11 | Stdlib only (`json` / `tomllib` / `re`) for the JSON/TOML parsing layer. macOS system 3.9 lacks `tomllib`; use Homebrew's `python3` |
-| macOS | Uses `launchd` for scheduling (Linux users: adapt to `cron` or `systemd`) |
-| Obsidian (optional) | Any markdown-compatible tool works |
-| Research repositories | One or more repos that carry a `graph.jsonld` concept graph (see [graph-schema.md](docs/graph-schema.md)) |
+| `python3` >= 3.11 | Stdlib only (`json` / `tomllib` / `re`) for JSON/TOML parsing. macOS system 3.9 lacks `tomllib`; use Homebrew's `python3` |
+| macOS | Uses `launchd` for scheduling (Linux: adapt to `cron` / `systemd`) |
+| Obsidian (optional) | Any markdown tool works |
+| Research repositories | One or more repos carrying a `graph.jsonld` concept graph ([schema](docs/graph-schema.md)) |
 
-## Install as a Claude Code skill
-
-```bash
-git clone https://github.com/shimo4228/daily-research.git \
-  ~/.claude/skills/daily-research
-```
-
-The repo ships a [`SKILL.md`](SKILL.md) manifest at root, so Claude Code recognizes it as a skill. After cloning you can invoke it manually as `/daily-research`, or set up scheduled execution — see "Quick Start" below for launchd (macOS). For Linux, swap the launchd step for cron or systemd.
-
-## Quick Start
+## Quick start
 
 ```bash
 # 1. Clone
 git clone https://github.com/shimo4228/daily-research.git daily-research
 cd daily-research
 
-# 2. Configure
+# 2. Configure — set vault_path and map each track to a research repo
 cp config.example.toml config.toml
-# Edit config.toml: set vault_path and map each track to a research repo
 
 # 3. Make scripts executable
-chmod +x scripts/daily-research.sh scripts/coverage-report.sh \
-         scripts/check-auth.sh scripts/bootstrap-graph.sh
+chmod +x scripts/*.sh
 
-# 4. Verify Claude auth
+# 4. Verify Claude auth (real OAuth probe)
 ./scripts/check-auth.sh
 
 # 5. (Optional) Bootstrap the concept graph from existing topic history
-#    Run once if you have a past_topics.json to classify into clusters.
 ./scripts/bootstrap-graph.sh
 
-# 6. Test run (manual; use a separate terminal, not inside a Claude Code session)
+# 6. Test run — in a SEPARATE terminal, never inside a Claude Code session
 ./scripts/daily-research.sh
 
 # 7. Schedule with launchd (optional)
-cp com.example.daily-research.plist com.daily-research.plist
-# Edit: replace YOUR_USERNAME with your macOS username
+cp com.example.daily-research.plist com.daily-research.plist   # edit YOUR_USERNAME
 ln -sf "$(pwd)/com.daily-research.plist" ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 ```
 
-## Project Structure
+**Install as a Claude Code skill:** the repo ships a [`SKILL.md`](SKILL.md) manifest at root, so cloning it into `~/.claude/skills/daily-research` makes it invocable as `/daily-research`.
 
-```
-daily-research/
-├── scripts/
-│   ├── daily-research.sh       # Orchestrator (sources lib/, preflight → Pass 1/2/3)
-│   ├── lib/                    # Sourced shell libraries + the Python parsing module
-│   │   ├── env.sh              # Env sanitize + PATH
-│   │   ├── log.sh              # log() / log_init() (chmod at creation, rotation)
-│   │   ├── notify.sh           # notify() (osascript guard)
-│   │   ├── lock.sh             # acquire_lock()/release_lock() (mkdir-atomic)
-│   │   ├── graph.sh            # check_graph_health()/sync_repo_graphs()
-│   │   ├── auth.sh             # real_auth_probe() (real OAuth probe, shared by 3 entrypoints)
-│   │   ├── claude.sh           # run_claude()/classify_exit() (E_AUTH/E_TRANSIENT/E_FATAL)
-│   │   └── dr_pipeline.py      # Single stdlib-only JSON/TOML parsing module (subcommands)
-│   ├── bootstrap-graph.sh      # One-shot graph.jsonld bootstrap (Opus clustering)
-│   ├── coverage-report.sh      # Uncovered-concept report, injected into Pass 1
-│   └── check-auth.sh           # Real OAuth probe health check (shares lib/auth.sh)
-├── prompts/
-│   ├── theme-selection-prompt.md  # Pass 1: repo-graph-driven theme selection (Opus)
-│   ├── task-prompt.md             # Pass 2: research & writing instruction (Sonnet)
-│   └── research-protocol.md       # Pass 2: research protocol (quality core, system prompt)
-├── templates/
-│   └── report-template.md      # Report format with YAML frontmatter
-├── graph.jsonld                # Persistent memory: concept cluster graph + reinforcement history (tracked)
-├── .repo-graphs/               # Per-track synced repo graphs (generated at startup, gitignored)
-├── config.example.toml         # Track → repo mapping, scoring, output (config.toml is gitignored)
-├── past_topics.example.json    # Topic history schema reference
-├── tests/                      # bats (daily-research / e2e-mock / lib) + pytest (dr_pipeline_test.py) + fixtures/
-├── docs/
-│   ├── RUNBOOK.md / RUNBOOK.ja.md   # Operations guide
-│   ├── CONTRIB.md / CONTRIB.ja.md   # Development guide
-│   ├── graph-schema.md              # graph.jsonld schema spec
-│   ├── adr/                         # Architecture Decision Records
-│   └── progress/                    # Postmortems and evaluation reports
-└── com.example.daily-research.plist  # launchd schedule template
-```
+## Configure a track
 
-## Concept Coverage Engine
-
-Each track points at one research repository. At startup the repo's `graph.jsonld` is copied into `.repo-graphs/<track>.jsonld` (read-only; the source repo is never edited). `coverage-report.sh` then diffs two sets:
-
-- every concept `@id` declared in the repo's graph, and
-- every concept already recorded under `reinforces` in this project's `graph.jsonld`.
-
-The difference is the set of **uncovered concepts**. Pass 1 receives this report and selects external research that reinforces those concepts first. When Pass 2 writes a report, it records the concepts it reinforced back into `graph.jsonld` via the `reinforces` field, so the next run sees a smaller gap.
-
-This is the *output* side of the same signal-first filter that drives theme selection: a report is the **delta** against each repo's current concept frontier, not a digest of accumulated content ([ADR-0002](docs/adr/0002-reports-as-frontier-diff.md)).
-
-`graph.jsonld` itself follows a schema.org JSON-LD model (`Article` nodes for reports, `Thing` nodes for clusters). The full schema — node types, cluster naming, and integrity rules — is documented in [graph-schema.md](docs/graph-schema.md).
-
-## Cross-line knowledge cycle
-
-In the author's own use, daily-research is also the *write* side of a knowledge cycle shared across several DOI-registered research lines (Agent Knowledge Cycle, Agent Attribution Practice, Contemplative Agent, authorship-strategy). It writes reports into a shared knowledge substrate; each research line consults that substrate read-only and folds findings back into its own concept graph by hand, so a concept one line absorbs can become another line's next research input. If you maintain several research repositories with linked concept graphs, a similar cross-line cycle emerges naturally. This is observed architecture, not a roadmap, and the substrate stays operator-private, so public docs describe it only generically. The filter governing what each line writes and reads is the same signal-first principle — the frontier-diff above is its output-side dual. See [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md).
-
-## Customization
-
-### Mapping a track to a research repo
-
-Edit `config.toml` to point each track at a repository:
+Each track points at one research repository; there are no fixed `domains` — the area of interest is derived from the repo's graph at runtime. Define one track per repo you want fed.
 
 ```toml
 [tracks.repo_a]
 name = "Research Repo A Contribution"
-focus = "Discover external research that reinforces and extends the concept system of research repo A"
+focus = "External research that reinforces and extends research repo A's concept system"
 target_repo = "/path/to/your/research-repo-a"
 target_graph = ".repo-graphs/repo_a.jsonld"   # cwd-relative path after sync
 target_doi = "10.xxxx/zenodo.xxxxxxxx"          # optional; the repo's DOI if it has one
-sources = [
-  "Semantic Scholar (your repo's domain keywords)",
-  "arXiv (relevant categories for the repo)",
-]
+sources = ["Semantic Scholar (your repo's keywords)", "arXiv (relevant categories)"]
 scoring_criteria = [
-  { name = "Concept reinforcement", weight = 35, desc = "Reinforces an uncovered / thinly-supported concept" },
-  { name = "Research recency", weight = 25, desc = "Latest research or development" },
-  { name = "Repo frontier fit", weight = 40, desc = "Serves the repo's next direction" },
+  { name = "Concept reinforcement", weight = 35, desc = "Reinforces an uncovered concept" },
+  { name = "Research recency",      weight = 25, desc = "Latest research or development" },
+  { name = "Repo frontier fit",     weight = 40, desc = "Serves the repo's next direction" },
 ]
 ```
 
-There are no fixed `domains`: the area of interest is derived from the repo's graph at runtime. Define one track per repo you want fed.
+Reports are generated in Japanese by default; change the language constraint in `prompts/research-protocol.md`. See [CONTRIB](docs/CONTRIB.md) for tuning research depth, CLI flags, and environment variables.
 
-### Language
+## Project structure
 
-The prompt files (`prompts/`) and report template are written in Japanese. Reports are generated in Japanese by default. To change the output language:
-
-1. Edit the language constraint in `prompts/research-protocol.md`:
-   ```
-   - 日本語で全て出力すること  →  - Output everything in English
-   ```
-2. Translate `prompts/research-protocol.md` and `templates/report-template.md` to your preferred language.
-
-### Tuning Research Depth
-
-Edit `prompts/research-protocol.md` to adjust:
-- Number of search queries per topic
-- Source validation requirements
-- Report structure and length
-
-### Changing the Schedule
-
-Edit the plist `StartCalendarInterval`:
-
-```xml
-<key>Hour</key>
-<integer>7</integer>  <!-- Change to 7 AM -->
+```
+daily-research/
+├── scripts/
+│   ├── daily-research.sh       # Orchestrator (sources lib/, preflight → Pass 1/2)
+│   ├── lib/                    # Sourced shell libraries + the Python parsing module
+│   │   ├── env.sh log.sh notify.sh lock.sh graph.sh auth.sh claude.sh
+│   │   └── dr_pipeline.py      # Single stdlib-only JSON/TOML parsing module
+│   ├── coverage-report.sh      # Uncovered-concept report, injected into Pass 1
+│   ├── bootstrap-graph.sh      # One-shot graph.jsonld bootstrap (Opus clustering)
+│   ├── check-auth.sh           # Real OAuth probe health check (shares lib/auth.sh)
+│   └── pre-commit.sh           # Secret / syntax guard
+├── prompts/                    # Pass 1 theme selection, Pass 2 task + research protocol
+├── templates/report-template.md
+├── graph.jsonld                # Persistent memory: concept clusters + reinforcement history
+├── config.example.toml         # Track → repo mapping (config.toml is gitignored)
+├── tests/                      # bats (daily-research / e2e-mock / lib) + pytest (dr_pipeline_test.py)
+└── docs/                       # RUNBOOK, CONTRIB, graph-schema, adr/
 ```
 
-Then reload: `launchctl unload ... && launchctl load ...`
-
-## Key Design Decisions
+## Key design decisions
 
 | Decision | Why |
 |----------|-----|
-| Each track = one research repo (coverage-gap driven) | Fixed topic domains caused structural saturation; mapping to a repo graph and prioritizing uncovered concepts prevents domain narrowing ([ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)) |
-| Reports as frontier-diff (signal-first output dual) | A report is the delta against each repo's evolving concept graph, not a digest — the output side of the same filter that drives theme selection ([ADR-0002](docs/adr/0002-reports-as-frontier-diff.md)) |
-| Local JSON-LD graph instead of external MCP memory | The previous Mem0 MCP integration ran zero times for 32 days due to silent failure; a local `graph.jsonld` is "if the file exists, it works" and fails loudly |
-| Read-only repo reference | The pipeline never edits the source repos; contributions flow through vault reports that a human folds back in, avoiding cross-repo pollution |
+| Each track = one research repo (coverage-gap driven) | Fixed topic domains caused structural saturation; mapping to a repo graph prevents domain narrowing ([ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)) |
+| Reports as frontier-diff | A report is the delta against a repo's evolving concept graph, not a digest ([ADR-0002](docs/adr/0002-reports-as-frontier-diff.md)) |
+| Local JSON-LD graph, not external MCP memory | The previous Mem0 MCP integration ran zero times for 32 days due to silent failure; a local file fails loudly |
 | 2-pass (Opus + Sonnet) | Opus is stronger at theme selection; Sonnet is faster and cheaper for research and writing |
-| Sonnet fallback on Pass 1 failure | Resilience: if Opus times out or fails, Sonnet handles theme selection too |
-| `--append-system-prompt-file` (not `--system-prompt-file`) | Preserves Claude Code's default capabilities while adding research instructions |
-| `--allowedTools` (not `--dangerously-skip-permissions`) | Minimum-privilege: Pass 1 is read-only, Pass 2 adds write |
-| `--max-turns` for timeout control | Process-external timeouts (gtimeout) kill claude via signal, causing data loss |
-| Shell orchestration + stdlib Python parser | No pip dependencies at runtime; JSON/TOML parsing lives in one testable `dr_pipeline.py` module instead of scattered inline `python3 -c` snippets (kills test/source copy-paste drift) |
-| Real auth probe, not `claude --version` | `--version` succeeds even with an expired OAuth token; a cheap Haiku probe inspects `is_error`/`api_error_status` so expiry fails loudly instead of cascading into a double-401 |
-| TOML config | Human-readable, supports nested structures for tracks/criteria |
-| `< /dev/null` stdin redirect | Prevents MCP stdio communication from conflicting with terminal stdin (root cause of MCP hangs) |
+| Read-only repo reference | Contributions flow through vault reports a human folds back in, avoiding cross-repo pollution |
+| Shell orchestration + stdlib Python parser | No pip dependencies at runtime; JSON/TOML parsing lives in one testable `dr_pipeline.py` module |
+
+Operational rationale (real auth probe vs `--version`, `--append-system-prompt-file`, `--allowedTools`, `--max-turns`, `< /dev/null` stdin redirect) lives in [CONTRIB](docs/CONTRIB.md). In the author's own use, daily-research is also the *write* side of a knowledge cycle shared across several research lines — observed architecture, not a roadmap ([ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md)).
 
 ## Gotchas
 
-- **Claude Code plugins cause hangs** -- If you have Claude Code plugins installed globally, their MCP servers initialize on every `claude -p` call, adding minutes of overhead or causing hangs. Create `.claude/settings.json` in the project root to disable them:
-  ```json
-  {
-    "enabledPlugins": {
-      "plugin-name@marketplace": false
-    }
-  }
-  ```
-  List each of your installed plugins and set them to `false`. Check installed plugins with `claude plugin list`. There is currently no blanket "disable all" option ([tracking issue](https://github.com/anthropics/claude-code/issues/20873)).
-- **OAuth token expires ~4 days** -- Run `claude` interactively periodically to refresh. The pipeline runs a real Haiku auth probe before Pass 1, so an expired token fails loudly with a re-auth notification (and skips the wasteful Sonnet fallback) instead of silently double-failing
-- **`ANTHROPIC_API_KEY` must be unset** -- If set, Claude uses per-token billing instead of Max plan. The script handles this with `unset ANTHROPIC_API_KEY`
-- **launchd + shell profile** -- `launchd` does NOT source `.zshrc`. All PATH entries must be explicit in the script and plist
-- **`--max-turns`** -- Pass 1 uses 15 turns (theme selection), Pass 2 uses 55 turns (research). These are guidelines, not hard limits
-- **Do NOT run from inside Claude Code** -- `claude -p` cannot be nested inside another Claude Code session; run it in a separate terminal
+- **Run in a separate terminal** — `claude -p` cannot be nested inside another Claude Code session.
+- **OAuth token expires ~4 days** — refresh by running `claude` interactively. The real auth probe fails loudly with a re-auth notification instead of silently double-failing.
+- **`ANTHROPIC_API_KEY` must be unset** — if set, Claude uses per-token billing instead of the Max plan. The script handles this with `unset`.
+- **Claude Code plugins cause hangs** — globally-installed plugins initialize their MCP servers on every `claude -p` call. Disable them per-project in `.claude/settings.json` (see [RUNBOOK](docs/RUNBOOK.md)).
+- **launchd doesn't source `.zshrc`** — all PATH entries must be explicit in the script and plist.
 
 ## Docs
 
-- [RUNBOOK.md](docs/RUNBOOK.md) / [RUNBOOK.ja.md](docs/RUNBOOK.ja.md) -- Operations: monitoring, troubleshooting, common issues
-- [CONTRIB.md](docs/CONTRIB.md) / [CONTRIB.ja.md](docs/CONTRIB.ja.md) -- Development: testing, CLI flags, environment variables
-- [graph-schema.md](docs/graph-schema.md) -- `graph.jsonld` schema: node types, cluster naming, integrity rules
-- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md) -- Why each track maps to a research repository
-- [ADR-0002](docs/adr/0002-reports-as-frontier-diff.md) -- Reports as frontier-diff: signal-first applied to output
-- [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) -- daily-research as the write side of a cross-line knowledge cycle
+- [RUNBOOK](docs/RUNBOOK.md) / [日本語](docs/RUNBOOK.ja.md) — operations: monitoring, troubleshooting
+- [CONTRIB](docs/CONTRIB.md) / [日本語](docs/CONTRIB.ja.md) — development: testing, CLI flags, environment variables
+- [graph-schema.md](docs/graph-schema.md) — `graph.jsonld` schema: node types, cluster naming, integrity rules
+- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md) · [ADR-0002](docs/adr/0002-reports-as-frontier-diff.md) · [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) — architecture decisions
 
 ## License
 
