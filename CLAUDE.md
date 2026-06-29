@@ -45,8 +45,7 @@ daily-research/
 ├── config.example.toml         # config.toml のテンプレート（Git 管理）
 ├── past_topics.json            # 過去テーマ履歴（.gitignore）
 ├── logs/                       # 実行ログ（30日でローテーション、.gitignore）
-├── evals/                      # LLM-as-Judge 評価（運用停止中、scores.jsonl は .gitignore）
-├── tests/                      # bats（daily-research / e2e-mock / lib / eval）+ pytest（dr_pipeline_test.py）+ fixtures/
+├── tests/                      # bats（daily-research / e2e-mock / lib）+ pytest（dr_pipeline_test.py）+ fixtures/
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md   # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md   # 開発ガイド
@@ -117,16 +116,9 @@ tail -f logs/$(date +%Y-%m-%d).log
 - `templates/report-template.md` は出力フォーマットの定義
 - プロンプトファイルは全て日本語。出力言語の変更は protocol.md を修正
 
-### 評価フレームワーク (LLM-as-Judge) — 運用停止中
-
-コスト対効果が低いため運用停止。`daily-research.sh` の呼び出しをコメントアウト済み。
-コード（`evals/` ディレクトリ、`scripts/eval-run.sh`）は削除せず保持。再開時はコメント解除で復旧可能。
-
-- **6次元ルーブリック**: Factual Grounding / Depth / Coherence / Specificity / Novelty / Actionability（各1-5点、30点満点）
-- **スコアログ**: `evals/scores.jsonl` に追記（.gitignore）。スキーマは `scores.example.jsonl` を参照
-
 ### 過去に試行・棄却した機能
 
+- **評価フレームワーク (LLM-as-Judge)**: 6次元ルーブリック（Factual Grounding / Depth / Coherence / Specificity / Novelty / Actionability、各1-5点）を Pass 2 成功後に Opus judge で採点していた。コスト対効果が低く 2026-02 以降運用停止 → 2026-06-29 に完全削除（`evals/` / `scripts/eval-run.sh` / `tests/test-eval.bats`）。コードは git history で復元可能
 - **エージェントチーム版**: コスト・時間対効果が低く棄却。詳細は `docs/progress/` のポストモーテム参照。コードは git history (`a79074e`) で復元可能
 - **Mem0 Cloud MCP 統合**: 2026-02-26 に main へマージしたが `.mcp.json` 不在 + ヘルスチェック形骸化により 32 日間ゼロ稼働。2026-05-23 撤去。後継はローカル JSON-LD concept cluster graph (`graph.jsonld`)
 - **汎用トレンドリサーチ (tech/personal/ai_dev)**: 固定 domains が構造的飽和を招いた（contemplative 系 37%）ため 2026-05-27 に廃止。各 track を研究 repo にマッピングする方式へ転換
@@ -139,4 +131,3 @@ tail -f logs/$(date +%Y-%m-%d).log
 - 永続メモリ層: JSON-LD concept cluster graph (`graph.jsonld`) 稼働中。Pass 2 が日次増分更新、起動時 health check
 - repo graph の未補強 concept を補強する R&D フィードバックエンジンとして稼働（2026-05-27 転換、Pass 1/2 の E2E は翌朝 launchd で検証予定）
 - Pass 1 失敗時は Sonnet 一括フォールバックで継続稼働
-- 評価フレームワーク (LLM-as-Judge) は運用停止中

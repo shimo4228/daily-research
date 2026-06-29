@@ -16,11 +16,10 @@ This is the self-contained AI reference for **daily-research**, an autonomous re
 - **Persistent memory**: `graph.jsonld` — schema.org JSON-LD, 314 nodes (250 `Article` + 64 `Thing`), 7 broad clusters, 57 sub clusters
 - **Broad clusters**: contemplative_meditation_science, predictive_processing_active_inference, ai_alignment_contemplative, ai_developer_ecosystem, frontier_ai_models_platforms, b2a_visibility_governance, fintech_money_payments
 - **Config format**: TOML (`config.toml`, `config.example.toml`)
-- **Tests**: bats — 4 suites (daily-research, e2e-mock, eval, log-summary)
+- **Tests**: bats — 3 suites (daily-research, e2e-mock, lib) + pytest (dr_pipeline)
 - **Output**: Obsidian vault, Markdown with YAML frontmatter
 - **Deduplication**: `past_topics.json`, 30-day window
 - **Key scripts**: `scripts/daily-research.sh`, `scripts/coverage-report.sh`, `scripts/bootstrap-graph.sh`, `scripts/check-auth.sh`
-- **Quality eval**: LLM-as-Judge, 6 dimensions, 30-point scale — currently suspended
 - **ADRs**: ADR-0001 (research-repo feedback engine, 2026-05-27), ADR-0002 (reports as frontier-diff, 2026-06-29), ADR-0003 (cross-line knowledge cycle, 2026-06-29)
 - **Graph date range**: 2026-02-24 to 2026-05-27
 - **Author**: shimo4228 (shimomoto-tatsuya)
@@ -88,9 +87,9 @@ daily-research uses Claude Opus for Pass 1 and Claude Sonnet for Pass 2. Opus is
 
 The output format is defined by `templates/report-template.md`: a Markdown file with YAML frontmatter, saved to `{vault_path}/{output_dir}/{date}_{track}_{slug}.md` in an Obsidian vault. Reports are prose-first; bullet lists are reserved for comparison tables or parallel enumerations of four or more items. Each report cites at least five sources with URLs, prioritizing primary sources. Every report ends with a "contribution to this repo" section that names the reinforced concepts and proposes repository extensions. Reports are generated in Japanese by default, controlled by `prompts/research-protocol.md`.
 
-## Is the quality evaluation framework active?
+## Is there a quality evaluation framework?
 
-No. The quality evaluation framework is currently suspended. It is an LLM-as-Judge system that scores each report on 6 independent dimensions — Factual Grounding, Depth of Analysis, Coherence, Specificity, Novelty, and Actionability — on a 1–5 scale, for 30 points total, appended to `evals/scores.jsonl`. It was suspended because its cost-to-value ratio was low. The call is commented out in `daily-research.sh`, and the `evals/` directory and `scripts/eval-run.sh` are retained so the framework can be restored by uncommenting.
+No. An LLM-as-Judge framework once scored each report on 6 dimensions (Factual Grounding, Depth of Analysis, Coherence, Specificity, Novelty, Actionability; 1–5 scale, 30 points total). It was suspended in 2026-02 because its cost-to-value ratio was low, and removed entirely on 2026-06-29 (`evals/`, `scripts/eval-run.sh`, and `tests/test-eval.bats`). Report quality is now governed by the signal-first theme filter and the research protocol rather than a post-hoc scoring pass. The removed code remains recoverable from git history.
 
 ## Who is shimo4228?
 

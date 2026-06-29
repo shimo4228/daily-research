@@ -12,7 +12,6 @@ cd /path/to/daily-research
 
 # 2. Make scripts executable
 chmod +x scripts/daily-research.sh
-chmod +x scripts/eval-run.sh
 chmod +x scripts/check-auth.sh
 
 # 3. Verify auth
@@ -57,19 +56,18 @@ launchctl start com.daily-research
 
 ```
 daily-research.sh
-├── MCP health check (Haiku, --max-turns 1)
-│   ├── Success → Mem0 enabled for Pass 2
-│   └── Failure → WARN, continue without Mem0
+├── Lock acquisition (atomic mkdir)
+├── Auth probe (real OAuth check)
+├── graph.jsonld health check
+├── Sync repo graphs → .repo-graphs/
+├── Coverage report (uncovered concepts → injected into Pass 1)
 ├── Pass 1: Opus theme selection (--max-turns 15, stream-json)
 │   ├── Success → Pass themes to Sonnet
 │   └── Failure → Sonnet fallback (handles theme selection + research)
-├── Pass 2: Sonnet research & writing (--max-turns 40)
-│   ├── Mem0 search-memories (if available)
-│   ├── WebSearch + WebFetch (multi-stage research)
-│   ├── Write reports → Obsidian vault
-│   └── Mem0 add-memory (if available)
-└── Evaluation: LLM-as-Judge (non-fatal, 6 dimensions x Opus)
-    └── Scores appended to evals/scores.jsonl
+└── Pass 2: Sonnet research & writing (--max-turns 40)
+    ├── WebSearch + WebFetch (multi-stage research)
+    ├── Write reports → Obsidian vault
+    └── Update graph.jsonld (record reinforced concepts)
 ```
 
 ## Monitoring
@@ -105,7 +103,6 @@ launchctl list | grep daily-research
 | Today's log exists | `ls logs/$(date +%Y-%m-%d).log` | File exists |
 | Log shows success | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | Match found |
 | Reports generated | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | 2 files |
-| Eval scores saved | `grep "$(date +%Y-%m-%d)" evals/scores.jsonl \| wc -l` | 2 entries |
 
 ### Log Messages Reference
 
@@ -119,13 +116,8 @@ launchctl list | grep daily-research
 | `Fallback: Sonnet handles theme selection + research` | Sonnet is doing all work (normal fallback behavior) |
 | `SUMMARY Pass2: cost=... turns=... duration=...` | Pass 2 execution statistics |
 | `SUMMARY Total: cost=... duration=...` | Combined cost/duration across both passes |
-| `MCP health check passed` | Mem0 MCP is responsive, enabled for Pass 2 |
-| `WARN: MCP health check failed (exit=N)` | Mem0 MCP not responding, continuing without Mem0 |
+| `graph.jsonld health check passed` | Concept graph is valid, pipeline proceeds |
 | `Completed successfully` | Both passes completed |
-| `[eval] Evaluation start: DATE=...` | Evaluation framework started |
-| `[eval] Found N report(s)` | Number of reports found for evaluation |
-| `[eval] Saved: total=N/30 duration=Ns` | Evaluation score saved successfully |
-| `WARN: Evaluation failed (non-fatal)` | Evaluation failed but pipeline continues |
 
 ## Common Issues and Fixes
 
@@ -252,28 +244,6 @@ cat past_topics.json | python3 -m json.tool
 cp past_topics.json.bak past_topics.json
 ```
 
-### 9. MCP Health Check Failed (Mem0 Unavailable)
-
-**Symptoms**: Log shows `WARN: MCP health check failed (exit=N). Continuing without Mem0.` macOS notification says "MCP ヘルスチェック失敗（Mem0 なしで続行）".
-
-**Cause**: Mem0 MCP server is not responding, not configured, or hanging. This is non-fatal -- the pipeline continues without Mem0 memory features.
-
-**Impact**: Reports are generated normally, but without Mem0's persistent memory (no cross-session context from previous research).
-
-**Fix** (if you want Mem0 features):
-```bash
-# Check if Mem0 MCP server is running
-# (depends on your MCP configuration)
-
-# Verify MCP settings in Claude Code
-cat ~/.claude.json | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin).get('mcpServers',{}), indent=2))"
-
-# Test MCP manually (in a separate terminal)
-claude -p "Search memories for test" --max-turns 1 --model haiku
-```
-
-**Note**: If you don't use Mem0, this warning can be safely ignored. The pipeline automatically excludes Mem0 tools from Pass 2's allowedTools when the health check fails.
-
 ## Rollback Procedures
 
 ### Revert Configuration Changes
@@ -315,7 +285,6 @@ If Mac was asleep at 5:00, launchd runs the job on wake (behavior of `StartCalen
 |-----------|-------|---------------|
 | Pass 1: Theme selection | Opus | ~$0.30 |
 | Pass 2: Research & writing | Sonnet | ~$1.50 |
-| Evaluation (2 reports x 6 dims) | Opus | ~$0.50 |
-| **Total** | | **~$2.30** |
+| **Total** | | **~$1.80** |
 
 With Claude Max plan, these costs are covered by the subscription. No per-token charges.

@@ -241,16 +241,6 @@ if [ "$PASS2_CLASS" = "OK" ]; then
   FINAL_EXIT=0
   log "=== Completed successfully ==="
   notify "今朝のリサーチレポートが完成しました" "Daily Research"
-
-  # === 品質評価 (運用停止中: コスト対効果が低いため) ===
-  # if [ -x "$PROJECT_DIR/scripts/eval-run.sh" ]; then
-  #   log "=== Starting evaluation ==="
-  #   "$PROJECT_DIR/scripts/eval-run.sh" "$DATE" >> "$LOG_FILE" 2>&1 || {
-  #     log "WARN: Evaluation failed (non-fatal)"
-  #   }
-  # else
-  #   log "WARN: eval-run.sh not found or not executable, skipping evaluation"
-  # fi
 else
   # timeout(124) 等は元の exit コードを保持、exit 0 だが is_error の場合は 1
   if [ "$PASS2_EXIT" != "0" ]; then

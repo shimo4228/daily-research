@@ -32,8 +32,6 @@ launchd (AM 5:00)
        │     ├── 「この repo への寄与」節を追記
        │     ├── past_topics.json を更新   # トピック履歴
        │     └── graph.jsonld を更新       # 補強した concept を記録
-       │
-       └── (Eval: LLM-as-Judge — 現在運用停止中、後述)
 ```
 
 **2パスアーキテクチャ**: Opus がテーマ選定（repo graph 群への深い推論）、Sonnet がリサーチと執筆（高速・低コスト）を担当します。Pass 1 が失敗した場合は Sonnet がフォールバックとして全てを処理します。
@@ -53,7 +51,6 @@ launchd (AM 5:00)
 - **repo フィードバックループ** -- 各レポート末尾の「この repo への寄与」節で、補強した concept 名と repo の拡張方法を提案
 - **Obsidian ネイティブ出力** -- YAML フロントマター付きレポート、Vault にそのまま配置可能
 - **運用上のセーフティネット** -- ロックファイル、ログローテーション、認証チェック、macOS 通知、Sonnet 自動フォールバック
-- **品質評価（停止中）** -- LLM-as-Judge がレポートを 6 次元で採点するフレームワーク; コスト都合で現在オフ、コードは保持
 
 ## 前提条件
 
@@ -135,9 +132,7 @@ daily-research/
 ├── .repo-graphs/               # 各トラックの repo graph 同期コピー (起動時生成、gitignore)
 ├── config.example.toml         # track → repo マッピング、スコアリング、出力設定 (config.toml は gitignore)
 ├── past_topics.example.json    # トピック履歴のスキーマ参照用
-├── evals/                      # LLM-as-Judge 評価 (運用停止中; コード保持)
-│   └── scores.example.jsonl    # スコアログのスキーマ参照用
-├── tests/                      # bats (daily-research / e2e-mock / lib / eval) + pytest (dr_pipeline_test.py) + fixtures/
+├── tests/                      # bats (daily-research / e2e-mock / lib) + pytest (dr_pipeline_test.py) + fixtures/
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md   # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md   # 開発ガイド
@@ -163,12 +158,6 @@ daily-research/
 ## 研究ライン横断の知識循環
 
 著者自身の運用では、daily-research は複数の DOI 登録済み研究ライン（Agent Knowledge Cycle / Agent Attribution Practice / Contemplative Agent / authorship-strategy）が共有する知識循環の *書き込み* 側としても機能します。外部研究をリサーチして共有知識基盤にレポートを書き込み、各研究ラインはその基盤を読み取り専用で参照し、見出した知見を人手で自分の concept graph に取り込みます。あるラインが吸収した概念が、別のラインの次のリサーチ入力になりえます。リンクした concept graph を持つ複数の研究リポジトリを運用していれば、同様のライン横断の循環が自然に生まれます。これはロードマップではなく観察された稼働中のアーキテクチャで、共有基盤はオペレーター固有のままとし、公開ドキュメントでは総称的にのみ記述します。各ラインが書き込み・読み出しする内容を規律するフィルターは signal-first 原則と同一です。その出力側双対が、上述のフロンティア差分にあたります。[ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) を参照。
-
-## 品質評価（停止中）
-
-このリポジトリには、生成された各レポートを 6 つの独立した次元（各 1〜5 点、合計 30 点満点）で採点する LLM-as-Judge フレームワークが含まれます: 事実的根拠、分析の深さ、一貫性、具体性、新規性、実行可能性。スコアは `evals/scores.jsonl` に追記され、`pipeline_version` フィールドでビフォー・アフター比較ができます。
-
-**この評価は現在運用停止中です。** コスト対効果が低かったためです。`daily-research.sh` の呼び出しはコメントアウトされており、`evals/` ディレクトリと `scripts/eval-run.sh` はコメント解除で復旧できるよう保持しています。詳細は [CONTRIB.ja.md](docs/CONTRIB.ja.md) を参照してください。
 
 ## カスタマイズ
 

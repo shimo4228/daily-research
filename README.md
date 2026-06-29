@@ -32,8 +32,6 @@ launchd (AM 5:00)
        │     ├── Append "contribution to this repo" section
        │     ├── Update past_topics.json   # topic history
        │     └── Update graph.jsonld       # record reinforced concepts
-       │
-       └── (Eval: LLM-as-Judge — currently suspended, see below)
 ```
 
 **2-pass architecture**: Opus handles theme selection (deep reasoning over the repo graphs), Sonnet handles research and writing (faster, cheaper). If Pass 1 fails, Sonnet handles everything as a fallback.
@@ -53,7 +51,6 @@ The key insight: Claude Code's `-p` flag turns it into a fully autonomous resear
 - **Repo feedback loop** -- each report ends with a "contribution to this repo" section naming the reinforced concepts and suggesting how to extend the repo
 - **Obsidian-native output** -- reports with YAML frontmatter, ready for your vault
 - **Operational safety nets** -- lock files, log rotation, auth checks, macOS notifications, automatic Sonnet fallback
-- **Quality evaluation (suspended)** -- an LLM-as-Judge framework scores reports on 6 dimensions; currently turned off for cost reasons, with the code retained
 
 ## Prerequisites
 
@@ -135,9 +132,7 @@ daily-research/
 ├── .repo-graphs/               # Per-track synced repo graphs (generated at startup, gitignored)
 ├── config.example.toml         # Track → repo mapping, scoring, output (config.toml is gitignored)
 ├── past_topics.example.json    # Topic history schema reference
-├── evals/                      # LLM-as-Judge evaluation (operation suspended; code retained)
-│   └── scores.example.jsonl    # Score log schema reference
-├── tests/                      # bats (daily-research / e2e-mock / lib / eval) + pytest (dr_pipeline_test.py) + fixtures/
+├── tests/                      # bats (daily-research / e2e-mock / lib) + pytest (dr_pipeline_test.py) + fixtures/
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md   # Operations guide
 │   ├── CONTRIB.md / CONTRIB.ja.md   # Development guide
@@ -163,12 +158,6 @@ This is the *output* side of the same signal-first filter that drives theme sele
 ## Cross-line knowledge cycle
 
 In the author's own use, daily-research is also the *write* side of a knowledge cycle shared across several DOI-registered research lines (Agent Knowledge Cycle, Agent Attribution Practice, Contemplative Agent, authorship-strategy). It writes reports into a shared knowledge substrate; each research line consults that substrate read-only and folds findings back into its own concept graph by hand, so a concept one line absorbs can become another line's next research input. If you maintain several research repositories with linked concept graphs, a similar cross-line cycle emerges naturally. This is observed architecture, not a roadmap, and the substrate stays operator-private, so public docs describe it only generically. The filter governing what each line writes and reads is the same signal-first principle — the frontier-diff above is its output-side dual. See [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md).
-
-## Quality Evaluation (suspended)
-
-The repo includes an LLM-as-Judge framework that scores each generated report on 6 independent dimensions (1-5 scale, 30 points total): Factual Grounding, Depth of Analysis, Coherence, Specificity, Novelty, and Actionability. Scores are appended to `evals/scores.jsonl`, with a `pipeline_version` field for before/after comparisons.
-
-**This evaluation is currently suspended** because its cost-to-value ratio was low. The call is commented out in `daily-research.sh`; the `evals/` directory and `scripts/eval-run.sh` are retained so it can be restored by uncommenting. See [CONTRIB.md](docs/CONTRIB.md) for details.
 
 ## Customization
 
