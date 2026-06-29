@@ -50,7 +50,6 @@ daily-research/
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md      # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md      # 開発ガイド（本ファイル）
-│   ├── plans/                           # 将来の拡張プラン
 │   └── progress/                        # ポストモーテム・評価レポート
 └── .claude/settings.local.json          # Claude Code プロジェクト権限設定
 ```
@@ -178,7 +177,7 @@ bats tests/
 
 ## 永続メモリ層
 
-2026-02-26 に Mem0 Cloud MCP を統合したが、`.mcp.json` 不在 + ヘルスチェック形骸化により 32 日間ゼロ稼働。2026-05-23 に撤去。今後はローカル JSON-LD concept cluster graph (`graph.jsonld`) を導入する方針（外部 MCP 依存を排除し、静かな失敗リスクを構造的に回避）。プランは `~/.claude/plans/cosmic-dazzling-fox.md` 参照。
+2026-02-26 に Mem0 Cloud MCP を統合したが、`.mcp.json` 不在 + ヘルスチェック形骸化により 32 日間ゼロ稼働。2026-05-23 に撤去。今後はローカル JSON-LD concept cluster graph (`graph.jsonld`) を導入する方針（外部 MCP 依存を排除し、静かな失敗リスクを構造的に回避）。
 
 ## 評価フレームワーク (LLM-as-Judge)
 

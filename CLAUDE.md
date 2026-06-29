@@ -51,7 +51,6 @@ daily-research/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md   # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md   # 開発ガイド
 │   ├── graph-schema.md              # graph.jsonld スキーマ仕様（concept cluster + reinforces）
-│   ├── plans/                       # 将来の拡張プラン
 │   └── progress/                    # ポストモーテム・評価レポート
 └── com.example.daily-research.plist  # launchd plist テンプレート
 ```

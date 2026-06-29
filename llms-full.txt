@@ -38,7 +38,7 @@ daily-research feeds three DOI-registered research repositories. Each `config.to
 
 ## What is daily-research?
 
-daily-research is defined as an autonomous research feedback engine that reinforces the concept systems of research repositories. Every morning at 05:00, macOS `launchd` runs `scripts/daily-research.sh`, which drives Claude Code in non-interactive mode (`claude -p`). It reads each mapped repository's concept graph, identifies concepts that external research has not reinforced yet, researches the latest work that fills those gaps, and writes reports into an Obsidian vault. It is built entirely from Bash scripts and prompt files, with no Python in the runtime and no orchestration framework. The reports are read by a human who folds the findings back into the source repositories.
+daily-research is defined as an autonomous research feedback engine that reinforces the concept systems of research repositories. Every morning at 05:00, macOS `launchd` runs `scripts/daily-research.sh`, which drives Claude Code in non-interactive mode (`claude -p`). It reads each mapped repository's concept graph, identifies concepts that external research has not reinforced yet, researches the latest work that fills those gaps, and writes reports into an Obsidian vault. Orchestration is Bash scripts and prompt files; JSON/TOML parsing is consolidated in a stdlib-only python3 module (`scripts/lib/dr_pipeline.py`), with no pip dependencies and no orchestration framework. The reports are read by a human who folds the findings back into the source repositories.
 
 ## How does the two-pass pipeline work?
 

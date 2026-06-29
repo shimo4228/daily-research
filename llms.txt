@@ -1,6 +1,6 @@
 # daily-research
 
-> An autonomous research feedback engine. Every morning at 05:00, macOS launchd runs Claude Code (`claude -p`) to read the concept graph of each mapped research repository, find concepts external research has not reinforced yet, research the gap-filling work, and write reports into an Obsidian vault. Two-pass pipeline (Opus theme selection → Sonnet research). Zero Python; Bash + prompt files only.
+> An autonomous research feedback engine. Every morning at 05:00, macOS launchd runs Claude Code (`claude -p`) to read the concept graph of each mapped research repository, find concepts external research has not reinforced yet, research the gap-filling work, and write reports into an Obsidian vault. Two-pass pipeline (Opus theme selection → Sonnet research). Bash orchestration with prompt files; JSON/TOML parsing in stdlib python3 (no pip dependencies, no orchestration framework).
 
 ## Core documentation
 

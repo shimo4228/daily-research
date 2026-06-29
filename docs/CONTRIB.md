@@ -50,7 +50,6 @@ daily-research/
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md      # Operations guide
 │   ├── CONTRIB.md / CONTRIB.ja.md      # Development guide (this file)
-│   ├── plans/                           # Future expansion plans
 │   └── progress/                        # Postmortems and evaluation reports
 └── .claude/settings.local.json          # Claude Code project permissions
 ```
@@ -178,7 +177,7 @@ Timeout is controlled via `--max-turns` rather than external process timeouts (g
 
 ## Persistent Memory Layer
 
-A Mem0 Cloud MCP integration was merged on 2026-02-26 but remained in zero-operation state for 32 days due to a missing `.mcp.json` and a non-functional health check. It was removed on 2026-05-23. The successor is a local JSON-LD concept cluster graph (`graph.jsonld`) that eliminates external MCP dependency and the structural risk of silent failures. See `~/.claude/plans/cosmic-dazzling-fox.md` for the plan.
+A Mem0 Cloud MCP integration was merged on 2026-02-26 but remained in zero-operation state for 32 days due to a missing `.mcp.json` and a non-functional health check. It was removed on 2026-05-23. The successor is a local JSON-LD concept cluster graph (`graph.jsonld`) that eliminates external MCP dependency and the structural risk of silent failures.
 
 ## Evaluation Framework (LLM-as-Judge)
 

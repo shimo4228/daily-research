@@ -89,4 +89,4 @@ Opus に検索クエリ設計だけさせ、安価な Haiku で WebSearch を実
 
 #### 案B: 3パス化 (Sonnet 検索 → Opus 判断 → Sonnet 執筆)
 
-`docs/plans/THREE-PASS-PLAN.md` 参照。検索を Sonnet に分離し、Opus は純粋な判断のみ行う案。Opus のタイムアウト問題への対策として有効。
+検索を Sonnet に分離し、Opus は純粋な判断のみ行う案。Opus のタイムアウト問題への対策として有効。
