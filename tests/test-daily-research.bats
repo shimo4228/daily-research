@@ -59,8 +59,27 @@ teardown() {
   grep -q 'PAST_THEMES' "$SCRIPT"
 }
 
+@test "daily-research.sh injects cluster saturation report into Pass 1 prompt" {
+  # 自由探索ラインの cluster 反発 (旧 tech track の固定 domains 飽和の再発防止)
+  grep -q 'CLUSTER' "$SCRIPT"
+  grep -q 'cluster-report' "$SCRIPT"
+}
+
 @test "theme-selection-prompt forbids reusing the same primary source" {
   grep -q "ソース単位の重複禁止" "$PROJECT_DIR/prompts/theme-selection-prompt.md"
+}
+
+@test "theme-selection-prompt documents coverage/frontier/explore modes" {
+  grep -q "frontier" "$PROJECT_DIR/prompts/theme-selection-prompt.md"
+  grep -q "explore" "$PROJECT_DIR/prompts/theme-selection-prompt.md"
+  grep -q "常設フロンティア質問" "$PROJECT_DIR/prompts/theme-selection-prompt.md"
+}
+
+@test "coverage-report emits per-repo MODE judgement" {
+  run "$PROJECT_DIR/scripts/coverage-report.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"MODE:"* ]]
+  [[ "$output" == *"Line:"* ]]
 }
 
 # === Config files exist ===

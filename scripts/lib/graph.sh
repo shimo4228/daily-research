@@ -33,20 +33,22 @@ check_graph_health() {
   return 1
 }
 
-# 各 track の target_repo (config.toml) から graph.jsonld を .repo-graphs/ へ sync。
-# repo 不在は WARN (該当 track の扱いは Pass 1 に委ねる = 意図的に非 fatal)。
+# 各 line の repos (config.toml の [[tracks.X.repos]]) から graph.jsonld を
+# .repo-graphs/<repo_key>.jsonld へ sync。tracks subcommand は
+# "line<TAB>repo_key<TAB>target_repo" を 1 repo 1 行で出力する。
+# repo 不在は WARN (該当 repo の扱いは Pass 1 に委ねる = 意図的に非 fatal)。
 sync_repo_graphs() {
   mkdir -p "$PROJECT_DIR/.repo-graphs"
-  local track repo src dst
-  while IFS=$'\t' read -r track repo; do
+  local track repo_key repo src dst
+  while IFS=$'\t' read -r track repo_key repo; do
     [ -z "$track" ] && continue
     src="$repo/graph.jsonld"
-    dst="$PROJECT_DIR/.repo-graphs/$track.jsonld"
+    dst="$PROJECT_DIR/.repo-graphs/$repo_key.jsonld"
     if [ -f "$src" ]; then
       cp "$src" "$dst"
-      log "Synced repo graph: $track <- $src"
+      log "Synced repo graph: $track/$repo_key <- $src"
     else
-      log "WARN: repo graph not found for track '$track': $src"
+      log "WARN: repo graph not found for $track/$repo_key: $src"
     fi
   done < <(python3 "$DR_PY" tracks "$PROJECT_DIR/config.toml" 2>> "$LOG_FILE")
 }

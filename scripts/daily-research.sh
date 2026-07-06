@@ -96,6 +96,17 @@ log "Auth probe passed"
 # 飽和警告のソース。不在 or 破損なら Pass 1 飽和判断ができないため fatal。
 check_graph_health || exit 1
 
+# === config schema チェック (旧 schema fail-fast, ADR-0004) ===
+# config.toml が旧 schema (tracks.X 直下の target_repo) のままだと、後段の
+# coverage/past-themes は失敗をフォールバック文字列に握り潰し、repo graph 未同期の
+# まま Sonnet フォールバックへ流れてしまう。guard を実効化するためここで fatal に止める。
+if ! python3 "$DR_PY" tracks "$PROJECT_DIR/config.toml" > /dev/null 2>> "$LOG_FILE"; then
+  log "ERROR: config.toml schema check failed (legacy schema? migrate per config.example.toml / ADR-0004)"
+  notify "config.toml が旧 schema のままです。config.example.toml を参照して移行してください" "Daily Research Error"
+  exit 1
+fi
+log "Config schema check passed"
+
 # === 実行 ===
 cd "$PROJECT_DIR"
 
@@ -117,15 +128,24 @@ log "=== Pass 1: Theme selection (Opus) ==="
 # 未補強 concept レポートを生成し prompt に concat (concept coverage gap 駆動)
 COVERAGE=$("$PROJECT_DIR/scripts/coverage-report.sh" 2>> "$LOG_FILE") || COVERAGE="(coverage report 生成失敗。各 repo graph を直接参照すること)"
 
-# 過去テーマ履歴 (track 別直近 10 件) を prompt に concat (テーマ・主ソース単位の重複防止)
+# 過去テーマ履歴 (line 別直近 10 件) を prompt に concat (テーマ・主ソース単位の重複防止)
 PAST_THEMES=$(python3 "$DR_PY" past-themes 2>> "$LOG_FILE") \
   || PAST_THEMES="(過去テーマ履歴の生成失敗。past_topics.json を直接 Read して重複を確認すること)"
+
+# 飽和 cluster レポートを prompt に concat (自由探索ラインの cluster 反発。
+# 旧 tech track の固定 domains 飽和の再発防止)
+CLUSTER=$(python3 "$DR_PY" cluster-report 2>> "$LOG_FILE") \
+  || CLUSTER="(cluster report 生成失敗。自由探索ラインは過去テーマ履歴から既出領域を避けること)"
 
 THEME_PROMPT="$(cat prompts/theme-selection-prompt.md)
 
 ---
 
 $COVERAGE
+
+---
+
+$CLUSTER
 
 ---
 
@@ -181,9 +201,13 @@ if [ "$USE_FALLBACK" = true ]; then
   log "=== Fallback: Sonnet handles theme selection + research ==="
   TASK_PROMPT="今日のデイリーリサーチを実行してください。
 
-1. config.toml を読み込む
+1. config.toml を読み込む (各 line = [tracks.X]。repos を持つ line は repo 寄与、repos が無い line は自由探索)
 2. past_topics.json で過去テーマを確認する
-3. config.toml で定義されている全トラックのテーマを選定する
+3. config.toml で定義されている全 line のテーマを 1 つずつ選定する
+   - repos を持つ line: 各 repo の graph (.repo-graphs/<key>.jsonld) を読み、
+     未補強 concept があれば補強 (coverage)、全て厚ければ concept への挑戦・拡張
+     (frontier、repo の frontier_questions を優先) となるテーマを選ぶ
+   - repos が無い line: 過去テーマと重ならない未踏領域から自由探索 (explore)
 4. 各テーマについて多段階リサーチを実行する
 5. 各テーマのレポートを生成し、Obsidian vault に保存する
 6. past_topics.json を更新する

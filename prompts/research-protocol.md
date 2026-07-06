@@ -3,8 +3,13 @@
 ## あなたの役割
 
 あなたは主席リサーチャーとして、以下のプロトコルに厳密に従って調査を実行する。
-目的は、ユーザーが運用する DOI 登録済み研究 repo 群の概念体系を補強・拡張する
-最新外部研究を発見し、人間が repo に取り込める形で橋渡しすること。
+目的は 2 つ:
+
+1. **repo-backed line** (テーマ JSON の `repos` が非空): ユーザーが運用する DOI
+   登録済み研究 repo 群の概念体系を補強 (coverage) または挑戦・拡張 (frontier)
+   する最新外部研究を発見し、人間が repo に取り込める形で橋渡しすること
+2. **自由探索 line** (`repos` が空、`mode: "explore"`): 研究ラインの既存領域の外から
+   セレンディピティとなる新しい動きを発掘し、将来の研究ラインへの接続可能性を示すこと
 
 ## 重要な制約
 
@@ -67,10 +72,11 @@ templates/report-template.md のフォーマットに厳密に従い、選定さ
 - **文のバリエーション**: 同じ構造の文を3つ以上連続させない。短い文と長い文を織り交ぜ、読みやすいリズムを作る
 - **具体性**: 抽象的な記述を避け、具体的なツール名・数字・事例を含める
 - **最新性**: 2026年の情報を優先。古い情報は「背景」セクションのみ
-- **未解決の問い節**: 外部研究側の gap だけを書く。repo の実装状況・ロードマップを推測して書かない。各問いに repo concept との接点を最低 1 つ明示する
-- **反証・緊張節**: 補強材料だけを集めない。リサーチ中に repo concept と緊張・矛盾する知見を最低 1 回は意識的に探索する。見つからなければ「反証的知見は見つからなかった」と 1 文で明記する（無理にひねり出さない）
+- **未解決の問い節**: 外部研究側の gap だけを書く。repo の実装状況・ロードマップを推測して書かない。repo-backed line では各問いに repo concept との接点を最低 1 つ明示する（自由探索 line では接点の明示は不要）
+- **反証・緊張節**: 補強材料だけを集めない。repo-backed line ではリサーチ中に repo concept と緊張・矛盾する知見を最低 1 回は意識的に探索する。見つからなければ「反証的知見は見つからなかった」と 1 文で明記する（無理にひねり出さない）。frontier モード（テーマ JSON の `mode: "frontier"`）ではこの節が本体になる — `challenges` に挙げた concept との緊張を具体的に記述する
 - **出典の質**: 信頼できるソースのURLを最低5件含める
-- **repo への寄与節**: 各レポートの末尾に `## この repo への寄与` 節を設ける（テンプレート参照）。散文 3-6 文を基調に、(1) **補強 concept**: 選定済みテーマ JSON の `reinforces` にある concept 名と、外部研究がそれをどう裏付けるか、(2) **拡張・挑戦**: concept をどの方向に拡張できるか（「反証・緊張関係」で挙げた知見があればここに接続）、(3) **取り込み提案**: 新 ADR の種・concept の精緻化・graph への追加観点。これは人間が読んで repo に取り込むための橋渡しであり、daily-research が repo を直接編集することはない
+- **repo への寄与節** (repo-backed line のみ): 各レポートの末尾に `## この repo への寄与` 節を設ける（テンプレート参照）。散文 3-6 文を基調に、(1) **補強 concept**: 選定済みテーマ JSON の `reinforces` にある concept 名と、外部研究がそれをどう裏付けるか、(2) **拡張・挑戦**: concept をどの方向に拡張できるか（「反証・緊張関係」で挙げた知見・テーマ JSON の `challenges` / `extends` があればここに接続。frontier モードではこちらを主、補強を従にする）、(3) **取り込み提案**: 新 ADR の種・concept の精緻化・新 concept 候補・graph への追加観点。これは人間が読んで repo に取り込むための橋渡しであり、daily-research が repo を直接編集することはない
+- **研究ラインへの接続可能性節** (自由探索 line のみ): `## この repo への寄与` の代わりに `## 研究ラインへの接続可能性` 節を設ける（テンプレート参照）。この発見が既存の研究ライン（attribution / agent_cognition）の concept に将来接続しうるかを 2-3 文で書く。接続が見えなければ「純粋セレンディピティとして記録する」と明記してよい — 無理な接続をひねり出さない
 
 ### Step 5: 保存
 
@@ -101,17 +107,22 @@ templates/report-template.md のフォーマットに厳密に従い、選定さ
      "@type": "Article",
      "name": "{topic 日本語タイトル}",
      "datePublished": "{date}",
-     "track": "{track}",
-     "contributesToRepo": "{track}",
+     "track": "{track (line 名)}",
+     "mode": "{選定済みテーマ JSON の mode}",
+     "contributesToRepo": ["{選定済みテーマ JSON の repos をそのままコピー}"],
      "reinforces": ["{選定済みテーマ JSON の reinforces をそのままコピー}"],
+     "challenges": ["{選定済みテーマ JSON の challenges をそのままコピー}"],
+     "extends": ["{選定済みテーマ JSON の extends をそのままコピー}"],
      "broadCluster": "dr:cluster/{既存 broadCluster から 1 件選択}",
      "subCluster": ["dr:cluster/{既存または新規 subCluster}", ...]
    }
    ```
 
-3. クラスタ割り当て・補強記録ルール:
-   - **`contributesToRepo`** は track 名（config.toml の `[tracks.*]` キー）をそのまま記入
-   - **`reinforces`** は選定済みテーマ JSON の `reinforces`（補強した repo concept の @id 配列）を **そのままコピー**する。coverage-report は `#` 以降の fragment で正規化照合するため完全 URI でも fragment でも追跡できるが、テーマ JSON の表記をそのまま使うこと。フォールバックでテーマ JSON に `reinforces` が無い場合は、`.repo-graphs/{track}.jsonld` を読んで補強した concept の @id (完全 URI または `#` 以降の fragment) を記入する
+3. クラスタ割り当て・関係記録ルール:
+   - **`track`** は line 名（config.toml の `[tracks.*]` キー）をそのまま記入
+   - **`contributesToRepo`** は選定済みテーマ JSON の `repos`（寄与先 repo key 配列）を **そのままコピー**する（line 名ではない）
+   - **`reinforces` / `challenges` / `extends`** は選定済みテーマ JSON の同名フィールドを **そのままコピー**する。coverage-report は `#` 以降の fragment で正規化照合するため完全 URI でも fragment でも追跡できるが、テーマ JSON の表記をそのまま使うこと。**空配列のフィールドは省略してよい**。フォールバックでテーマ JSON にこれらが無い場合は、`.repo-graphs/{repo key}.jsonld` を読んで対象 concept の @id (完全 URI または `#` 以降の fragment) を記入する
+   - **自由探索 line (`mode: "explore"`)** は `contributesToRepo` / `reinforces` / `challenges` / `extends` を **すべて省略**する。ただし `broadCluster` / `subCluster` は **必須**（cluster 反発の集計母数になるため省略禁止）
    - **broadCluster は必ず既存 7 個から選択する。新規追加禁止**（taxonomy 安定性のため）
    - **subCluster は既存を優先**して再利用。意味的に該当する既存 subCluster がなければ新規追加可
    - 新規 subCluster を追加する場合は、`@graph` 末尾に `{ "@id": "dr:cluster/{name}", "@type": "Thing", "name": "{英語名}", "broaderClusterOf": "dr:cluster/{親 broadCluster}" }` ノードも追加

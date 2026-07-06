@@ -9,6 +9,7 @@ logs/
 
 # Personal data (use *.example.* as templates)
 config.toml
+config.toml.bak
 past_topics.json
 past_topics.json.bak
 

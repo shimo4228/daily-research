@@ -20,7 +20,12 @@
     "broadCluster": "dr:broadCluster",
     "subCluster": "dr:subCluster",
     "track": "dr:track",
-    "broaderClusterOf": "dr:broaderClusterOf"
+    "broaderClusterOf": "dr:broaderClusterOf",
+    "mode": "dr:mode",
+    "contributesToRepo": "dr:contributesToRepo",
+    "reinforces": "dr:reinforces",
+    "challenges": "dr:challenges",
+    "extends": "dr:extends"
   },
   "@graph": [
     { "@type": "Article", ... },
@@ -38,11 +43,14 @@
 | `@id` | ✅ | `dr:topic/{YYYY-MM-DD}_{track}_{slug}` |
 | `name` | ✅ | topic のタイトル (日本語可) |
 | `datePublished` | ✅ | `YYYY-MM-DD` |
-| `track` | ✅ | config.toml の track 名 (現行 `authorship` / `contemplative` / `aap` / `akc`)。過去 Article は旧 track (tech/personal/...) を保持 |
-| `contributesToRepo` | 任意 | 寄与先 repo (= track 名)。repo フィードバック型レポート (2026-05-27 転換以降) で記録 |
-| `reinforces` | 任意 | 補強した repo concept の @id 配列 (例 `https://github.com/shimo4228/authorship-strategy#concept/three-axis-inversion`)。`coverage-report.sh` がこれを集計し未補強 concept を算出 |
+| `track` | ✅ | config.toml の line 名 (現行 `attribution` / `agent_cognition` / `tech`、2026-07-07 再編 = ADR-0004)。過去 Article は旧 track 名 (authorship/aap/akc/contemplative/tech/personal/...) を保持 — 集計は concept @id / cluster ベースなので旧名のままで正しい |
+| `mode` | 任意 | 選定モード `coverage` / `frontier` / `explore` (2026-07-07 以降) |
+| `contributesToRepo` | 任意 | 寄与先 repo key の**配列** (config.toml の `[[tracks.X.repos]]` の `key`。例 `["authorship"]`)。2026-07-07 以前の Article は track 名の文字列。自由探索 line は省略 |
+| `reinforces` | 任意 | 補強した repo concept の @id 配列 (例 `https://github.com/shimo4228/authorship-strategy#concept/three-axis-inversion`)。coverage-report が集計し未補強 concept を算出。**厚い/薄い/未補強の分類はこのフィールドのみ**で数える |
+| `challenges` | 任意 | 挑戦・矛盾する repo concept の @id 配列 (frontier モード)。厚み分類には数えず、既出表示・主ソース dedup には reinforces との union で数える |
+| `extends` | 任意 | 拡張する repo concept の @id 配列 (frontier モード)。集計上の扱いは challenges と同じ |
 | `broadCluster` | ✅ | `dr:cluster/{broad_name}` を 1 件指定 |
-| `subCluster` | ✅ | `dr:cluster/{sub_name}` の配列 (1 件以上、複数許可) |
+| `subCluster` | ✅ | `dr:cluster/{sub_name}` の配列 (1 件以上、複数許可)。自由探索 line でも必須 (cluster-report の飽和判定の母数) |
 | `about` | 任意 | Wikidata `@id` または `dr:concept/...` 配列。意味タグ |
 
 ### `@type: "Thing"` (各 cluster 1 件 = 1 ノード)

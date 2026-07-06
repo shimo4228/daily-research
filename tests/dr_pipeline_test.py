@@ -4,6 +4,7 @@
 本テストは scripts/lib/dr_pipeline.py を直接 import して検証する (単一 parser-of-record)。
 fixtures は実ログ由来 (tests/fixtures/result-401.json 等)。
 """
+
 import io
 import json
 import pathlib
@@ -28,13 +29,21 @@ def run_cmd(monkeypatch, capsys, args, stdin=""):
 
 # === log-summary ===
 
+
 @pytest.mark.unit
 @pytest.mark.parametrize(
     "stdin,expect",
     [
         (
             '{"total_cost_usd":0.1234,"num_turns":10,"duration_ms":60000,"usage":{"input_tokens":5000,"output_tokens":1200},"tool_counts":{"WebSearch":3,"WebFetch":1}}',
-            ["cost=$0.1234", "turns=10", "duration=60s", "tokens_in=5000", "tokens_out=1200", "searches=4"],
+            [
+                "cost=$0.1234",
+                "turns=10",
+                "duration=60s",
+                "tokens_in=5000",
+                "tokens_out=1200",
+                "searches=4",
+            ],
         ),
         (
             '{"total_cost_usd":0,"num_turns":0,"duration_ms":0,"usage":{"input_tokens":0,"output_tokens":0}}',
@@ -42,13 +51,26 @@ def run_cmd(monkeypatch, capsys, args, stdin=""):
         ),
         (
             '[{"type":"assistant","message":{"content":[]}},{"type":"result","total_cost_usd":0.5678,"num_turns":20,"duration_ms":120000,"usage":{"input_tokens":8000,"output_tokens":2000}}]',
-            ["cost=$0.5678", "turns=20", "duration=120s", "tokens_in=8000", "tokens_out=2000"],
+            [
+                "cost=$0.5678",
+                "turns=20",
+                "duration=120s",
+                "tokens_in=8000",
+                "tokens_out=2000",
+            ],
         ),
         ('[{"type":"assistant","message":{"content":[]}}]', ["cost=$0.0000"]),
-        ('[]', ["SUMMARY Pass1:", "cost=$0.0000"]),
-        ('{}', ["SUMMARY Pass1:", "cost=$0.0000", "turns=0"]),
+        ("[]", ["SUMMARY Pass1:", "cost=$0.0000"]),
+        ("{}", ["SUMMARY Pass1:", "cost=$0.0000", "turns=0"]),
     ],
-    ids=["dict", "zero-cost", "array-with-result", "array-no-result", "empty-array", "missing-fields"],
+    ids=[
+        "dict",
+        "zero-cost",
+        "array-with-result",
+        "array-no-result",
+        "empty-array",
+        "missing-fields",
+    ],
 )
 def test_log_summary_ok(monkeypatch, capsys, stdin, expect):
     rc, out, _ = run_cmd(monkeypatch, capsys, ["log-summary", "Pass1"], stdin)
@@ -74,6 +96,7 @@ def test_log_summary_no_searches_omits_tool_str(monkeypatch, capsys):
 
 
 # === total-summary ===
+
 
 @pytest.mark.unit
 def test_total_summary_dict_dict(monkeypatch, capsys):
@@ -101,11 +124,14 @@ def test_total_summary_dict_array(monkeypatch, capsys):
 
 @pytest.mark.unit
 def test_total_summary_missing_second_line_reports_parse_error(monkeypatch, capsys):
-    rc, out, _ = run_cmd(monkeypatch, capsys, ["total-summary"], '{"total_cost_usd":0.25}\n')
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["total-summary"], '{"total_cost_usd":0.25}\n'
+    )
     assert "parse error" in out
 
 
 # === error-fields (auth/401 判定) ===
+
 
 @pytest.mark.unit
 def test_error_fields_401_fixture(monkeypatch, capsys):
@@ -132,9 +158,9 @@ def test_error_fields_success_fixture(monkeypatch, capsys):
     [
         ('{"is_error":false,"api_error_status":null}', "\tfalse"),
         ('{"is_error":true,"api_error_status":401}', "401\ttrue"),
-        ('not-json', "\tparse-fail"),
+        ("not-json", "\tparse-fail"),
         # 空入力は `'' or 'null'` で null パースされ {} → "\tfalse" (parse-fail ではない)
-        ('', "\tfalse"),
+        ("", "\tfalse"),
     ],
     ids=["clean", "auth-401", "garbage", "empty"],
 )
@@ -145,6 +171,7 @@ def test_error_fields_cases(monkeypatch, capsys, stdin, expected):
 
 
 # === parse-stream ===
+
 
 @pytest.mark.unit
 def test_parse_stream_normal_aggregates_tool_counts(monkeypatch, capsys):
@@ -174,21 +201,56 @@ def test_parse_stream_skips_unparseable_lines(monkeypatch, capsys):
 
 # === validate-theme ===
 
+
 def _valid_themes():
-    return json.dumps({
-        "themes": [
-            {"track": "authorship", "topic": "T", "slug": "a-slug", "score": 80, "rationale": "r", "reinforces": ["concept/x"]},
-            {"track": "contemplative", "topic": "T", "slug": "b-slug", "score": 80, "rationale": "r", "reinforces": ["concept/y"]},
-            {"track": "akc", "topic": "T", "slug": "c-slug", "score": 80, "rationale": "r", "reinforces": ["concept/z"]},
-        ]
-    })
+    # fixture config の 3 line 構成 (attribution / agent_cognition / tech) に対応。
+    # coverage / frontier / explore の 3 mode を 1 テーマずつカバーする。
+    return json.dumps(
+        {
+            "themes": [
+                {
+                    "track": "attribution",
+                    "repos": ["authorship"],
+                    "mode": "coverage",
+                    "topic": "T",
+                    "slug": "a-slug",
+                    "score": 80,
+                    "rationale": "r",
+                    "reinforces": ["concept/x"],
+                },
+                {
+                    "track": "agent_cognition",
+                    "repos": ["akc", "contemplative"],
+                    "mode": "frontier",
+                    "topic": "T",
+                    "slug": "b-slug",
+                    "score": 80,
+                    "rationale": "r",
+                    "reinforces": [],
+                    "challenges": ["concept/y"],
+                },
+                {
+                    "track": "tech",
+                    "repos": [],
+                    "mode": "explore",
+                    "topic": "T",
+                    "slug": "c-slug",
+                    "score": 80,
+                    "rationale": "r",
+                    "reinforces": [],
+                },
+            ]
+        }
+    )
 
 
 @pytest.mark.unit
 def test_validate_theme_valid(monkeypatch, capsys):
-    rc, out, _ = run_cmd(monkeypatch, capsys, ["validate-theme", CONFIG], _valid_themes())
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["validate-theme", CONFIG], _valid_themes()
+    )
     assert rc == 0
-    assert json.loads(out)["themes"][0]["track"] == "authorship"
+    assert json.loads(out)["themes"][0]["track"] == "attribution"
 
 
 @pytest.mark.unit
@@ -200,6 +262,37 @@ def test_validate_theme_strips_code_fence(monkeypatch, capsys):
 
 
 @pytest.mark.unit
+def test_validate_theme_normalizes_defaults(monkeypatch, capsys):
+    # mode / repos / 関係フィールド省略時の default 正規化 (repo line → coverage、
+    # 自由探索 line → explore) を検証。Pass 2 が graph に記録するため書き戻しが必要。
+    d = json.loads(_valid_themes())
+    del d["themes"][0]["mode"]  # repo line → coverage に正規化
+    del d["themes"][2]["mode"]  # 自由探索 line → explore に正規化
+    del d["themes"][2]["repos"]  # 省略 → [] に正規化
+    del d["themes"][2]["reinforces"]  # 省略 → [] に正規化
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["validate-theme", CONFIG], json.dumps(d))
+    assert rc == 0
+    themes = json.loads(out)["themes"]
+    assert themes[0]["mode"] == "coverage"
+    assert themes[2]["mode"] == "explore"
+    assert themes[2]["repos"] == []
+    assert themes[2]["reinforces"] == []
+    assert themes[2]["challenges"] == []
+
+
+@pytest.mark.unit
+def test_validate_theme_old_schema_config_errors(monkeypatch, capsys):
+    rc, _, err = run_cmd(
+        monkeypatch,
+        capsys,
+        ["validate-theme", str(FIXTURES / "config-old-schema.toml")],
+        _valid_themes(),
+    )
+    assert rc == 1
+    assert "legacy schema" in err
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "mutate,reason",
     [
@@ -208,32 +301,118 @@ def test_validate_theme_strips_code_fence(monkeypatch, capsys):
         (lambda d: d["themes"][0].__setitem__("slug", "Bad Slug!"), "invalid-slug"),
         (lambda d: d["themes"][0].pop("rationale"), "missing-key"),
         (lambda d: d["themes"][0].__setitem__("topic", "x" * 201), "topic-too-long"),
-        (lambda d: d["themes"][0].__setitem__("rationale", "x" * 501), "rationale-too-long"),
-        (lambda d: d["themes"][0].pop("reinforces"), "missing-reinforces"),
-        (lambda d: d["themes"][0].__setitem__("reinforces", []), "empty-reinforces"),
-        (lambda d: d["themes"][0].__setitem__("reinforces", ['bad "quote"']), "reinforces-bad-char"),
-        (lambda d: d["themes"][0].__setitem__("reinforces", [123]), "reinforces-non-string"),
+        (
+            lambda d: d["themes"][0].__setitem__("rationale", "x" * 501),
+            "rationale-too-long",
+        ),
+        (
+            lambda d: d["themes"][0].__setitem__("reinforces", []),
+            "coverage-empty-reinforces",
+        ),
+        (
+            lambda d: d["themes"][0].__setitem__("reinforces", ['bad "quote"']),
+            "reinforces-bad-char",
+        ),
+        (
+            lambda d: d["themes"][0].__setitem__("reinforces", [123]),
+            "reinforces-non-string",
+        ),
+        (
+            lambda d: d["themes"][1].__setitem__("challenges", ["bad char"]),
+            "challenges-bad-char",
+        ),
+        (
+            lambda d: d["themes"][0].__setitem__("repos", ["bogus-repo"]),
+            "invalid-repo-key",
+        ),
+        (
+            lambda d: d["themes"][0].__setitem__("repos", []),
+            "repos-missing-for-repo-line",
+        ),
+        (
+            lambda d: d["themes"][0].__setitem__("repos", "authorship"),
+            "repos-not-a-list",
+        ),
+        (
+            lambda d: d["themes"][2].__setitem__("repos", ["authorship"]),
+            "repos-on-explore-line",
+        ),
+        (
+            lambda d: d["themes"][0].__setitem__("mode", "explore"),
+            "explore-mode-on-repo-line",
+        ),
+        (
+            lambda d: d["themes"][2].__setitem__("mode", "coverage"),
+            "coverage-mode-on-explore-line",
+        ),
+        (
+            lambda d: d["themes"][1].__setitem__("challenges", []),
+            "frontier-all-relations-empty",
+        ),
+        (
+            lambda d: d["themes"][2].__setitem__("reinforces", ["concept/x"]),
+            "explore-with-reinforces",
+        ),
+        (
+            lambda d: d["themes"][0].__setitem__("mode", ["coverage"]),
+            "mode-not-a-string",
+        ),
+        (
+            lambda d: d["themes"].__setitem__(0, "not-a-dict"),
+            "theme-not-a-dict",
+        ),
+        (
+            lambda d: d["themes"][1].update(d["themes"][0] | {"slug": "dup-slug"}),
+            "duplicate-track",
+        ),
     ],
-    ids=["wrong-count", "invalid-track", "invalid-slug", "missing-key", "topic-too-long",
-         "rationale-too-long", "missing-reinforces", "empty-reinforces", "reinforces-bad-char", "reinforces-non-string"],
+    ids=[
+        "wrong-count",
+        "invalid-track",
+        "invalid-slug",
+        "missing-key",
+        "topic-too-long",
+        "rationale-too-long",
+        "coverage-empty-reinforces",
+        "reinforces-bad-char",
+        "reinforces-non-string",
+        "challenges-bad-char",
+        "invalid-repo-key",
+        "repos-missing-for-repo-line",
+        "repos-not-a-list",
+        "repos-on-explore-line",
+        "explore-mode-on-repo-line",
+        "coverage-mode-on-explore-line",
+        "frontier-all-relations-empty",
+        "explore-with-reinforces",
+        "mode-not-a-string",
+        "theme-not-a-dict",
+        "duplicate-track",
+    ],
 )
 def test_validate_theme_rejects(monkeypatch, capsys, mutate, reason):
     d = json.loads(_valid_themes())
     mutate(d)
-    rc, out, err = run_cmd(monkeypatch, capsys, ["validate-theme", CONFIG], json.dumps(d))
+    rc, out, err = run_cmd(
+        monkeypatch, capsys, ["validate-theme", CONFIG], json.dumps(d)
+    )
     assert rc == 1
 
 
 @pytest.mark.unit
 def test_validate_theme_no_tracks_config_errors(monkeypatch, capsys):
-    rc, out, err = run_cmd(monkeypatch, capsys, ["validate-theme", CONFIG_NO_TRACKS], _valid_themes())
+    rc, out, err = run_cmd(
+        monkeypatch, capsys, ["validate-theme", CONFIG_NO_TRACKS], _valid_themes()
+    )
     assert rc == 1
     assert "No tracks defined" in err
 
 
 @pytest.mark.unit
 def test_validate_theme_no_json_object_errors(monkeypatch, capsys):
-    rc, out, err = run_cmd(monkeypatch, capsys, ["validate-theme", CONFIG], "no braces here")
+    rc, out, err = run_cmd(
+        monkeypatch, capsys, ["validate-theme", CONFIG], "no braces here"
+    )
     assert rc == 1
     assert "No JSON object found" in err
 
@@ -241,12 +420,15 @@ def test_validate_theme_no_json_object_errors(monkeypatch, capsys):
 @pytest.mark.unit
 def test_validate_theme_malformed_json_in_braces_errors(monkeypatch, capsys):
     # 波括弧はあるが JSON として壊れている → JSONDecodeError 経路
-    rc, out, err = run_cmd(monkeypatch, capsys, ["validate-theme", CONFIG], "{themes: [unquoted]}")
+    rc, out, err = run_cmd(
+        monkeypatch, capsys, ["validate-theme", CONFIG], "{themes: [unquoted]}"
+    )
     assert rc == 1
     assert "JSON parse error" in err
 
 
 # === result-field ===
+
 
 @pytest.mark.unit
 def test_result_field_extracts_result(monkeypatch, capsys):
@@ -265,6 +447,7 @@ def test_result_field_missing_is_empty(monkeypatch, capsys):
 
 # === vault-path ===
 
+
 @pytest.mark.unit
 def test_vault_path_reads_general(monkeypatch, capsys):
     rc, out, _ = run_cmd(monkeypatch, capsys, ["vault-path", CONFIG])
@@ -281,50 +464,112 @@ def test_vault_path_missing_is_empty(monkeypatch, capsys):
 
 # === themes-log ===
 
+
 @pytest.mark.unit
 def test_themes_log(monkeypatch, capsys):
-    arg = json.dumps({"themes": [{"track": "akc", "topic": "Hello"}]})
+    arg = json.dumps(
+        {
+            "themes": [
+                {
+                    "track": "attribution",
+                    "repos": ["authorship"],
+                    "mode": "frontier",
+                    "topic": "Hello",
+                },
+                {"track": "tech", "topic": "World"},
+            ]
+        }
+    )
     rc, out, _ = run_cmd(monkeypatch, capsys, ["themes-log", arg])
     assert rc == 0
-    assert out.strip() == 'Pass 1 themes: akc="Hello"'
+    assert (
+        out.strip()
+        == 'Pass 1 themes: attribution[authorship/frontier]="Hello", tech="World"'
+    )
 
 
 # === tracks ===
 
+
 @pytest.mark.unit
-def test_tracks_emits_tsv(monkeypatch, capsys):
+def test_tracks_emits_line_repo_tsv(monkeypatch, capsys):
+    # 1 repo 1 行 (line<TAB>repo_key<TAB>target_repo)。自由探索 line (tech) は 0 行。
     rc, out, _ = run_cmd(monkeypatch, capsys, ["tracks", CONFIG])
     assert rc == 0
     lines = [ln for ln in out.splitlines() if ln]
-    assert len(lines) == 3
-    assert "authorship\t/tmp/fixture-repos/authorship-strategy" in lines
+    assert len(lines) == 4
+    assert "attribution\tauthorship\t/tmp/fixture-repos/authorship-strategy" in lines
+    assert (
+        "agent_cognition\tcontemplative\t/tmp/fixture-repos/contemplative-agent"
+        in lines
+    )
+    assert not any(ln.startswith("tech\t") for ln in lines)
+
+
+@pytest.mark.unit
+def test_tracks_old_schema_config_errors(monkeypatch, capsys):
+    rc, _, err = run_cmd(
+        monkeypatch, capsys, ["tracks", str(FIXTURES / "config-old-schema.toml")]
+    )
+    assert rc == 1
+    assert "legacy schema" in err
 
 
 # === past-themes ===
 
+
 @pytest.mark.unit
-def test_past_themes_groups_by_track(monkeypatch, capsys, tmp_path):
+def test_past_themes_groups_aliases_into_line(monkeypatch, capsys, tmp_path):
+    # 旧 track 名 (aliases) の履歴が新 line 配下に集約され dedup 文脈が継続する
     past = tmp_path / "past_topics.json"
-    past.write_text(json.dumps({"topics": [
-        {"track": "akc", "title": "Old AKC topic", "date": "2026-06-01"},
-        {"track": "authorship", "title": "Old authorship topic", "date": "2026-06-02"},
-        {"track": "unknown-track", "title": "should be filtered", "date": "2026-06-03"},
-    ]}))
+    past.write_text(
+        json.dumps(
+            {
+                "topics": [
+                    {"track": "akc", "title": "Old AKC topic", "date": "2026-06-01"},
+                    {
+                        "track": "authorship",
+                        "title": "Old authorship topic",
+                        "date": "2026-06-02",
+                    },
+                    {"track": "aap", "title": "Old AAP topic", "date": "2026-06-03"},
+                    {
+                        "track": "ai_dev",
+                        "title": "Old ai_dev topic",
+                        "date": "2026-06-04",
+                    },
+                    {
+                        "track": "unknown-track",
+                        "title": "should be filtered",
+                        "date": "2026-06-05",
+                    },
+                ]
+            }
+        )
+    )
     rc, out, _ = run_cmd(monkeypatch, capsys, ["past-themes", str(past), CONFIG])
     assert rc == 0
-    assert "Track: akc" in out
+    assert "Track: attribution (旧 track: authorship, aap を含む)" in out
+    assert "Old authorship topic" in out
+    assert "Old AAP topic" in out
+    assert "Track: agent_cognition" in out
     assert "Old AKC topic" in out
+    assert "Track: tech" in out
+    assert "Old ai_dev topic" in out  # tech の alias ai_dev も集約
     assert "should be filtered" not in out  # 未定義 track は除外
 
 
 @pytest.mark.unit
 def test_past_themes_missing_file_is_empty(monkeypatch, capsys, tmp_path):
-    rc, out, _ = run_cmd(monkeypatch, capsys, ["past-themes", str(tmp_path / "nope.json"), CONFIG])
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["past-themes", str(tmp_path / "nope.json"), CONFIG]
+    )
     assert rc == 0
     assert "過去テーマ履歴" in out
 
 
 # === graph-health ===
+
 
 @pytest.mark.unit
 def test_graph_health_valid(monkeypatch, capsys, tmp_path):
@@ -336,7 +581,9 @@ def test_graph_health_valid(monkeypatch, capsys, tmp_path):
 
 @pytest.mark.unit
 def test_graph_health_missing(monkeypatch, capsys, tmp_path):
-    rc, _, err = run_cmd(monkeypatch, capsys, ["graph-health", str(tmp_path / "nope.jsonld")])
+    rc, _, err = run_cmd(
+        monkeypatch, capsys, ["graph-health", str(tmp_path / "nope.jsonld")]
+    )
     assert rc == 2
     assert "not found" in err
 
@@ -359,7 +606,303 @@ def test_graph_health_schema_invalid_missing_graph_key(monkeypatch, capsys, tmp_
     assert "@graph" in err
 
 
+# === cluster-report ===
+
+
+def _write_cluster_graph(tmp_path, today):
+    """subCluster 頻度テスト用の graph.jsonld を生成。
+    fixture config は saturated_top_n=2 / recent_days=90 / recent_min=3。"""
+    from datetime import timedelta
+
+    old = (today - timedelta(days=200)).isoformat()
+    recent = (today - timedelta(days=5)).isoformat()
+    articles = []
+    # cluster_a: 全期間 5 回 (古い) → top-N 入り
+    for i in range(5):
+        articles.append(
+            {
+                "@type": "Article",
+                "name": f"a{i}",
+                "datePublished": old,
+                "broadCluster": "dr:cluster/broad_x",
+                "subCluster": ["dr:cluster/cluster_a"],
+            }
+        )
+    # cluster_b: 全期間 4 回 → top-N 入り
+    for i in range(4):
+        articles.append(
+            {
+                "@type": "Article",
+                "name": f"b{i}",
+                "datePublished": old,
+                "broadCluster": "dr:cluster/broad_x",
+                "subCluster": ["dr:cluster/cluster_b"],
+            }
+        )
+    # cluster_c: 全期間 3 回だが全て直近 → recent_min=3 で飽和入り
+    for i in range(3):
+        articles.append(
+            {
+                "@type": "Article",
+                "name": f"c{i}",
+                "datePublished": recent,
+                "broadCluster": "dr:cluster/broad_y",
+                "subCluster": ["dr:cluster/cluster_c"],
+            }
+        )
+    # cluster_d: 全期間 1 回 → 飽和しない
+    articles.append(
+        {
+            "@type": "Article",
+            "name": "d0",
+            "datePublished": old,
+            "broadCluster": "dr:cluster/broad_y",
+            "subCluster": "dr:cluster/cluster_d",  # 文字列形式も許容
+        }
+    )
+    # Article 以外のノードは無視される
+    articles.append({"@type": "Thing", "name": "not-an-article"})
+    g = tmp_path / "graph.jsonld"
+    g.write_text(json.dumps({"@graph": articles}))
+    return str(g)
+
+
+@pytest.mark.unit
+def test_cluster_report_saturation(monkeypatch, capsys, tmp_path):
+    from datetime import date
+
+    graph = _write_cluster_graph(tmp_path, date.today())
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["cluster-report", CONFIG, graph])
+    assert rc == 0
+    # top-2 (cluster_a, cluster_b) + 直近 3 回 (cluster_c) が飽和
+    assert "dr:cluster/cluster_a (全期間 5 回" in out
+    assert "dr:cluster/cluster_b" in out
+    assert "dr:cluster/cluster_c" in out
+    # 低頻度 cluster_d は飽和リストに入らない
+    assert "cluster_d" not in out.split("broadCluster")[0]
+    # broadCluster 分布は参考表示
+    assert "dr:cluster/broad_x: 9 回" in out
+
+
+@pytest.mark.unit
+def test_cluster_report_missing_graph_errors(monkeypatch, capsys, tmp_path):
+    rc, _, err = run_cmd(
+        monkeypatch, capsys, ["cluster-report", CONFIG, str(tmp_path / "nope.jsonld")]
+    )
+    assert rc == 1
+    assert "cluster report unavailable" in err
+
+
+# === coverage-report ===
+
+
+def _write_coverage_setup(tmp_path, reinforce_counts, engagements=(), questions=None):
+    """coverage-report テスト用の config + repo graph + daily graph を生成する。
+
+    reinforce_counts: {concept_fragment: 補強回数}
+    engagements: [(field, concept_fragment)] — challenges / extends の関与
+    """
+    base = "https://example.com/vocab#"
+    concepts = [
+        {"@id": f"{base}{frag}", "@type": "Concept", "name": frag.split("/")[-1]}
+        for frag in reinforce_counts
+    ]
+    concepts.append(
+        {
+            "@id": "https://example.com/paper1",
+            "@type": "ExternalReference",
+            "name": "Adopted Paper One",
+        }
+    )
+    repo_graph = tmp_path / "repo_a.jsonld"
+    repo_graph.write_text(json.dumps({"@graph": concepts}))
+
+    articles = []
+    for frag, cnt in reinforce_counts.items():
+        for i in range(cnt):
+            articles.append(
+                {
+                    "@type": "Article",
+                    "name": f"reinforce {frag} #{i}",
+                    "datePublished": f"2026-01-{i + 1:02d}",
+                    "reinforces": [f"{base}{frag}"],
+                }
+            )
+    for field, frag in engagements:
+        articles.append(
+            {
+                "@type": "Article",
+                "name": f"{field} {frag}",
+                "datePublished": "2026-02-01",
+                field: [f"{base}{frag}"],
+            }
+        )
+    daily_graph = tmp_path / "graph.jsonld"
+    daily_graph.write_text(json.dumps({"@graph": articles}))
+
+    q_line = ""
+    if questions:
+        q_line = "frontier_questions = " + json.dumps(questions)
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f"""
+[coverage]
+frontier_threshold = 0
+
+[tracks.line_x]
+name = "Line X"
+
+[[tracks.line_x.repos]]
+key = "repo_a"
+target_repo = "/tmp/fixture-repos/repo-a"
+target_graph = "{repo_graph}"
+{q_line}
+
+[tracks.free]
+name = "Free"
+"""
+    )
+    return str(config), str(daily_graph)
+
+
+@pytest.mark.unit
+def test_coverage_report_coverage_mode(monkeypatch, capsys, tmp_path):
+    # 未補強 1 + 薄い 1 + 厚い 1 → coverage モード
+    config, graph = _write_coverage_setup(
+        tmp_path,
+        {"concept/zero": 0, "concept/thin": 1, "concept/thick": 3},
+        questions=["standing question?"],
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["coverage-report", config, graph])
+    assert rc == 0
+    assert "MODE: coverage" in out
+    assert "未補強 (0 件) — 最優先:" in out
+    assert "concept/zero" in out
+    assert "薄い (1-2 件):" in out
+    assert "厚い (3+ 件) — 再訪は新展開時のみ:" in out
+    # coverage モードでは frontier_questions は副次ガイド
+    assert "常設フロンティア質問 (副次ガイド" in out
+    assert "standing question?" in out
+    # 自由探索 line は coverage report に出ない
+    assert "Line: free" not in out
+    # ExternalReference 禁止リスト
+    assert "Adopted Paper One" in out
+
+
+@pytest.mark.unit
+def test_coverage_report_frontier_mode(monkeypatch, capsys, tmp_path):
+    # 全 concept 厚い → frontier モード。質問が最優先で表示される
+    config, graph = _write_coverage_setup(
+        tmp_path,
+        {"concept/t1": 3, "concept/t2": 4},
+        questions=["diffusion measurement?"],
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["coverage-report", config, graph])
+    assert rc == 0
+    assert "MODE: frontier" in out
+    assert "常設フロンティア質問 (最優先の探索軸):" in out
+    assert "diffusion measurement?" in out
+    assert "全 concept (挑戦・矛盾・拡張の対象として再訪可):" in out
+    # frontier モードでは coverage 分類ラベルを出さない
+    assert "未補強 (0 件) — 最優先:" not in out
+
+
+@pytest.mark.unit
+def test_coverage_report_engagement_union_dedup(monkeypatch, capsys, tmp_path):
+    # challenges の関与は『既出』に出る (主ソース dedup 用) が、
+    # 厚み判定は reinforces のみ → challenges 1 件では未補強のまま
+    config, graph = _write_coverage_setup(
+        tmp_path,
+        {"concept/challenged": 0},
+        engagements=[("challenges", "concept/challenged")],
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["coverage-report", config, graph])
+    assert rc == 0
+    assert "MODE: coverage" in out
+    # reinforces 0 だが challenges 既出があるので「薄い」扱い (既出行を表示)
+    assert "既出: 2026-02-01 challenges concept/challenged" in out
+    assert "(補強 0 回)" in out
+
+
+@pytest.mark.unit
+def test_coverage_report_multi_repo_line_has_independent_modes(
+    monkeypatch, capsys, tmp_path
+):
+    # 1 line = 2 repos で、repo ごとに独立して mode 判定されること
+    # (repo_a は gap あり → coverage、repo_b は全て厚い → frontier)
+    base = "https://example.com/vocab#"
+    repo_a = tmp_path / "repo_a.jsonld"
+    repo_a.write_text(
+        json.dumps(
+            {
+                "@graph": [
+                    {"@id": f"{base}concept/gap", "@type": "Concept", "name": "gap"}
+                ]
+            }
+        )
+    )
+    repo_b = tmp_path / "repo_b.jsonld"
+    repo_b.write_text(
+        json.dumps(
+            {
+                "@graph": [
+                    {"@id": f"{base}concept/thick", "@type": "Concept", "name": "thick"}
+                ]
+            }
+        )
+    )
+    articles = [
+        {
+            "@type": "Article",
+            "name": f"r{i}",
+            "datePublished": f"2026-01-{i + 1:02d}",
+            "reinforces": [f"{base}concept/thick"],
+        }
+        for i in range(3)
+    ]
+    graph = tmp_path / "graph.jsonld"
+    graph.write_text(json.dumps({"@graph": articles}))
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f"""
+[coverage]
+frontier_threshold = 0
+
+[tracks.line_x]
+name = "Line X"
+
+[[tracks.line_x.repos]]
+key = "repo_a"
+target_repo = "/tmp/fixture-repos/repo-a"
+target_graph = "{repo_a}"
+
+[[tracks.line_x.repos]]
+key = "repo_b"
+target_repo = "/tmp/fixture-repos/repo-b"
+target_graph = "{repo_b}"
+"""
+    )
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["coverage-report", str(config), str(graph)]
+    )
+    assert rc == 0
+    assert "Repo: repo_a (repo: repo-a, 1 concepts)  MODE: coverage" in out
+    assert "Repo: repo_b (repo: repo-b, 1 concepts)  MODE: frontier" in out
+
+
+@pytest.mark.unit
+def test_coverage_report_old_schema_config_errors(monkeypatch, capsys):
+    rc, _, err = run_cmd(
+        monkeypatch,
+        capsys,
+        ["coverage-report", str(FIXTURES / "config-old-schema.toml")],
+    )
+    assert rc == 1
+    assert "legacy schema" in err
+
+
 # === dispatcher ===
+
 
 @pytest.mark.unit
 def test_unknown_subcommand_usage(monkeypatch, capsys):
