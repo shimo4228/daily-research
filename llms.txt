@@ -1,6 +1,6 @@
 # daily-research
 
-> An autonomous research feedback engine. Every morning at 05:00, macOS launchd runs Claude Code (`claude -p`) to read the concept graph of each mapped research repository, find concepts external research has not reinforced yet, research the gap-filling work, and write reports into an Obsidian vault. Two-pass pipeline (Opus theme selection → Sonnet research). Bash orchestration with prompt files; JSON/TOML parsing in stdlib python3 (no pip dependencies, no orchestration framework).
+> An autonomous research feedback engine. Every morning at 05:00, macOS launchd runs Claude Code (`claude -p`) over three research lines: two repo-backed lines read the concept graph of each mapped research repository and pick external research that fills coverage gaps (coverage mode) or challenges/extends concepts once coverage saturates (frontier mode, steered by standing frontier questions); one free-exploration line hunts serendipity outside the saturated concept clusters. Reports go to an Obsidian vault. Two-pass pipeline (Opus theme selection → Sonnet research). Bash orchestration with prompt files; JSON/TOML parsing in stdlib python3 (no pip dependencies, no orchestration framework).
 
 ## Core documentation
 
@@ -12,11 +12,12 @@
 ## Architecture
 
 - [graph.jsonld schema](docs/graph-schema.md): node types, cluster naming, integrity rules
-- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md): why each track maps to a research repository
-- [Theme selection prompt](prompts/theme-selection-prompt.md): Pass 1 (Opus) coverage-driven theme selection
+- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md): why tracks map to research repositories
+- [ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md): line consolidation, frontier mode, free-exploration line with cluster repulsion
+- [Theme selection prompt](prompts/theme-selection-prompt.md): Pass 1 (Opus) mode-driven theme selection (coverage / frontier / explore)
 - [Research protocol](prompts/research-protocol.md): Pass 2 (Sonnet) research quality core
 - [Main entry point](scripts/daily-research.sh): pipeline orchestration and fallback logic
-- [Coverage report](scripts/coverage-report.sh): uncovered-concept computation injected into Pass 1
+- [Coverage report](scripts/coverage-report.sh): per-repo coverage classification and mode judgement injected into Pass 1
 
 ## Operations
 
@@ -29,8 +30,8 @@
 
 ## Related
 
-- [authorship-strategy](https://doi.org/10.5281/zenodo.20263316): mapped research repo (track: authorship)
-- [contemplative-agent](https://doi.org/10.5281/zenodo.19212118): mapped research repo (track: contemplative)
-- [agent-attribution-practice](https://doi.org/10.5281/zenodo.19652013): mapped research repo (track: aap)
-- [agent-knowledge-cycle](https://doi.org/10.5281/zenodo.19200726): mapped research repo (track: akc)
+- [authorship-strategy](https://doi.org/10.5281/zenodo.20263316): mapped research repo (line: attribution)
+- [agent-attribution-practice](https://doi.org/10.5281/zenodo.19652013): mapped research repo (line: attribution)
+- [agent-knowledge-cycle](https://doi.org/10.5281/zenodo.19200726): mapped research repo (line: agent_cognition)
+- [contemplative-agent](https://doi.org/10.5281/zenodo.19212118): mapped research repo (line: agent_cognition)
 - [llmstxt.org](https://llmstxt.org/): the llms.txt standard this file follows

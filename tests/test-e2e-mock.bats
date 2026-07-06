@@ -37,19 +37,33 @@ setup() {
 }
 EOF
 
-  # config.toml のミニマル版（vault_path を temp に向ける）
+  # config.toml のミニマル版（新 line schema。vault_path を temp に向ける。
+  # repo graph は不在 → sync は WARN (非 fatal) で素通りする）
   cat > "$MOCK_PROJECT/config.toml" << 'EOF'
 [general]
 vault_path = "/tmp/mock-vault"
 
+[tracks.attribution]
+name = "Attribution Line"
+aliases = ["authorship", "aap"]
+
+[[tracks.attribution.repos]]
+key = "authorship"
+target_repo = "/tmp/mock-repos/authorship-strategy"
+
+[[tracks.attribution.repos]]
+key = "aap"
+target_repo = "/tmp/mock-repos/agent-attribution-practice"
+
+[tracks.agent_cognition]
+name = "Agent Cognition Line"
+
+[[tracks.agent_cognition.repos]]
+key = "akc"
+target_repo = "/tmp/mock-repos/agent-knowledge-cycle"
+
 [tracks.tech]
-name = "Tech Trends"
-
-[tracks.personal]
-name = "Personal Interests"
-
-[tracks.social]
-name = "社会課題 x Tech"
+name = "Tech Free Exploration"
 EOF
 
   # past_topics.json のミニマル版
@@ -119,7 +133,7 @@ if [[ "$MODEL" == "opus" ]]; then
       # --output-format stream-json --verbose の NDJSON 形式。parse-stream.py が処理する
       cat << 'JSON'
 {"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"tool_use","name":"WebSearch","id":"toolu_mock01","input":{"query":"mock search"}}]}}
-{"type":"result","subtype":"success","is_error":false,"duration_ms":5000,"duration_api_ms":4500,"num_turns":5,"total_cost_usd":0.25,"usage":{"input_tokens":1000,"output_tokens":500,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"result":"{\"themes\": [{\"track\": \"tech\", \"topic\": \"Mock Tech Topic for E2E Testing\", \"slug\": \"mock-tech-topic\", \"score\": 85, \"reinforces\": [\"concept/mock-tech\"], \"rationale\": \"E2E test rationale\"}, {\"track\": \"personal\", \"topic\": \"Mock Personal Topic for E2E Testing\", \"slug\": \"mock-personal-topic\", \"score\": 80, \"reinforces\": [\"concept/mock-personal\"], \"rationale\": \"E2E test rationale\"}, {\"track\": \"social\", \"topic\": \"Mock Social Topic for E2E Testing\", \"slug\": \"mock-social-topic\", \"score\": 82, \"reinforces\": [\"concept/mock-social\"], \"rationale\": \"E2E test rationale\"}]}"}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":5000,"duration_api_ms":4500,"num_turns":5,"total_cost_usd":0.25,"usage":{"input_tokens":1000,"output_tokens":500,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"result":"{\"themes\": [{\"track\": \"attribution\", \"repos\": [\"authorship\"], \"mode\": \"coverage\", \"topic\": \"Mock Attribution Topic for E2E Testing\", \"slug\": \"mock-attribution-topic\", \"score\": 85, \"reinforces\": [\"concept/mock-attr\"], \"rationale\": \"E2E test rationale\"}, {\"track\": \"agent_cognition\", \"repos\": [\"akc\"], \"mode\": \"frontier\", \"topic\": \"Mock Cognition Topic for E2E Testing\", \"slug\": \"mock-cognition-topic\", \"score\": 80, \"challenges\": [\"concept/mock-akc\"], \"rationale\": \"E2E test rationale\"}, {\"track\": \"tech\", \"topic\": \"Mock Tech Topic for E2E Testing\", \"slug\": \"mock-tech-topic\", \"score\": 82, \"rationale\": \"E2E test rationale\"}]}"}
 JSON
       exit 0
       ;;
@@ -216,10 +230,15 @@ get_log() {
   local sonnet_prompt
   sonnet_prompt=$(cat "$MOCK_HOME/.sonnet_prompt")
 
+  echo "$sonnet_prompt" | grep -q "mock-attribution-topic"
+  echo "$sonnet_prompt" | grep -q "mock-cognition-topic"
   echo "$sonnet_prompt" | grep -q "mock-tech-topic"
-  echo "$sonnet_prompt" | grep -q "mock-personal-topic"
-  echo "$sonnet_prompt" | grep -q "mock-social-topic"
   echo "$sonnet_prompt" | grep -q "選定済みテーマ"
+
+  # validate-theme が mode / repos を正規化して透過している
+  # (tech テーマは mode 省略 → explore に正規化される)
+  echo "$sonnet_prompt" | grep -q '"mode": "explore"'
+  echo "$sonnet_prompt" | grep -q '"challenges": \["concept/mock-akc"\]'
 }
 
 # === Test: Pass 1 failure fallback ===
@@ -254,10 +273,11 @@ get_log() {
   sonnet_prompt=$(cat "$MOCK_HOME/.sonnet_prompt")
 
   # フォールバック時はテーマ選定ステップが含まれる
-  echo "$sonnet_prompt" | grep -q "テーマを選定する"
+  echo "$sonnet_prompt" | grep -q "テーマを 1 つずつ選定する"
 
-  # 動的トラック表現が含まれる
+  # 動的 line 表現 (repo 寄与 / 自由探索の分岐) が含まれる
   echo "$sonnet_prompt" | grep -q "config.toml"
+  echo "$sonnet_prompt" | grep -q "自由探索"
 
   # 選定済みテーマ セクションは含まれない
   ! echo "$sonnet_prompt" | grep -q "選定済みテーマ"
@@ -334,6 +354,32 @@ get_log() {
   ! echo "$log_content" | grep -q "Completed successfully"
   # E_FATAL として失敗報告される
   echo "$log_content" | grep -q "Failed (E_FATAL"
+}
+
+# === Test: Legacy config schema fail-fast (ADR-0004) ===
+
+@test "E2E: legacy config schema stops before Pass 1 (fail-fast, no silent fallback)" {
+  # コードは新 schema・config は旧 schema のままの移行事故を fatal に止める
+  cat > "$MOCK_PROJECT/config.toml" << 'EOF'
+[general]
+vault_path = "/tmp/mock-vault"
+
+[tracks.authorship]
+name = "Legacy Track"
+target_repo = "/tmp/mock-repos/authorship-strategy"
+EOF
+
+  run run_script
+  [ "$status" -ne 0 ]
+
+  local log_content
+  log_content=$(get_log)
+
+  echo "$log_content" | grep -q "config.toml schema check failed"
+
+  # Pass 1 (Opus) も Sonnet フォールバックも実行されない
+  ! echo "$log_content" | grep -q "Pass 1: Theme selection (Opus)"
+  [ ! -f "$MOCK_HOME/.sonnet_prompt" ]
 }
 
 # === Test: Absolute path resolution ===

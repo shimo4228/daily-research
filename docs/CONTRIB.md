@@ -75,7 +75,8 @@ daily-research/
 |---------|---------|
 | `[general]` | Obsidian vault path, output directory, language, date format |
 | `[report]` | Minimum source count |
-| `[tracks.<name>]` | One block per track: `target_repo`, `target_graph`, `sources`, `scoring_criteria` (config.example.toml ships `repo_a` / `repo_b` / `repo_c` templates) |
+| `[tracks.<name>]` | One block per line: `focus`, `aliases`, `sources`, `scoring_criteria`, plus `[[tracks.<name>.repos]]` entries (`key`, `target_repo`, `target_graph`, `target_doi`, `frontier_questions`); a line with no repos is a free-exploration line (config.example.toml ships `line_a` / `explore` templates) |
+| `[coverage]` | Frontier / saturation thresholds: `frontier_threshold`, `saturated_top_n`, `saturated_recent_days`, `saturated_recent_min` |
 | `[user_profile]` | Optional skills / interests / goal hints |
 
 ## Development Workflow

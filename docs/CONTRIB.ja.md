@@ -75,7 +75,8 @@ daily-research/
 |-----------|------|
 | `[general]` | Obsidian vault パス、出力ディレクトリ、言語、日付フォーマット |
 | `[report]` | 最低出典数 |
-| `[tracks.<name>]` | トラック 1 つにつき 1 ブロック: `target_repo`, `target_graph`, `sources`, `scoring_criteria`（config.example.toml は `repo_a` / `repo_b` / `repo_c` テンプレートを同梱） |
+| `[tracks.<name>]` | ライン 1 つにつき 1 ブロック: `focus`, `aliases`, `sources`, `scoring_criteria` + `[[tracks.<name>.repos]]` エントリ（`key`, `target_repo`, `target_graph`, `target_doi`, `frontier_questions`）。repos の無いラインは自由探索ライン（config.example.toml は `line_a` / `explore` テンプレートを同梱） |
+| `[coverage]` | frontier / 飽和の閾値: `frontier_threshold`, `saturated_top_n`, `saturated_recent_days`, `saturated_recent_min` |
 | `[user_profile]` | 任意のスキル / 関心領域 / 目標ヒント |
 
 ## 開発ワークフロー

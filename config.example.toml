@@ -7,61 +7,76 @@ date_format = "%Y-%m-%d"
 [report]
 min_sources = 5
 
-# Each track maps to one research repository.
-# At startup the repo's graph.jsonld is synced into .repo-graphs/<track>.jsonld,
-# and Pass 1 reads it together with the coverage-report to pick external research
-# that reinforces concepts not yet covered. No fixed `domains`: the area of interest
-# is derived dynamically from the repo graph. Define one track per repo you want fed.
+# === Lines (tracks) ===
+# Each track is a research LINE. A line maps to zero or more research repositories
+# via [[tracks.<line>.repos]] entries:
+#   - Repo-backed line (1..N repos): Pass 1 reads each repo's synced graph
+#     (.repo-graphs/<key>.jsonld) plus the coverage report, and picks external
+#     research per line. Per-repo selection mode is decided by the coverage report:
+#       coverage — the repo still has uncovered / thin concepts; fill the gaps
+#       frontier — the repo is saturated; hunt research that CHALLENGES or EXTENDS
+#                  existing concepts, guided by the repo's frontier_questions
+#     A line with 2+ repos may also produce cross-repo themes.
+#   - Free-exploration line (no repos): serendipity-driven. Pass 1 avoids the
+#     saturated clusters reported by cluster-report and picks themes from
+#     low-frequency / brand-new clusters ("explore" mode).
+# `aliases` lists legacy track names whose past_topics.json history should keep
+# feeding this line's dedup context.
 
-[tracks.repo_a]
-name = "Research Repo A Contribution"
-focus = "Discover external research that reinforces and extends the concept system of research repo A"
-target_repo = "/path/to/your/research-repo-a"
-target_graph = ".repo-graphs/repo_a.jsonld"   # cwd-relative path after sync
-target_doi = "10.xxxx/zenodo.xxxxxxxx"          # optional; the repo's DOI if it has one
+[tracks.line_a]
+name = "Research Line A (repo_a + repo_b)"
+focus = "Discover external research that reinforces, challenges, or extends the concept systems of repo A and repo B"
+aliases = ["old_track_a1", "old_track_a2"]
 sources = [
-  "Semantic Scholar (your repo's domain keywords)",
-  "arXiv (relevant categories for the repo)",
+  "Semantic Scholar (your repos' domain keywords)",
+  "arXiv (relevant categories for the repos)",
 ]
 scoring_criteria = [
-  { name = "Concept reinforcement", weight = 35, desc = "Reinforces an uncovered / thinly-supported concept (see coverage-report)" },
+  { name = "Concept reinforcement / frontier fit", weight = 35, desc = "Coverage mode: reinforces an uncovered or thin concept. Frontier mode: challenges or extends a concept, or answers a frontier question" },
   { name = "Research recency", weight = 25, desc = "Latest 2026 research or development" },
-  { name = "Repo frontier fit", weight = 40, desc = "Serves the repo's next direction / open questions" },
+  { name = "Repo frontier fit", weight = 40, desc = "Serves the repos' next direction / open questions" },
 ]
 
-[tracks.repo_b]
-name = "Research Repo B Contribution"
-focus = "Discover external research that reinforces and extends the concept system of research repo B"
+[[tracks.line_a.repos]]
+key = "repo_a"                                   # used for .repo-graphs/<key>.jsonld and theme JSON `repos`
+target_repo = "/path/to/your/research-repo-a"
+target_graph = ".repo-graphs/repo_a.jsonld"      # cwd-relative path after sync
+target_doi = "10.xxxx/zenodo.xxxxxxxx"           # optional; the repo's DOI if it has one
+frontier_questions = [
+  "A standing open question that should drive theme selection once coverage saturates",
+]
+
+[[tracks.line_a.repos]]
+key = "repo_b"
 target_repo = "/path/to/your/research-repo-b"
 target_graph = ".repo-graphs/repo_b.jsonld"
 target_doi = "10.xxxx/zenodo.xxxxxxxx"
+frontier_questions = []
+
+[tracks.explore]
+name = "Free Exploration"
+focus = "Serendipity line: developer technology and research trends OUTSIDE the areas the repo-backed lines already cover"
+aliases = ["old_free_track"]
 sources = [
-  "Semantic Scholar (your repo's domain keywords)",
-  "arXiv (relevant categories for the repo)",
+  "Hacker News top stories",
+  "GitHub Trending (past 7 days)",
+  "arXiv cs.* new papers",
 ]
 scoring_criteria = [
-  { name = "Concept reinforcement", weight = 35, desc = "Reinforces an uncovered / thinly-supported concept (see coverage-report)" },
-  { name = "Research recency", weight = 25, desc = "Latest 2026 research or development" },
-  { name = "Repo frontier fit", weight = 40, desc = "Serves the repo's next direction / open questions" },
+  { name = "Novelty", weight = 30, desc = "No similar theme in past_topics.json" },
+  { name = "Serendipity", weight = 30, desc = "Distant from the saturated clusters in cluster-report; ideally a brand-new cluster" },
+  { name = "Momentum", weight = 20, desc = "An actively evolving area, not static knowledge" },
+  { name = "Whisper trend", weight = 20, desc = "A change not yet widely noticed" },
 ]
 
-[tracks.repo_c]
-name = "Research Repo C Contribution"
-focus = "Discover external research that reinforces and extends the concept system of research repo C"
-target_repo = "/path/to/your/research-repo-c"
-target_graph = ".repo-graphs/repo_c.jsonld"
-target_doi = "10.xxxx/zenodo.xxxxxxxx"
-sources = [
-  "Semantic Scholar (your repo's domain keywords)",
-  "arXiv (relevant categories for the repo)",
-]
-scoring_criteria = [
-  { name = "Concept reinforcement", weight = 35, desc = "Reinforces an uncovered / thinly-supported concept (see coverage-report)" },
-  { name = "Research recency", weight = 25, desc = "Latest 2026 research or development" },
-  { name = "Repo frontier fit", weight = 40, desc = "Serves the repo's next direction / open questions" },
-]
+# === Coverage / saturation thresholds ===
+[coverage]
+frontier_threshold = 0      # repo enters frontier mode when (uncovered + thin concepts) <= this value
+saturated_top_n = 15        # cluster repulsion: all-time top-N subClusters are off-limits for the explore line
+saturated_recent_days = 90  # ...plus any subCluster hit at least `saturated_recent_min` times in this window
+saturated_recent_min = 3
 
 [user_profile]
 skills = ["Python", "Swift", "TypeScript", "iOS development"]
 interests = ["AI/ML", "Agents", "your research domains"]
-goal = "Continuously discover external research that advances the concept systems of the mapped research repositories"
+goal = "Continuously discover external research that advances the concept systems of the mapped research repositories, plus serendipitous findings from unrelated fields"

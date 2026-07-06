@@ -1,6 +1,6 @@
 # daily-research
 
-Claude Code 非対話モード (`claude -p`) + macOS launchd で毎朝 AM 5:00 に自律リサーチを実行するシステム。各 track を 1 つの DOI 登録済み研究 repo にマッピングし、repo の概念体系 (graph.jsonld) の「未補強 concept」を補強する最新外部研究をリサーチして Obsidian vault に出力する。
+Claude Code 非対話モード (`claude -p`) + macOS launchd で毎朝 AM 5:00 に自律リサーチを実行するシステム。3 つの研究ライン (line) で構成される: repo-backed line 2 本 (各 line = 2 つの DOI 登録済み研究 repo) は repo の概念体系 (graph.jsonld) を補強 (coverage) または挑戦・拡張 (frontier) する最新外部研究を、自由探索 line 1 本は飽和 cluster を避けた未踏領域のセレンディピティをリサーチして Obsidian vault に出力する。
 
 ## Tech Stack
 
@@ -31,7 +31,7 @@ daily-research/
 │   │   ├── claude.sh           # run_claude()/classify_exit()（E_AUTH/E_TRANSIENT/E_FATAL）
 │   │   └── dr_pipeline.py      # JSON/TOML 解析の単一モジュール（旧 inline python を集約）
 │   ├── bootstrap-graph.sh      # graph.jsonld 初回 bootstrap（ワンショット、Opus clustering）
-│   ├── coverage-report.sh      # 未補強 concept レポート生成（Pass 1 へ注入）
+│   ├── coverage-report.sh      # coverage + モード判定レポート生成（本体は dr_pipeline.py、Pass 1 へ注入）
 │   ├── check-auth.sh           # OAuth トークンの実 probe ヘルスチェック（lib/auth.sh を共有）
 │   └── pre-commit.sh           # secret / 構文ガード（git pre-commit hook）
 ├── prompts/
@@ -40,9 +40,9 @@ daily-research/
 │   └── research-protocol.md     # Pass 2: リサーチプロトコル（品質の中核）
 ├── templates/
 │   └── report-template.md      # レポートの Markdown テンプレート（YAML frontmatter 付き）
-├── graph.jsonld                # 永続メモリ層: concept cluster graph + repo 補強履歴（Git 管理）
-├── .repo-graphs/               # 各 track の repo graph 同期コピー（起動時生成、.gitignore）
-├── config.toml                 # トラック=repo マッピング・スコアリング基準・出力設定（.gitignore）
+├── graph.jsonld                # 永続メモリ層: concept cluster graph + repo 関与履歴（Git 管理）
+├── .repo-graphs/               # 各 repo graph の同期コピー（<repo_key>.jsonld、起動時生成、.gitignore）
+├── config.toml                 # ライン=repos マッピング・frontier_questions・スコアリング基準・出力設定（.gitignore）
 ├── config.example.toml         # config.toml のテンプレート（Git 管理）
 ├── past_topics.json            # 過去テーマ履歴（.gitignore）
 ├── logs/                       # 実行ログ（30日でローテーション、.gitignore）
@@ -83,8 +83,10 @@ tail -f logs/$(date +%Y-%m-%d).log
 
 ### 設計方針
 
-- **2パス方式**: Pass 1 (Opus: repo graph + coverage-report を読んで未補強 concept を補強するテーマ選定) → Pass 2 (Sonnet: リサーチ・執筆 + graph.jsonld 増分更新)
-- **各 track = 1 研究 repo (concept coverage gap 駆動)**: 起動時に各 track の repo graph を `.repo-graphs/` へ sync、`coverage-report.sh` が「repo の全 concept − graph.jsonld の reinforces 済み concept」= 未補強 concept を算出し Pass 1 に注入。Pass 1 は未補強 concept を補強する外部研究を選定し、Pass 2 が `reinforces` を graph に記録する
+- **2パス方式**: Pass 1 (Opus: repo graph + coverage-report + cluster-report を読んでテーマ選定) → Pass 2 (Sonnet: リサーチ・執筆 + graph.jsonld 増分更新)
+- **3 ライン構成 (2026-07-07 再編 = ADR-0004)**: config.toml の `[tracks.X]` = line、`[[tracks.X.repos]]` = 寄与先 repo (0..N)。repos を持つ line は repo 寄与、持たない line は自由探索
+- **coverage / frontier の 2 モード (repo 単位)**: 起動時に各 repo の graph を `.repo-graphs/<key>.jsonld` へ sync、`coverage-report.sh` (本体は `dr_pipeline.py coverage-report`) が「repo の全 concept − graph.jsonld の reinforces 済み concept」を算出し、未補強+薄い concept が閾値以下なら **frontier モード** (gap 埋め → concept への挑戦・拡張・新 concept 候補の探索に切替、repo の `frontier_questions` を最優先) と判定して Pass 1 に注入。Pass 2 が `reinforces` / `challenges` / `extends` を graph に記録する
+- **自由探索 line の cluster 反発**: `dr_pipeline.py cluster-report` が graph.jsonld の subCluster 頻度から飽和 cluster (全期間 top-N ∪ 直近 90 日 3+ 回) を算出し Pass 1 に注入、選定禁止にする (旧 tech track の固定 domains 飽和の再発防止)
 - Pass 1 失敗時は Sonnet が一括フォールバック（テーマ選定も担当）
 - **`--append-system-prompt-file`** を使用（`--system-prompt-file` ではない）。Claude Code のデフォルト能力を保持するため
 - **`--allowedTools`** で最小権限。`--dangerously-skip-permissions` は使わない
@@ -122,13 +124,13 @@ tail -f logs/$(date +%Y-%m-%d).log
 - **評価フレームワーク (LLM-as-Judge)**: 6次元ルーブリック（Factual Grounding / Depth / Coherence / Specificity / Novelty / Actionability、各1-5点）を Pass 2 成功後に Opus judge で採点していた。コスト対効果が低く 2026-02 以降運用停止 → 2026-06-29 に完全削除（`evals/` / `scripts/eval-run.sh` / `tests/test-eval.bats`）。コードは git history で復元可能
 - **エージェントチーム版**: コスト・時間対効果が低く棄却。詳細は `.notes/progress/` (gitignore、operator-private) のポストモーテム参照。コードは git history (`a79074e`) で復元可能
 - **Mem0 Cloud MCP 統合**: 2026-02-26 に main へマージしたが `.mcp.json` 不在 + ヘルスチェック形骸化により 32 日間ゼロ稼働。2026-05-23 撤去。後継はローカル JSON-LD concept cluster graph (`graph.jsonld`)
-- **汎用トレンドリサーチ (tech/personal/ai_dev)**: 固定 domains が構造的飽和を招いた（contemplative 系 37%）ため 2026-05-27 に廃止。各 track を研究 repo にマッピングする方式へ転換
+- **汎用トレンドリサーチ (tech/personal/ai_dev)**: 固定 domains が構造的飽和を招いた（contemplative 系 37%）ため 2026-05-27 に廃止。各 track を研究 repo にマッピングする方式へ転換。**2026-07-07 に tech のみ「自由探索 line」として復活** — 固定 domains の代わりに graph.jsonld の cluster 統計による飽和 cluster 反発で新規性を機構的に担保する (ADR-0004)
 
 ## Status
 
 - 本番稼働中。毎朝 AM 5:00 に launchd で自動実行
 - Opus テーマ選定 + Sonnet リサーチ・執筆の2パス方式（E2E 検証済み、2026-02-20）
-- **4トラック構成 (各 track = 1 DOI 登録済み研究 repo)**: `authorship` (authorship-strategy) / `contemplative` (contemplative-agent) / `aap` (agent-attribution-practice) / `akc` (agent-knowledge-cycle)。トラック数・マッピングは config.toml から動的取得
+- **3 ライン構成 (2026-07-07 再編 = ADR-0004)**: `attribution` (authorship-strategy + agent-attribution-practice) / `agent_cognition` (agent-knowledge-cycle + contemplative-agent) / `tech` (自由探索)。ライン数・repo マッピングは config.toml から動的取得
 - 永続メモリ層: JSON-LD concept cluster graph (`graph.jsonld`) 稼働中。Pass 2 が日次増分更新、起動時 health check
-- repo graph の未補強 concept を補強する R&D フィードバックエンジンとして稼働（2026-05-27 転換、Pass 1/2 の E2E は翌朝 launchd で検証予定）
+- coverage (gap 埋め) / frontier (挑戦・拡張) の 2 モード R&D フィードバックエンジン + 自由探索として稼働（2026-07-07 再編、翌朝 launchd で E2E 検証予定）
 - Pass 1 失敗時は Sonnet 一括フォールバックで継続稼働
