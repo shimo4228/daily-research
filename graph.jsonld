@@ -5705,6 +5705,529 @@
         "dr:cluster/skill_library_maintenance",
         "dr:cluster/skill_internalization_rl"
       ]
+    },
+    {
+      "@id": "dr:topic/2026-07-08_attribution_ai-accountability-external-liability-to-internal-governance",
+      "@type": "Article",
+      "name": "AI 帰責の『外部責任→内部ガバナンス』内旋 — Petrin の outside-in 力学と Delaware 役員監督義務判例が示す accountability distribution の企業内実装",
+      "datePublished": "2026-07-08",
+      "track": "attribution",
+      "mode": "frontier",
+      "contributesToRepo": [
+        "aap"
+      ],
+      "challenges": [
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/externalized-accountability"
+      ],
+      "extends": [
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/accountability-distribution"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_board_fiduciary_duty",
+        "dr:cluster/moral_crumple_zone_evidence"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-08_agent_cognition_harness-configuration-mechanisms-exploratory-study",
+      "@type": "Article",
+      "name": "AI コーディングエージェントの harness 設定機構の実証ベースライン — 2,853 repo 調査が示す Context Files 支配・AGENTS.md の相互運用標準化・Skills の静的指示偏重(AIware'26)",
+      "datePublished": "2026-07-08",
+      "track": "agent_cognition",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "akc"
+      ],
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#akc/concept/harness-alignment",
+        "https://shimo4228.github.io/shimo4228/vocab#akc/concept/harness-drift"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/harness_engineering_externalization",
+        "dr:cluster/agent_skills_industry_standard"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-08_tech_quantum-battery-superextensive-charging-prototype",
+      "@type": "Article",
+      "name": "サイズが大きいほど速く充電される『量子電池』の初の実証 — CSIRO Quach チームの superextensive charging 実機(Dicke Hamiltonian・有機マイクロキャビティ・レーザー無線充電, Light: Sci. Appl. 2026-03)",
+      "datePublished": "2026-07-08",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/quantum_battery_charging"
+      ]
+    },
+    {
+      "@id": "dr:cluster/ai_board_fiduciary_duty",
+      "@type": "Thing",
+      "name": "AI board oversight & fiduciary duty (Caremark) / 取締役会のAI監督義務",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:cluster/quantum_battery_charging",
+      "@type": "Thing",
+      "name": "Quantum battery & superextensive charging / 量子電池・超蓄積充電",
+      "broaderClusterOf": "dr:cluster/frontier_ai_models_platforms"
+    },
+    {
+      "@id": "dr:topic/2026-07-09_attribution_apparent-authority-binds-principal-agentic-commerce",
+      "@type": "Article",
+      "name": "AIエージェントの『見かけの権限(apparent authority)』が本人を契約に拘束する——agentic commerce と agency 法が帰責の実運用に突きつける新ドクトリン(2026)",
+      "datePublished": "2026-07-09",
+      "track": "attribution",
+      "mode": "frontier",
+      "contributesToRepo": [
+        "aap"
+      ],
+      "challenges": [
+        "aap/concept/approval-gate"
+      ],
+      "extends": [
+        "aap/concept/accountability-distribution"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/responsibility_vacuum",
+        "dr:cluster/cross_agency_attribution_gap"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-09_agent_cognition_policybank-alignment-vs-execution-failure-memory",
+      "@type": "Article",
+      "name": "PolicyBank——自然言語ポリシーと真の要件の乖離を『alignment failure ≠ execution failure』に分解し、ポリシー洞察を不変の正解でなく可変メモリとして反復精緻化する(2026)",
+      "datePublished": "2026-07-09",
+      "track": "agent_cognition",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "akc"
+      ],
+      "reinforces": [
+        "akc/concept/intent-alignment",
+        "akc/concept/loop-failure-modes"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_memory_consolidation",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-09_tech_diffusion-llm-production-mercury2-llada2",
+      "@type": "Article",
+      "name": "拡散言語モデルが本番投入された2026——Mercury 2 が 1,000+ tok/s、LLaDA 2 で『自己回帰から並列トークン精緻化へ』が latency 敏感なエージェント/コード生成の実用ラインを越える",
+      "datePublished": "2026-07-09",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/frontier_model_releases"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-10_attribution_risk-architecture-ai-native-teams-determinism-mismatch",
+      "@type": "Article",
+      "name": "依存境界の決定論ミスマッチ——AIネイティブ開発チームのリスク・アーキテクチャにおける新たな帰責の空白",
+      "datePublished": "2026-07-10",
+      "track": "attribution",
+      "mode": "frontier",
+      "contributesToRepo": [
+        "aap"
+      ],
+      "extends": [
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/accountability-distribution",
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/attribution-gap"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/cross_agency_attribution_gap",
+        "dr:cluster/ai_regulation_policy"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-10_agent_cognition_agentic-safety-epistemic-teachability",
+      "@type": "Article",
+      "name": "安全性は振る舞いでなくエピステミックな性質である——teachabilityという新しい安全基準",
+      "datePublished": "2026-07-10",
+      "track": "agent_cognition",
+      "mode": "frontier",
+      "contributesToRepo": [
+        "contemplative"
+      ],
+      "challenges": [
+        "https://shimo4228.github.io/shimo4228/vocab#concept/security-by-absence"
+      ],
+      "extends": [
+        "https://shimo4228.github.io/shimo4228/vocab#concept/four-contemplative-axioms"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/contemplative_ai_alignment",
+        "dr:cluster/agent_self_improvement"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-10_tech_llm-agentic-gpu-kernel-generation",
+      "@type": "Article",
+      "name": "LLMがGPUカーネルを書く時代——単発生成から閉ループagentic最適化へ",
+      "datePublished": "2026-07-10",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agentic_gpu_kernels"
+      ]
+    },
+    {
+      "@id": "dr:cluster/agentic_gpu_kernels",
+      "@type": "Thing",
+      "name": "Agentic GPU kernel optimization / GPUカーネルのagentic最適化",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:topic/2026-07-12_attribution_explicit-provenance-responsibility-tensor",
+      "@type": "Article",
+      "name": "帰属なき責任は成立しない——因果帰属関数と責任テンソルが示す分散因果連鎖の監査限界",
+      "datePublished": "2026-07-12",
+      "track": "attribution",
+      "mode": "frontier",
+      "contributesToRepo": [
+        "aap"
+      ],
+      "challenges": [
+        "concept/non-invasion-posture"
+      ],
+      "extends": [
+        "concept/attribution-gap",
+        "concept/accountability-distribution"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/cross_agency_attribution_gap",
+        "dr:cluster/responsibility_vacuum"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-12_agent_cognition_scaffold-effects-gaia-elicitation-gap",
+      "@type": "Article",
+      "name": "「能力」ではなく「足場」を測っていた——GAIA 統制比較が暴く agent capability スコアの scaffold 依存性",
+      "datePublished": "2026-07-12",
+      "track": "agent_cognition",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "akc"
+      ],
+      "reinforces": [
+        "concept/scaffold-dissolution",
+        "pattern/orchestrator"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_evaluation_benchmarks",
+        "dr:cluster/skill_internalization_rl"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-12_tech_world-models-developer-primitive-marble-genie",
+      "@type": "Article",
+      "name": "世界モデルの商用化——Marble・Project Genie・Waymo World Modelが拓く開発者プリミティブ化",
+      "datePublished": "2026-07-12",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/world_models_neuromorphic"
+      ]
+    },
+    {
+      "@id": "dr:cluster/embedded_agency_self_boundary",
+      "@type": "Thing",
+      "name": "Embedded agency & self-boundary individuation",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:topic/2026-07-13_attribution_ai-citation-placement-channel-asymmetry",
+      "@type": "Article",
+      "name": "AIに引用されるのは『何を書くか』より『どこに置くか』——2026年の配置チャネル実証(AI引用の自社サイト集中78% vs 同一内容のアーンドメディア経由で325%増)が著者戦略のTactics層に突きつけるチャネル選択の非対称",
+      "datePublished": "2026-07-13",
+      "track": "attribution",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "authorship"
+      ],
+      "reinforces": [
+        "https://github.com/shimo4228/authorship-strategy#concept/tactical-layer"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/ai_authorship_attribution"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-13_agent_cognition_tao-of-agency-self-boundary-paradox",
+      "@type": "Article",
+      "name": "自己の境界を『信じて行動し、見通して理解する』——The Tao of Agency (arXiv 2606.19924, 2026) が embedded agency から示す autotelic AI の自己個別化パラドックスと、非二元・自己非保存公理への挑戦",
+      "datePublished": "2026-07-13",
+      "track": "agent_cognition",
+      "mode": "frontier",
+      "contributesToRepo": [
+        "contemplative"
+      ],
+      "challenges": [
+        "https://shimo4228.github.io/shimo4228/vocab#concept/four-contemplative-axioms"
+      ],
+      "extends": [
+        "https://shimo4228.github.io/shimo4228/vocab#concept/security-by-absence"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/contemplative_ai_alignment",
+        "dr:cluster/embedded_agency_self_boundary"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-13_tech_llm-autonomous-gpu-kernel-generation",
+      "@type": "Article",
+      "name": "LLM が自らの実行基盤を最適化し始めた——自律 GPU カーネル生成が2026年に専門家パリティを越える(KernelAgent が torch.compile 比 1.56x、KernelBench 全250タスク正答、AutoKernel/daVinci-kernel/KForge が急伸)",
+      "datePublished": "2026-07-13",
+      "track": "tech",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agentic_gpu_kernels"
+      ]
+    },
+    {
+      "@id": "dr:cluster/vision_language_action_models",
+      "@type": "Thing",
+      "name": "Vision-Language-Action (VLA) models & embodied robotics",
+      "broaderClusterOf": "dr:cluster/frontier_ai_models_platforms"
+    },
+    {
+      "@id": "dr:topic/2026-07-14_attribution_eu-pld-defect-presumption-accountability",
+      "@type": "Article",
+      "name": "EU 製造物責任指令の2026年国内法化が AI ブラックボックスに『欠陥の推定』を課す——立証責任の反転と deployer→provider→manufacturer 再分類が accountability distribution を法的に事前確定する機序",
+      "datePublished": "2026-07-14",
+      "track": "attribution",
+      "mode": "frontier",
+      "contributesToRepo": [
+        "aap"
+      ],
+      "challenges": [
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/externalized-accountability"
+      ],
+      "extends": [
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/accountability-distribution",
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/pre-named-gap-bearer"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_regulation_policy",
+        "dr:cluster/cross_agency_attribution_gap"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-14_agent_cognition_selective-memory-retention-vindicates-signal-first",
+      "@type": "Article",
+      "name": "無差別な記憶蓄積は『記憶なし』より劣る——Selective Memory Retention (2026) が示す、LLM 品質判定フィルタが専門家キュレーションを上回り精度2.5→50%・推論ステップ19→4.3に短縮する signal-first の実証",
+      "datePublished": "2026-07-14",
+      "track": "agent_cognition",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "akc"
+      ],
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#akc/concept/signal-first",
+        "https://shimo4228.github.io/shimo4228/vocab#akc/concept/cognitive-economy"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_memory_context_engineering",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-14_tech_open-vla-crosses-practical-line-2026",
+      "@type": "Article",
+      "name": "オープンソース VLA が実用ラインを越えた2026——Robbyant/Ant の LingBot-VLA 2.0 (Apache-2.0・6B・RTX4090で130ms未満) が π0.5/GR00T N1.7 を上回り、個人開発者が微調整できる身体性AIの『汎用ブレイン』に",
+      "datePublished": "2026-07-14",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/vision_language_action_models"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-15_attribution_singapore-imda-agentic-ai-governance-verifiable-identity",
+      "@type": "Article",
+      "name": "Singapore IMDA『Agentic AI 統治フレームワーク』(2026年1月/5月更新)——世界初のエージェント特化規制が要求する『検証可能なエージェント身元＋誰の認可で動いたかの監査証跡』が accountability distribution を実運用へ落とす",
+      "datePublished": "2026-07-15",
+      "track": "attribution",
+      "mode": "frontier",
+      "contributesToRepo": [
+        "aap"
+      ],
+      "extends": [
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/accountability-distribution",
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/pre-named-gap-bearer",
+        "https://shimo4228.github.io/shimo4228/vocab#aap/concept/externalized-accountability"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_regulation_policy",
+        "dr:cluster/agent_identity_governance"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-15_agent_cognition_provenance-role-collapse-typed-memory-observed-vs-generated",
+      "@type": "Article",
+      "name": "長期エージェント記憶の『来歴-役割崩壊(provenance-role collapse)』を型付きメモリ表現で防ぐ——観測された証拠と推論された内容を構造的に区別する2026研究が observed-vs-generated 信号に実装機構を与える",
+      "datePublished": "2026-07-15",
+      "track": "agent_cognition",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "akc"
+      ],
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#akc/concept/observed-vs-generated",
+        "https://shimo4228.github.io/shimo4228/vocab#akc/concept/self-reingestion"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_memory_context_engineering",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-15_tech_confidential-computing-fhe-agentic-ai-secrets",
+      "@type": "Article",
+      "name": "エージェントが秘密を扱う時代の暗号プライバシー層——FHE/機密計算が agentic AI 推論で理論から本番へ(Concrete ML・TFHE-rs・PRITRAN・Orbit)、『秘密を託せるエージェント』という未踏の設計軸",
+      "datePublished": "2026-07-15",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/fhe_confidential_computing"
+      ]
+    },
+    {
+      "@id": "dr:cluster/fhe_confidential_computing",
+      "@type": "Thing",
+      "name": "FHE & confidential computing for AI",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:topic/2026-07-16_attribution_cross-lingual-parametric-knowledge-multilingual-diffusion",
+      "@type": "Article",
+      "name": "多言語公開された知識はLLMに均等に吸収されない——17言語横断のパラメトリック知識分布研究(Cross-Lingual Exploration, 2026)が示す cross-lingual recall の失敗と、多言語化タクティクスの効果境界",
+      "datePublished": "2026-07-16",
+      "track": "attribution",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "authorship"
+      ],
+      "reinforces": [
+        "https://github.com/shimo4228/authorship-strategy#concept/tactical-layer"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/neologism_parametric_attribution",
+        "dr:cluster/cross_lingual_parametric_knowledge"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-16_agent_cognition_critique-agent-model-internalized-agency-vs-scaffolding",
+      "@type": "Article",
+      "name": "『真の agency は外部足場でなく内在化を要する』——Critique of Agent Model (2026) が security-by-absence の非自己設計と AKC の externalization・scaffold dissolution 双方に突きつける反証",
+      "datePublished": "2026-07-16",
+      "track": "agent_cognition",
+      "mode": "frontier",
+      "contributesToRepo": [
+        "contemplative",
+        "akc"
+      ],
+      "challenges": [
+        "https://shimo4228.github.io/shimo4228/vocab#concept/security-by-absence",
+        "https://shimo4228.github.io/shimo4228/vocab#concept/four-contemplative-axioms",
+        "https://shimo4228.github.io/shimo4228/vocab#concept/scaffold-dissolution"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/contemplative_ai_alignment",
+        "dr:cluster/embedded_agency_self_boundary",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-16_tech_tabfm-tabular-foundation-models-zero-shot",
+      "@type": "Article",
+      "name": "表形式データがついに基盤モデルを得た——Google TabFM のゼロショット予測が調律済み勾配ブースティング木を上回り、合成因果データ事前学習と in-context learning が拓く『LLM 一辺倒でない』基盤モデル前線",
+      "datePublished": "2026-07-16",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/tabular_foundation_models"
+      ]
+    },
+    {
+      "@id": "dr:cluster/cross_lingual_parametric_knowledge",
+      "@type": "Thing",
+      "name": "Cross-lingual parametric knowledge distribution",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:cluster/tabular_foundation_models",
+      "@type": "Thing",
+      "name": "Tabular foundation models (TabFM, TabPFN, TabICL)",
+      "broaderClusterOf": "dr:cluster/frontier_ai_models_platforms"
+    },
+    {
+      "@id": "dr:topic/2026-07-17_attribution_governance-maturity-inversion-enterprise-agentic-ai-2026",
+      "@type": "Article",
+      "name": "ガバナンス成熟度の反転——2026年の企業 agentic AI 導入調査が暴く『accountability構造がaudit trail・control planeより先に立つ』構造的倒錯",
+      "datePublished": "2026-07-17",
+      "track": "attribution",
+      "mode": "frontier",
+      "contributesToRepo": ["aap"],
+      "challenges": ["aap/concept/approval-gate"],
+      "extends": ["aap/concept/accountability-distribution", "aap/concept/externalized-accountability"],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/responsibility_vacuum",
+        "dr:cluster/moral_crumple_zone_evidence",
+        "dr:cluster/agent_constitutional_governance"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-17_agent_cognition_assay-not-all-skills-help-causal-heterogeneity-curation",
+      "@type": "Article",
+      "name": "スキルは集約すると害が見えなくなる——ASSAY(Not All Skills Help, 2026)がper-skill因果帰属で暴く因果的異質性と、生成(判断)と採否(経験的証拠)を分離するcuration",
+      "datePublished": "2026-07-17",
+      "track": "agent_cognition",
+      "mode": "coverage",
+      "contributesToRepo": ["akc"],
+      "reinforces": ["akc/pattern/filter", "akc/concept/signal-first"],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/skill_library_maintenance",
+        "dr:cluster/agent_memory_consolidation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-17_tech_lingbot-vla-2-cross-embodiment-open-robot-foundation-model",
+      "@type": "Article",
+      "name": "1つのaction spaceに20のロボット身体を統合する——LingBot-VLA 2.0(Ant Group Robbyant, 2026-07, Apache-2.0, 6B)が推し進めるcross-embodiment汎用ロボットpolicyのオープンソース化",
+      "datePublished": "2026-07-17",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/vision_language_action_models"
+      ]
     }
   ]
 }
