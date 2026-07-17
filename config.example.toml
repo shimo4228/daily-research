@@ -53,9 +53,14 @@ target_graph = ".repo-graphs/repo_b.jsonld"
 target_doi = "10.xxxx/zenodo.xxxxxxxx"
 frontier_questions = []
 
+# A free-exploration line may set `report_variant = "maker"`: its reports then drop
+# the counter-evidence section and end with a "development ideas" section (1-3 things
+# the reader could build, derived from the research + [user_profile]) instead of the
+# research-line connection section.
 [tracks.explore]
 name = "Free Exploration"
-focus = "Serendipity line: developer technology and research trends OUTSIDE the areas the repo-backed lines already cover"
+report_variant = "maker"  # optional; omit for the default report format
+focus = "Serendipity line: define the domain to explore here (e.g. AI / developer technology). Themes mainly belonging to saturated clusters (including areas the repo-backed lines already cover) are banned — pick untouched sub-areas WITHIN this domain"
 aliases = ["old_free_track"]
 sources = [
   "Hacker News top stories",
