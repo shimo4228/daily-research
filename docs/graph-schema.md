@@ -43,10 +43,10 @@
 | `@id` | ✅ | `dr:topic/{YYYY-MM-DD}_{track}_{slug}` |
 | `name` | ✅ | topic のタイトル (日本語可) |
 | `datePublished` | ✅ | `YYYY-MM-DD` |
-| `track` | ✅ | config.toml の line 名 (現行 `attribution` / `agent_cognition` / `tech`、2026-07-07 再編 = ADR-0004)。過去 Article は旧 track 名 (authorship/aap/akc/contemplative/tech/personal/...) を保持 — 集計は concept @id / cluster ベースなので旧名のままで正しい |
+| `track` | ✅ | config.toml の line 名 (現行 `agent_systems` / `human_ai_publics` / `tech` / `human_adaptation`、2026-07-19 再編 = ADR-0005)。過去 Article は旧 track 名 (`attribution` / `agent_cognition` / authorship/aap/akc/contemplative/tech/personal/...) を保持 — 集計は concept @id / cluster ベースなので旧名のままで正しい |
 | `mode` | 任意 | 選定モード `coverage` / `frontier` / `explore` (2026-07-07 以降) |
-| `contributesToRepo` | 任意 | 寄与先 repo key の**配列** (config.toml の `[[tracks.X.repos]]` の `key`。例 `["authorship"]`)。2026-07-07 以前の Article は track 名の文字列。自由探索 line は省略 |
-| `reinforces` | 任意 | 補強した repo concept の @id 配列 (例 `https://github.com/shimo4228/authorship-strategy#concept/three-axis-inversion`)。coverage-report が集計し未補強 concept を算出。**厚い/薄い/未補強の分類はこのフィールドのみ**で数える |
+| `contributesToRepo` | 任意 | 寄与先 repo key の**配列** (config.toml の `[[tracks.X.repos]]` の `key`。例 `["akc"]`)。2026-07-07 以前の Article は track 名の文字列。自由探索 line は省略 |
+| `reinforces` | 任意 | 補強した repo concept の @id 配列 (例 `https://github.com/shimo4228/agent-knowledge-cycle#concept/signal-first`)。coverage-report が集計し未補強 concept を算出。**厚い/薄い/未補強の分類はこのフィールドのみ**で数える |
 | `challenges` | 任意 | 挑戦・矛盾する repo concept の @id 配列 (frontier モード)。厚み分類には数えず、既出表示・主ソース dedup には reinforces との union で数える |
 | `extends` | 任意 | 拡張する repo concept の @id 配列 (frontier モード)。集計上の扱いは challenges と同じ |
 | `broadCluster` | ✅ | `dr:cluster/{broad_name}` を 1 件指定 |

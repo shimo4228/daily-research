@@ -1,6 +1,6 @@
 # daily-research
 
-Claude Code 非対話モード (`claude -p`) + macOS launchd で毎朝 AM 5:00 に自律リサーチを実行するシステム。4 つの研究ライン (line) で構成される: repo-backed line 2 本 (各 line = 2 つの DOI 登録済み研究 repo) は repo の概念体系 (graph.jsonld) を補強 (coverage) または挑戦・拡張 (frontier) する最新外部研究を、自由探索 line 2 本 (tech / human_adaptation、いずれも maker variant) は飽和 cluster を避けた未踏領域のセレンディピティをリサーチして Obsidian vault に出力する。
+Claude Code 非対話モード (`claude -p`) + macOS launchd で毎朝 AM 5:00 に自律リサーチを実行するシステム。4 つの研究ライン (line) で構成される: repo-backed line 1 本 (`agent_systems` = AKC / Contemplative Agent / AAP) は repo の概念体系 (graph.jsonld) を補強 (coverage) または挑戦・拡張 (frontier) する最新外部研究を、自由探索 line 3 本 (`human_ai_publics` / `tech` / `human_adaptation`) は飽和 cluster を避けた未踏領域のセレンディピティをリサーチして Obsidian vault に出力する。
 
 ## Tech Stack
 
@@ -51,7 +51,7 @@ daily-research/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md   # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md   # 開発ガイド
 │   ├── graph-schema.md              # graph.jsonld スキーマ仕様（concept cluster + reinforces）
-│   └── adr/                         # アーキテクチャ決定記録（0001-0003 + README）
+│   └── adr/                         # アーキテクチャ決定記録（0001-0005 + README）
 └── com.example.daily-research.plist  # launchd plist テンプレート
 ```
 
@@ -84,7 +84,7 @@ tail -f logs/$(date +%Y-%m-%d).log
 ### 設計方針
 
 - **2パス方式**: Pass 1 (Opus: repo graph + coverage-report + cluster-report を読んでテーマ選定) → Pass 2 (Sonnet: リサーチ・執筆 + graph.jsonld 増分更新)
-- **4 ライン構成 (2026-07-07 再編 = ADR-0004、2026-07-17 に human_adaptation 追加)**: config.toml の `[tracks.X]` = line、`[[tracks.X.repos]]` = 寄与先 repo (0..N)。repos を持つ line は repo 寄与、持たない line は自由探索。自由探索 line は `report_variant = "maker"` を指定でき、レポートは反証・緊張関係節なし + 末尾「開発アイデア」節になる
+- **4 ライン固定 (2026-07-19 再編 = ADR-0005)**: `agent_systems` (AKC + Contemplative Agent + AAP) / `human_ai_publics` (AI協働型公共圏・public_sphere_radar) / `tech` (maker) / `human_adaptation` (maker)。config.toml の `[tracks.X]` = line、`[[tracks.X.repos]]` = 寄与先 repo (0..N)。repos を持つ line は repo 寄与、持たない line は自由探索。Authorship Strategy は active mapping 対象外
 - **coverage / frontier の 2 モード (repo 単位)**: 起動時に各 repo の graph を `.repo-graphs/<key>.jsonld` へ sync、`coverage-report.sh` (本体は `dr_pipeline.py coverage-report`) が「repo の全 concept − graph.jsonld の reinforces 済み concept」を算出し、未補強+薄い concept が閾値以下なら **frontier モード** (gap 埋め → concept への挑戦・拡張・新 concept 候補の探索に切替、repo の `frontier_questions` を最優先) と判定して Pass 1 に注入。Pass 2 が `reinforces` / `challenges` / `extends` を graph に記録する
 - **自由探索 line の cluster 反発**: `dr_pipeline.py cluster-report` が graph.jsonld の subCluster 頻度から飽和 cluster (全期間 top-N ∪ 直近 90 日 3+ 回) を算出し Pass 1 に注入、選定禁止にする (旧 tech track の固定 domains 飽和の再発防止)
 - Pass 1 失敗時は Sonnet が一括フォールバック（テーマ選定も担当）
@@ -108,8 +108,8 @@ tail -f logs/$(date +%Y-%m-%d).log
 - vault_path は `config.toml` の `[general].vault_path` で指定
 - レポートは散文主体。箇条書きは比較表や4項目以上の並列列挙のみ
 - 出典は最低5件、URL 必須
-- 「未解決の問い」「反証・緊張関係」節で外部研究側の gap と repo concept への挑戦を記録（開発アイデア節は 2026-06-06 廃止 — repo 内部状態を知らないため的外れになりやすく、寄与節と重複していた）
-- 各レポート末尾に「この repo への寄与」節（補強 concept / 拡張・挑戦 / 取り込み提案の 3 点構造）
+- 「未解決の問い」「反証・緊張関係」節で外部研究側の gap と repo concept への挑戦を記録。maker variant は反証節を省略し末尾「開発アイデア」、public_sphere_radar は公共圏構造を分析し末尾「参加・発信機会」
+- repo-backed レポート末尾は「この repo への寄与」節（補強 concept / 拡張・挑戦 / 取り込み提案の 3 点構造）
 - **repo は read-only 参照のみ**。寄与は vault レポート経由で人間が手で取り込む（daily-research は repo を直接編集しない）
 
 ### プロンプト編集時の注意
@@ -130,7 +130,7 @@ tail -f logs/$(date +%Y-%m-%d).log
 
 - 本番稼働中。毎朝 AM 5:00 に launchd で自動実行
 - Opus テーマ選定 + Sonnet リサーチ・執筆の2パス方式（E2E 検証済み、2026-02-20）
-- **4 ライン構成 (2026-07-07 再編 = ADR-0004、2026-07-17 human_adaptation 追加)**: `attribution` (authorship-strategy + agent-attribution-practice) / `agent_cognition` (agent-knowledge-cycle + contemplative-agent) / `tech` (自由探索・maker variant) / `human_adaptation` (自由探索・maker variant、AI 時代の人間側の学習・認知・スキル形成)。ライン数・repo マッピングは config.toml から動的取得
+- **4 ライン構成 (2026-07-19 再編 = ADR-0005)**: `agent_systems` (agent-knowledge-cycle + contemplative-agent + agent-attribution-practice) / `human_ai_publics` (自由探索・public_sphere_radar、人間主体のAI協働型公共圏) / `tech` (自由探索・maker) / `human_adaptation` (自由探索・maker)。ライン数・repo マッピングは config.toml から動的取得
 - 永続メモリ層: JSON-LD concept cluster graph (`graph.jsonld`) 稼働中。Pass 2 が日次増分更新、起動時 health check
-- coverage (gap 埋め) / frontier (挑戦・拡張) の 2 モード R&D フィードバックエンジン + 自由探索として稼働（2026-07-07 再編、翌朝 launchd で E2E 検証予定）
+- coverage (gap 埋め) / frontier (挑戦・拡張) の repo feedback と、3 種の自由探索として稼働
 - Pass 1 失敗時は Sonnet 一括フォールバックで継続稼働

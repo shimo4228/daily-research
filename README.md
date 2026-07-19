@@ -2,7 +2,7 @@ Language: English | [日本語](README.ja.md)
 
 # daily-research
 
-**A research feedback engine for your own research repositories.** Every morning, [Claude Code](https://docs.anthropic.com/en/docs/claude-code) reads the concept graph of each repo you maintain and researches the latest external work that *develops* it — filling coverage gaps while they exist, then switching to research that challenges or extends the concepts once coverage saturates — plus one free-exploration line that hunts serendipity outside your saturated territory. Reports land in your [Obsidian](https://obsidian.md) vault, each ending with a contribution section you fold back in by hand.
+**A research feedback engine for your own research repositories and adjacent unknowns.** Every morning, [Claude Code](https://docs.anthropic.com/en/docs/claude-code) reads the concept graph of each mapped repo and researches the latest external work that *develops* it — filling coverage gaps while they exist, then switching to research that challenges or extends the concepts once coverage saturates. Independent free-exploration lines hunt serendipity outside saturated territory. Reports land in your [Obsidian](https://obsidian.md) vault with an ending matched to the line: repo contribution, development ideas, or a participation radar.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/shimo4228/daily-research) [![GitMCP](https://img.shields.io/endpoint?url=https://gitmcp.io/badge/shimo4228/daily-research)](https://gitmcp.io/shimo4228/daily-research) ![python](https://img.shields.io/badge/python-3.11%2B%20stdlib-3776ab.svg)
 
@@ -34,7 +34,7 @@ This started as a generic trend-research tool. Fixed topic domains caused struct
 
 - **Coverage gap** — a concept present in a repo's graph but not yet recorded under `reinforces` in `graph.jsonld`. While gaps exist they are the primary targets of theme selection, and they shrink as Pass 2 records each reinforced concept.
 - **Frontier mode** — the post-saturation objective: once a repo has no gaps left, themes must challenge (`challenges`) or extend (`extends`) existing concepts, or propose new-concept candidates, guided by per-repo `frontier_questions`. Thickness statistics count only `reinforces`; dedup counts the union.
-- **Cluster repulsion** — the free-exploration line's novelty guard: high-frequency subClusters (all-time top-N ∪ recently hot) are off-limits, mechanically preventing the saturation that killed the original trend tracks.
+- **Cluster repulsion** — the free-exploration lines' novelty guard: high-frequency subClusters (all-time top-N ∪ recently hot) are off-limits, mechanically preventing the saturation that killed the original trend tracks.
 - **Frontier-diff reporting** — a report is the *delta* against a repo's current concept frontier, not a digest of accumulated content. This is the output-side dual of the same signal-first filter that drives theme selection ([ADR-0002](docs/adr/0002-reports-as-frontier-diff.md)).
 - **Concept cluster graph** — `graph.jsonld`, a schema.org JSON-LD persistent memory whose report nodes are grouped into 7 broad concept clusters; Pass 2 updates it incrementally each run. Schema in [graph-schema.md](docs/graph-schema.md).
 - **Repo feedback loop** — repos are referenced **read-only**; the pipeline never edits them. Contributions flow through vault reports that a human folds back in, avoiding cross-repo pollution.
@@ -122,6 +122,8 @@ saturated_recent_days = 90
 saturated_recent_min = 3
 ```
 
+Free-exploration lines may set `report_variant = "maker"` to end with buildable ideas, or `report_variant = "public_sphere_radar"` to analyze a human-led AI-enabled public venue and end with a `PILOT | WATCH | DROP` participation verdict. The radar verifies current activity and excludes agent-only networks, generic model leaderboards, and inactive demo-only venues.
+
 Reports are generated in Japanese by default; change the language constraint in `prompts/research-protocol.md`. See [CONTRIB](docs/CONTRIB.md) for tuning research depth, CLI flags, and environment variables.
 
 ## Project structure
@@ -151,6 +153,7 @@ daily-research/
 |----------|-----|
 | Lines map to repo graphs (coverage-gap driven while gaps exist) | Fixed topic domains caused structural saturation; mapping to a repo graph prevents domain narrowing ([ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)) |
 | Frontier mode + free-exploration line with cluster repulsion | A gap-driven engine completes by design; saturation flips the objective to challenge/extend, and serendipity gets its own mechanically-guarded line ([ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md)) |
+| Four-line rebalance: Agent Systems + three exploration lines | Keeps the daily attention budget fixed while separating agent architecture, human-led AI public participation, developer technology, and individual adaptation ([ADR-0005](docs/adr/0005-agent-systems-and-human-ai-publics-line-rebalance.md)) |
 | Reports as frontier-diff | A report is the delta against a repo's evolving concept graph, not a digest ([ADR-0002](docs/adr/0002-reports-as-frontier-diff.md)) |
 | Local JSON-LD graph, not external MCP memory | The previous Mem0 MCP integration ran zero times for 32 days due to silent failure; a local file fails loudly |
 | 2-pass (Opus + Sonnet) | Opus is stronger at theme selection; Sonnet is faster and cheaper for research and writing |
@@ -172,7 +175,7 @@ Operational rationale (real auth probe vs `--version`, `--append-system-prompt-f
 - [RUNBOOK](docs/RUNBOOK.md) / [日本語](docs/RUNBOOK.ja.md) — operations: monitoring, troubleshooting
 - [CONTRIB](docs/CONTRIB.md) / [日本語](docs/CONTRIB.ja.md) — development: testing, CLI flags, environment variables
 - [graph-schema.md](docs/graph-schema.md) — `graph.jsonld` schema: node types, cluster naming, integrity rules
-- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md) · [ADR-0002](docs/adr/0002-reports-as-frontier-diff.md) · [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) · [ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md) — architecture decisions
+- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md) · [ADR-0002](docs/adr/0002-reports-as-frontier-diff.md) · [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) · [ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md) · [ADR-0005](docs/adr/0005-agent-systems-and-human-ai-publics-line-rebalance.md) — architecture decisions
 
 ## License
 

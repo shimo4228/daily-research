@@ -6,6 +6,7 @@
 | 0002 | signal-first 原則の出力側双対 — レポートをフロンティア差分として定義する | Accepted | 2026-06-29 |
 | 0003 | daily-research を複数研究ラインにまたがる知識環流エンジンとして認識する | Accepted | 2026-06-29 |
 | 0004 | 4 track を 3 ライン (2 repo-backed + 1 自由探索) に再編し、飽和 repo に frontier モードを導入する | Accepted | 2026-07-07 |
+| 0005 | 4ラインを Agent Systems + AI協働型公共圏 + Tech + Human Adaptation に再編する | Accepted | 2026-07-19 |
 
 ## Template
 

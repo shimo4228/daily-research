@@ -43,27 +43,32 @@ EOF
 [general]
 vault_path = "/tmp/mock-vault"
 
-[tracks.attribution]
-name = "Attribution Line"
-aliases = ["authorship", "aap"]
+[tracks.agent_systems]
+name = "Agent Systems Line"
+aliases = ["agent_cognition", "akc", "contemplative", "aap"]
 
-[[tracks.attribution.repos]]
-key = "authorship"
-target_repo = "/tmp/mock-repos/authorship-strategy"
-
-[[tracks.attribution.repos]]
-key = "aap"
-target_repo = "/tmp/mock-repos/agent-attribution-practice"
-
-[tracks.agent_cognition]
-name = "Agent Cognition Line"
-
-[[tracks.agent_cognition.repos]]
+[[tracks.agent_systems.repos]]
 key = "akc"
 target_repo = "/tmp/mock-repos/agent-knowledge-cycle"
 
+[[tracks.agent_systems.repos]]
+key = "contemplative"
+target_repo = "/tmp/mock-repos/contemplative-agent"
+
+[[tracks.agent_systems.repos]]
+key = "aap"
+target_repo = "/tmp/mock-repos/agent-attribution-practice"
+
+[tracks.human_ai_publics]
+name = "Human-AI Publics"
+report_variant = "public_sphere_radar"
+
 [tracks.tech]
 name = "Tech Free Exploration"
+
+[tracks.human_adaptation]
+name = "Human Adaptation"
+report_variant = "maker"
 EOF
 
   # past_topics.json のミニマル版
@@ -133,7 +138,7 @@ if [[ "$MODEL" == "opus" ]]; then
       # --output-format stream-json --verbose の NDJSON 形式。parse-stream.py が処理する
       cat << 'JSON'
 {"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"tool_use","name":"WebSearch","id":"toolu_mock01","input":{"query":"mock search"}}]}}
-{"type":"result","subtype":"success","is_error":false,"duration_ms":5000,"duration_api_ms":4500,"num_turns":5,"total_cost_usd":0.25,"usage":{"input_tokens":1000,"output_tokens":500,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"result":"{\"themes\": [{\"track\": \"attribution\", \"repos\": [\"authorship\"], \"mode\": \"coverage\", \"topic\": \"Mock Attribution Topic for E2E Testing\", \"slug\": \"mock-attribution-topic\", \"score\": 85, \"reinforces\": [\"concept/mock-attr\"], \"rationale\": \"E2E test rationale\"}, {\"track\": \"agent_cognition\", \"repos\": [\"akc\"], \"mode\": \"frontier\", \"topic\": \"Mock Cognition Topic for E2E Testing\", \"slug\": \"mock-cognition-topic\", \"score\": 80, \"challenges\": [\"concept/mock-akc\"], \"rationale\": \"E2E test rationale\"}, {\"track\": \"tech\", \"topic\": \"Mock Tech Topic for E2E Testing\", \"slug\": \"mock-tech-topic\", \"score\": 82, \"rationale\": \"E2E test rationale\"}]}"}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":5000,"duration_api_ms":4500,"num_turns":5,"total_cost_usd":0.25,"usage":{"input_tokens":1000,"output_tokens":500,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"result":"{\"themes\": [{\"track\": \"agent_systems\", \"repos\": [\"akc\"], \"mode\": \"frontier\", \"topic\": \"Mock Agent Systems Topic for E2E Testing\", \"slug\": \"mock-agent-systems-topic\", \"score\": 85, \"challenges\": [\"concept/mock-akc\"], \"rationale\": \"E2E test rationale\"}, {\"track\": \"human_ai_publics\", \"repos\": [], \"mode\": \"explore\", \"topic\": \"Mock Human AI Publics Topic for E2E Testing\", \"slug\": \"mock-human-ai-publics-topic\", \"score\": 84, \"rationale\": \"E2E test rationale\"}, {\"track\": \"tech\", \"topic\": \"Mock Tech Topic for E2E Testing\", \"slug\": \"mock-tech-topic\", \"score\": 82, \"rationale\": \"E2E test rationale\"}, {\"track\": \"human_adaptation\", \"repos\": [], \"mode\": \"explore\", \"topic\": \"Mock Human Adaptation Topic for E2E Testing\", \"slug\": \"mock-human-adaptation-topic\", \"score\": 81, \"rationale\": \"E2E test rationale\"}]}"}
 JSON
       exit 0
       ;;
@@ -230,9 +235,10 @@ get_log() {
   local sonnet_prompt
   sonnet_prompt=$(cat "$MOCK_HOME/.sonnet_prompt")
 
-  echo "$sonnet_prompt" | grep -q "mock-attribution-topic"
-  echo "$sonnet_prompt" | grep -q "mock-cognition-topic"
+  echo "$sonnet_prompt" | grep -q "mock-agent-systems-topic"
+  echo "$sonnet_prompt" | grep -q "mock-human-ai-publics-topic"
   echo "$sonnet_prompt" | grep -q "mock-tech-topic"
+  echo "$sonnet_prompt" | grep -q "mock-human-adaptation-topic"
   echo "$sonnet_prompt" | grep -q "選定済みテーマ"
 
   # validate-theme が mode / repos を正規化して透過している

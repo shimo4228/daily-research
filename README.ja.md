@@ -2,7 +2,7 @@ Language: [English](README.md) | 日本語
 
 # daily-research
 
-**自分の研究リポジトリのためのリサーチフィードバックエンジン。** 毎朝、[Claude Code](https://docs.anthropic.com/en/docs/claude-code) が、あなたが管理する各 repo の concept graph を読み込み、それを *発展させる* 最新の外部研究をリサーチします — coverage gap がある間はそれを埋め、飽和したら concept に挑戦・拡張する研究へ切り替えます。加えて、飽和領域の外からセレンディピティを拾う自由探索ラインが 1 本走ります。レポートは [Obsidian](https://obsidian.md) Vault に書き出され、末尾の寄与節を人間が手で元 repo に取り込めます。
+**自分の研究リポジトリと、その周囲の未知を耕すリサーチフィードバックエンジン。** 毎朝、[Claude Code](https://docs.anthropic.com/en/docs/claude-code) が、マッピングされた repo の concept graph を読み込み、それを *発展させる* 最新の外部研究をリサーチします — coverage gap がある間はそれを埋め、飽和したら concept に挑戦・拡張する研究へ切り替えます。独立した自由探索ラインは飽和領域の外からセレンディピティを拾います。レポートは [Obsidian](https://obsidian.md) Vault に書き出され、ラインに応じてrepo寄与、開発アイデア、参加機会Radarのいずれかで終わります。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/shimo4228/daily-research) [![GitMCP](https://img.shields.io/endpoint?url=https://gitmcp.io/badge/shimo4228/daily-research)](https://gitmcp.io/shimo4228/daily-research) ![python](https://img.shields.io/badge/python-3.11%2B%20stdlib-3776ab.svg)
 
@@ -34,7 +34,7 @@ flowchart TD
 
 - **Coverage gap** — repo の graph にあるが `graph.jsonld` の `reinforces` にまだ記録されていない concept。gap がある間はテーマ選定の第一ターゲットで、Pass 2 が補強を記録するたびに縮小します。
 - **Frontier モード** — 飽和後の目的関数: repo に gap が無くなったら、テーマは既存 concept への挑戦 (`challenges`)・拡張 (`extends`)、または新 concept 候補の提案となり、repo ごとの `frontier_questions` が探索を導きます。厚み統計は `reinforces` のみ、dedup は union で数えます。
-- **Cluster 反発** — 自由探索ラインの新規性ガード: 高頻度 subCluster（全期間 top-N ∪ 直近の頻出）を選定禁止にし、旧トレンドトラックを殺した飽和を機構的に防ぎます。
+- **Cluster 反発** — 自由探索ライン群の新規性ガード: 高頻度 subCluster（全期間 top-N ∪ 直近の頻出）を選定禁止にし、旧トレンドトラックを殺した飽和を機構的に防ぎます。
 - **フロンティア差分レポート (frontier-diff reporting)** — レポートは蓄積コンテンツの要約ではなく、repo の現在の concept frontier に対する *差分* です。テーマ選定を駆動するのと同じ signal-first フィルターの出力側双対です（[ADR-0002](docs/adr/0002-reports-as-frontier-diff.md)）。
 - **Concept cluster graph** — `graph.jsonld`、schema.org JSON-LD の永続メモリ。レポートノードを 7 つの broad concept クラスタにまとめます。Pass 2 が実行ごとに増分更新します。スキーマは [graph-schema.md](docs/graph-schema.md)。
 - **repo フィードバックループ** — repo は **read-only** 参照で、パイプラインは決して編集しません。寄与は人間が取り込む Vault レポート経由で流れ、repo 間汚染を回避します。
@@ -122,6 +122,8 @@ saturated_recent_days = 90
 saturated_recent_min = 3
 ```
 
+自由探索ラインでは、`report_variant = "maker"` を指定すると開発アイデアで、`report_variant = "public_sphere_radar"` を指定すると人間主体のAI協働型公共圏を分析した `PILOT | WATCH | DROP` の参加機会Radarでレポートが終わります。Radarは現在の実活動を確認し、agent-only network、generic model leaderboard、休眠したdemo-only venueを除外します。
+
 レポートはデフォルトで日本語生成です。出力言語は `prompts/research-protocol.md` の言語制約を変更します。リサーチ深度の調整・CLI フラグ・環境変数は [CONTRIB](docs/CONTRIB.md) を参照。
 
 ## プロジェクト構成
@@ -151,6 +153,7 @@ daily-research/
 |------|------|
 | ラインを repo graph にマッピング（gap がある間は coverage-gap 駆動） | 固定トピックドメインが構造的飽和を招いた; repo graph にマッピングしドメイン狭隘化を防ぐ（[ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)） |
 | Frontier モード + cluster 反発つき自由探索ライン | gap 駆動エンジンは設計上「完走」する; 飽和で目的関数を挑戦・拡張に反転し、セレンディピティには機構的ガードつきの専用ラインを充てる（[ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md)） |
+| 4本固定の再編: Agent Systems + 3自由探索 | 日次の注意予算を増やさず、agent設計、人間主体のAI公共参加、開発技術、個人適応を分離する（[ADR-0005](docs/adr/0005-agent-systems-and-human-ai-publics-line-rebalance.md)） |
 | レポート = フロンティア差分 | レポートは要約ではなく、repo の進化する concept graph に対する差分（[ADR-0002](docs/adr/0002-reports-as-frontier-diff.md)） |
 | 外部 MCP メモリではなくローカル JSON-LD graph | 旧 Mem0 MCP 統合は静かな失敗で 32 日間ゼロ稼働した; ローカルファイルは失敗が顕在化する |
 | 2パス (Opus + Sonnet) | テーマ選定は Opus が優位; リサーチ・執筆は Sonnet が高速かつ低コスト |
@@ -172,7 +175,7 @@ daily-research/
 - [RUNBOOK](docs/RUNBOOK.md) / [日本語](docs/RUNBOOK.ja.md) — 運用: モニタリング、トラブルシューティング
 - [CONTRIB](docs/CONTRIB.md) / [日本語](docs/CONTRIB.ja.md) — 開発: テスト、CLI フラグ、環境変数
 - [graph-schema.md](docs/graph-schema.md) — `graph.jsonld` スキーマ: ノード型、クラスタ命名、整合性ルール
-- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md) · [ADR-0002](docs/adr/0002-reports-as-frontier-diff.md) · [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) · [ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md) — アーキテクチャ決定記録
+- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md) · [ADR-0002](docs/adr/0002-reports-as-frontier-diff.md) · [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) · [ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md) · [ADR-0005](docs/adr/0005-agent-systems-and-human-ai-publics-line-rebalance.md) — アーキテクチャ決定記録
 
 ## ライセンス
 

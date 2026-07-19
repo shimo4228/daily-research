@@ -15,7 +15,7 @@ import pytest
 import dr_pipeline
 
 FIXTURES = pathlib.Path(__file__).parent / "fixtures"
-CONFIG = str(FIXTURES / "config.toml")
+CONFIG = str(FIXTURES / "config-lines.toml")
 CONFIG_NO_TRACKS = str(FIXTURES / "config-no-tracks.toml")
 
 
@@ -203,14 +203,14 @@ def test_parse_stream_skips_unparseable_lines(monkeypatch, capsys):
 
 
 def _valid_themes():
-    # fixture config の 3 line 構成 (attribution / agent_cognition / tech) に対応。
-    # coverage / frontier / explore の 3 mode を 1 テーマずつカバーする。
+    # fixture config の 4 line 構成に対応。
+    # repo-backed の coverage と、3 本の explore をカバーする。
     return json.dumps(
         {
             "themes": [
                 {
-                    "track": "attribution",
-                    "repos": ["authorship"],
+                    "track": "agent_systems",
+                    "repos": ["akc", "contemplative", "aap"],
                     "mode": "coverage",
                     "topic": "T",
                     "slug": "a-slug",
@@ -219,15 +219,13 @@ def _valid_themes():
                     "reinforces": ["concept/x"],
                 },
                 {
-                    "track": "agent_cognition",
-                    "repos": ["akc", "contemplative"],
-                    "mode": "frontier",
+                    "track": "human_ai_publics",
+                    "repos": [],
+                    "mode": "explore",
                     "topic": "T",
                     "slug": "b-slug",
                     "score": 80,
                     "rationale": "r",
-                    "reinforces": [],
-                    "challenges": ["concept/y"],
                 },
                 {
                     "track": "tech",
@@ -238,6 +236,15 @@ def _valid_themes():
                     "score": 80,
                     "rationale": "r",
                     "reinforces": [],
+                },
+                {
+                    "track": "human_adaptation",
+                    "repos": [],
+                    "mode": "explore",
+                    "topic": "T",
+                    "slug": "d-slug",
+                    "score": 80,
+                    "rationale": "r",
                 },
             ]
         }
@@ -250,7 +257,21 @@ def test_validate_theme_valid(monkeypatch, capsys):
         monkeypatch, capsys, ["validate-theme", CONFIG], _valid_themes()
     )
     assert rc == 0
-    assert json.loads(out)["themes"][0]["track"] == "attribution"
+    assert json.loads(out)["themes"][0]["track"] == "agent_systems"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("old_track", ["attribution", "agent_cognition"])
+def test_validate_theme_rejects_retired_line_keys(
+    monkeypatch, capsys, old_track
+):
+    data = json.loads(_valid_themes())
+    data["themes"][0]["track"] = old_track
+    rc, _, err = run_cmd(
+        monkeypatch, capsys, ["validate-theme", CONFIG], json.dumps(data)
+    )
+    assert rc == 1
+    assert "invalid track" in err
 
 
 @pytest.mark.unit
@@ -267,17 +288,16 @@ def test_validate_theme_normalizes_defaults(monkeypatch, capsys):
     # 自由探索 line → explore) を検証。Pass 2 が graph に記録するため書き戻しが必要。
     d = json.loads(_valid_themes())
     del d["themes"][0]["mode"]  # repo line → coverage に正規化
-    del d["themes"][2]["mode"]  # 自由探索 line → explore に正規化
-    del d["themes"][2]["repos"]  # 省略 → [] に正規化
-    del d["themes"][2]["reinforces"]  # 省略 → [] に正規化
+    del d["themes"][1]["mode"]  # 自由探索 line → explore に正規化
+    del d["themes"][1]["repos"]  # 省略 → [] に正規化
     rc, out, _ = run_cmd(monkeypatch, capsys, ["validate-theme", CONFIG], json.dumps(d))
     assert rc == 0
     themes = json.loads(out)["themes"]
     assert themes[0]["mode"] == "coverage"
-    assert themes[2]["mode"] == "explore"
-    assert themes[2]["repos"] == []
-    assert themes[2]["reinforces"] == []
-    assert themes[2]["challenges"] == []
+    assert themes[1]["mode"] == "explore"
+    assert themes[1]["repos"] == []
+    assert themes[1]["reinforces"] == []
+    assert themes[1]["challenges"] == []
 
 
 @pytest.mark.unit
@@ -318,7 +338,7 @@ def test_validate_theme_old_schema_config_errors(monkeypatch, capsys):
             "reinforces-non-string",
         ),
         (
-            lambda d: d["themes"][1].__setitem__("challenges", ["bad char"]),
+            lambda d: d["themes"][0].__setitem__("challenges", ["bad char"]),
             "challenges-bad-char",
         ),
         (
@@ -330,11 +350,11 @@ def test_validate_theme_old_schema_config_errors(monkeypatch, capsys):
             "repos-missing-for-repo-line",
         ),
         (
-            lambda d: d["themes"][0].__setitem__("repos", "authorship"),
+            lambda d: d["themes"][0].__setitem__("repos", "akc"),
             "repos-not-a-list",
         ),
         (
-            lambda d: d["themes"][2].__setitem__("repos", ["authorship"]),
+            lambda d: d["themes"][1].__setitem__("repos", ["akc"]),
             "repos-on-explore-line",
         ),
         (
@@ -342,15 +362,17 @@ def test_validate_theme_old_schema_config_errors(monkeypatch, capsys):
             "explore-mode-on-repo-line",
         ),
         (
-            lambda d: d["themes"][2].__setitem__("mode", "coverage"),
+            lambda d: d["themes"][1].__setitem__("mode", "coverage"),
             "coverage-mode-on-explore-line",
         ),
         (
-            lambda d: d["themes"][1].__setitem__("challenges", []),
+            lambda d: d["themes"][0].update(
+                {"mode": "frontier", "reinforces": [], "challenges": []}
+            ),
             "frontier-all-relations-empty",
         ),
         (
-            lambda d: d["themes"][2].__setitem__("reinforces", ["concept/x"]),
+            lambda d: d["themes"][1].__setitem__("reinforces", ["concept/x"]),
             "explore-with-reinforces",
         ),
         (
@@ -493,17 +515,21 @@ def test_themes_log(monkeypatch, capsys):
 
 @pytest.mark.unit
 def test_tracks_emits_line_repo_tsv(monkeypatch, capsys):
-    # 1 repo 1 行 (line<TAB>repo_key<TAB>target_repo)。自由探索 line (tech) は 0 行。
+    # 1 repo 1 行。3 本の自由探索 line は 0 行。
     rc, out, _ = run_cmd(monkeypatch, capsys, ["tracks", CONFIG])
     assert rc == 0
     lines = [ln for ln in out.splitlines() if ln]
-    assert len(lines) == 4
-    assert "attribution\tauthorship\t/tmp/fixture-repos/authorship-strategy" in lines
+    assert len(lines) == 3
+    assert "agent_systems\takc\t/tmp/fixture-repos/agent-knowledge-cycle" in lines
     assert (
-        "agent_cognition\tcontemplative\t/tmp/fixture-repos/contemplative-agent"
+        "agent_systems\tcontemplative\t/tmp/fixture-repos/contemplative-agent"
         in lines
     )
-    assert not any(ln.startswith("tech\t") for ln in lines)
+    assert "agent_systems\taap\t/tmp/fixture-repos/agent-attribution-practice" in lines
+    assert not any(
+        ln.startswith(("human_ai_publics\t", "tech\t", "human_adaptation\t"))
+        for ln in lines
+    )
 
 
 @pytest.mark.unit
@@ -528,8 +554,8 @@ def test_past_themes_groups_aliases_into_line(monkeypatch, capsys, tmp_path):
                 "topics": [
                     {"track": "akc", "title": "Old AKC topic", "date": "2026-06-01"},
                     {
-                        "track": "authorship",
-                        "title": "Old authorship topic",
+                        "track": "agent_cognition",
+                        "title": "Old cognition topic",
                         "date": "2026-06-02",
                     },
                     {"track": "aap", "title": "Old AAP topic", "date": "2026-06-03"},
@@ -543,20 +569,27 @@ def test_past_themes_groups_aliases_into_line(monkeypatch, capsys, tmp_path):
                         "title": "should be filtered",
                         "date": "2026-06-05",
                     },
+                    {
+                        "track": "attribution",
+                        "title": "Old attribution line should stay historical",
+                        "date": "2026-07-08",
+                    },
                 ]
             }
         )
     )
     rc, out, _ = run_cmd(monkeypatch, capsys, ["past-themes", str(past), CONFIG])
     assert rc == 0
-    assert "Track: attribution (旧 track: authorship, aap を含む)" in out
-    assert "Old authorship topic" in out
+    assert "Track: agent_systems (旧 track: agent_cognition, akc, contemplative, aap を含む)" in out
+    assert "Old cognition topic" in out
     assert "Old AAP topic" in out
-    assert "Track: agent_cognition" in out
     assert "Old AKC topic" in out
     assert "Track: tech" in out
     assert "Old ai_dev topic" in out  # tech の alias ai_dev も集約
+    assert "Track: human_ai_publics" not in out  # 新 line は旧履歴を継承しない
+    assert "Track: human_adaptation" not in out  # 履歴が無い line は表示しない
     assert "should be filtered" not in out  # 未定義 track は除外
+    assert "Old attribution line should stay historical" not in out
 
 
 @pytest.mark.unit

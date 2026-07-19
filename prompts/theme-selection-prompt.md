@@ -17,7 +17,11 @@
   coverage report の **『常設フロンティア質問』を最優先の探索軸** にすること
 - **explore** — 自由探索 line 専用。line の `focus` が定めるドメインの中で、プロンプト末尾の **Cluster saturation report** の飽和 cluster を避け、過去テーマと重ならない未踏サブ領域から選ぶ
 
-2 repo を持つ line では、片方の repo に絞ったテーマでも、両 repo の concept を横断する **交差テーマ** でもよい。交差テーマは単独 repo では出ない新規性を持つため歓迎される (その場合 `repos` に両方の key を列挙する)。
+複数 repo を持つ line では、1 repo に絞ったテーマでも、複数 repo の concept を横断する **交差テーマ** でもよい。交差テーマは単独 repo では出ない新規性を持つため歓迎される (その場合 `repos` に該当する key を列挙する)。
+
+### `public_sphere_radar` variant の選定条件
+
+config.toml の line に `report_variant = "public_sphere_radar"` がある場合は、AI自体やAI agentを主体にせず、**AIを活用する人間が公開・参加・評価・remixする場**を選ぶ。候補には、人間の主体性、AI-nativeな参加機構、公開artifactの持続性、remix・attributionの経路、現在参加できる入口が必要である。公式ページが存在するだけの休眠venueやdemo-only企画は選ばず、直近の投稿・イベント・更新・参加者などの**実活動**を確認する。agent-only social network、非公開productivity tool、通常SNSへのAI機能追加、generic model leaderboard、投機中心marketplace、著者性・判断・系譜を欠くslop feedは除外する。
 
 ## 手順
 
@@ -31,9 +35,10 @@
 4. 自由探索 line について、このプロンプト末尾の **Cluster saturation report** を読む
    - 飽和 cluster に主に属するテーマは選定禁止。低頻度・新規 cluster を優先
 5. このプロンプト末尾の **過去テーマ履歴** を読み、テーマ・主ソースが重複していないか確認する
-6. 各 line について、モードに適合する **2026 年の最新外部研究** を WebSearch で探索する
+6. 各 line について、モードに適合する **2026 年の最新シグナル** を WebSearch で探索する
    - 各 line の `sources` を検索の起点にする
    - repo-backed line では「この外部研究は repo のどの concept を、どう補強 (coverage) / 挑戦・拡張 (frontier) するか」を常に意識する
+   - 自由探索 line では論文に限定せず、公式発表、稼働中のplatform・venue、公開artifact、communityの実活動、実践動向を含める
 7. `config.toml` の `scoring_criteria` で候補を評価し、各 line 最高スコアのテーマを 1 つずつ選定する
 
 ## 出力形式
@@ -45,28 +50,28 @@ themes 配列の要素数は config.toml の line 数と一致させること（
 {
   "themes": [
     {
-      "track": "attribution",
-      "repos": ["authorship"],
+      "track": "agent_systems",
+      "repos": ["akc"],
       "mode": "coverage",
       "topic": "テーマのタイトル（日本語、200 文字以内）",
       "slug": "english-kebab-case-slug",
       "score": 4.2,
-      "reinforces": ["https://github.com/shimo4228/authorship-strategy#concept/xxx"],
+      "reinforces": ["https://github.com/shimo4228/agent-knowledge-cycle#concept/xxx"],
       "challenges": [],
       "extends": [],
       "rationale": "補強対象の concept 名と、この外部研究がどう補強するかを 1-2 文で（500 文字以内）"
     },
     {
-      "track": "agent_cognition",
-      "repos": ["akc", "contemplative"],
-      "mode": "frontier",
+      "track": "human_ai_publics",
+      "repos": [],
+      "mode": "explore",
       "topic": "...",
       "slug": "...",
-      "score": 3.9,
+      "score": 4.1,
       "reinforces": [],
-      "challenges": ["https://.../vocab#concept/yyy"],
-      "extends": ["https://.../vocab#concept/zzz"],
-      "rationale": "挑戦・拡張対象の concept 名と、この外部研究がどう挑戦・拡張するかを 1-2 文で"
+      "challenges": [],
+      "extends": [],
+      "rationale": "人間が主体となる公共的な参加機構、直近の実活動、参加入口を 1-2 文で"
     },
     {
       "track": "tech",
@@ -79,6 +84,18 @@ themes 配列の要素数は config.toml の line 数と一致させること（
       "challenges": [],
       "extends": [],
       "rationale": "どの未踏 cluster に属し、なぜ今注目かを 1-2 文で"
+    },
+    {
+      "track": "human_adaptation",
+      "repos": [],
+      "mode": "explore",
+      "topic": "...",
+      "slug": "...",
+      "score": 3.8,
+      "reinforces": [],
+      "challenges": [],
+      "extends": [],
+      "rationale": "人間側の学習・認知・スキル形成における未踏領域と新展開を 1-2 文で"
     }
   ]
 }
@@ -89,7 +106,7 @@ themes 配列の要素数は config.toml の line 数と一致させること（
 - track 名・repos の key は config.toml の通り。順不同で可
 - **`repos`** には寄与先 repo の `key` を入れる（config.toml の `[[tracks.X.repos]]` の `key`）。交差テーマなら複数列挙。自由探索 line は空配列
 - **`mode`** は coverage report の `MODE:` 判定に従う。repo-backed line は `coverage` / `frontier`、自由探索 line は `explore`。1 テーマで複数 repo に寄与しモードが混在する場合は主たる寄与先のモードを書く
-- **`reinforces` / `challenges` / `extends`** には対象 concept の @id を入れる。coverage report の角括弧 `[...]` 内の完全 URI、またはその fragment (`#` 以降、例 `concept/attribution-diffusion`) のどちらでもよい (coverage-report は `#` 以降で正規化照合する)。使い分け:
+- **`reinforces` / `challenges` / `extends`** には対象 concept の @id を入れる。coverage report の角括弧 `[...]` 内の完全 URI、またはその fragment (`#` 以降、例 `concept/signal-first`) のどちらでもよい (coverage-report は `#` 以降で正規化照合する)。使い分け:
   - `reinforces` — concept を裏付け・補強する (coverage モードの主フィールド。非空必須)
   - `challenges` — concept に挑戦・矛盾する (frontier モード)
   - `extends` — concept を拡張する (frontier モード)。frontier では 3 つの union が非空であること

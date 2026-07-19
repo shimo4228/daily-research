@@ -1,0 +1,42 @@
+# Test fixture config — 4 lines (1 repo-backed + 3 free-exploration),
+# mirrors the structure of the real config.toml.
+[general]
+vault_path = "/tmp/fixture-vault"
+
+[coverage]
+frontier_threshold = 0
+saturated_top_n = 2
+saturated_recent_days = 90
+saturated_recent_min = 3
+
+[tracks.agent_systems]
+name = "Agent Systems Line"
+aliases = ["agent_cognition", "akc", "contemplative", "aap"]
+
+[[tracks.agent_systems.repos]]
+key = "akc"
+target_repo = "/tmp/fixture-repos/agent-knowledge-cycle"
+target_graph = ".repo-graphs/akc.jsonld"
+frontier_questions = ["How can a knowledge cycle be evaluated?"]
+
+[[tracks.agent_systems.repos]]
+key = "contemplative"
+target_repo = "/tmp/fixture-repos/contemplative-agent"
+target_graph = ".repo-graphs/contemplative.jsonld"
+
+[[tracks.agent_systems.repos]]
+key = "aap"
+target_repo = "/tmp/fixture-repos/agent-attribution-practice"
+target_graph = ".repo-graphs/aap.jsonld"
+
+[tracks.human_ai_publics]
+name = "Human-AI Publics"
+report_variant = "public_sphere_radar"
+
+[tracks.tech]
+name = "Tech Free Exploration"
+aliases = ["tech", "ai_dev"]
+
+[tracks.human_adaptation]
+name = "Human Adaptation"
+report_variant = "maker"

@@ -8,8 +8,9 @@
 1. **repo-backed line** (テーマ JSON の `repos` が非空): ユーザーが運用する DOI
    登録済み研究 repo 群の概念体系を補強 (coverage) または挑戦・拡張 (frontier)
    する最新外部研究を発見し、人間が repo に取り込める形で橋渡しすること
-2. **自由探索 line** (`repos` が空、`mode: "explore"`): 研究ラインの既存領域の外から
-   セレンディピティとなる新しい動きを発掘し、将来の研究ラインへの接続可能性を示すこと
+2. **自由探索 line** (`repos` が空、`mode: "explore"`): line の focus に沿って既存領域の
+   外からセレンディピティとなる新しい動きを発掘し、`report_variant` に応じて開発案、
+   公共的な参加機会、または将来の研究ラインへの接続可能性を示すこと
 
 ## 重要な制約
 
@@ -44,6 +45,9 @@
 
 2. **これらの問いに基づいて次のStep 3の検索を計画する**
 
+`public_sphere_radar` variant では、5問の中に必ず「人間とAIの役割分担」「公開artifactと
+参加入口」「評価・remix・attributionの仕組み」「現在の実活動」「利用条件・撤退リスク」を含める。
+
 ### Step 3: 多段階リサーチ実行
 
 各テーマについて:
@@ -72,12 +76,15 @@ templates/report-template.md のフォーマットに厳密に従い、選定さ
 - **文のバリエーション**: 同じ構造の文を3つ以上連続させない。短い文と長い文を織り交ぜ、読みやすいリズムを作る
 - **具体性**: 抽象的な記述を避け、具体的なツール名・数字・事例を含める
 - **最新性**: 2026年の情報を優先。古い情報は「背景」セクションのみ
+- **公共圏としての構造** (`public_sphere_radar` variant のみ): `## 公共圏としての構造` 節を設け、人間の役割、AIの役割、公開artifact、参加入口、持続性、評価・検証、remix・lineage、attribution、アクセス条件を一体として分析する。AI agentを主体とする空間は対象外
+- **実活動の検証** (`public_sphere_radar` variant のみ): 公式説明だけで判断せず、直近の投稿・イベント・更新・参加者・公開artifactなど、場が現在動いていることを示す証拠を最低1件含める。確認できなければ後述のverdictを `PILOT` にしない
 - **未解決の問い節**: 外部研究側の gap だけを書く。repo の実装状況・ロードマップを推測して書かない。repo-backed line では各問いに repo concept との接点を最低 1 つ明示する（自由探索 line では接点の明示は不要）
 - **反証・緊張節**: **maker variant line（config.toml の track に `report_variant = "maker"` がある自由探索 line）ではこの節を出力しない**。それ以外の line では: 補強材料だけを集めない。repo-backed line ではリサーチ中に repo concept と緊張・矛盾する知見を最低 1 回は意識的に探索する。見つからなければ「反証的知見は見つからなかった」と 1 文で明記する（無理にひねり出さない）。frontier モード（テーマ JSON の `mode: "frontier"`）ではこの節が本体になる — `challenges` に挙げた concept との緊張を具体的に記述する
 - **出典の質**: 信頼できるソースのURLを最低5件含める
 - **repo への寄与節** (repo-backed line のみ): 各レポートの末尾に `## この repo への寄与` 節を設ける（テンプレート参照）。散文 3-6 文を基調に、(1) **補強 concept**: 選定済みテーマ JSON の `reinforces` にある concept 名と、外部研究がそれをどう裏付けるか、(2) **拡張・挑戦**: concept をどの方向に拡張できるか（「反証・緊張関係」で挙げた知見・テーマ JSON の `challenges` / `extends` があればここに接続。frontier モードではこちらを主、補強を従にする）、(3) **取り込み提案**: 新 ADR の種・concept の精緻化・新 concept 候補・graph への追加観点。これは人間が読んで repo に取り込むための橋渡しであり、daily-research が repo を直接編集することはない
 - **開発アイデア節** (maker variant の自由探索 line のみ): 末尾に `## 開発アイデア` 節を設ける（テンプレート参照）。この発見に触発されて config.toml の `user_profile.skills` の持ち主が自分で作れそうなもの 1-3 案を散文で書く。研究 repo の内部文脈は参照しない — 外部研究の内容と user_profile だけから発想する。各案は数日〜1週間のプロトタイプで試せる粒度まで具体化する。作る種が見えなければ無理にひねり出さず 1 案でよい
-- **研究ラインへの接続可能性節** (maker variant でない自由探索 line のみ): `## この repo への寄与` の代わりに `## 研究ラインへの接続可能性` 節を設ける（テンプレート参照）。この発見が既存の研究ライン（attribution / agent_cognition）の concept に将来接続しうるかを 2-3 文で書く。接続が見えなければ「純粋セレンディピティとして記録する」と明記してよい — 無理な接続をひねり出さない
+- **参加・発信機会節** (`public_sphere_radar` variant の自由探索 line のみ): 末尾に `## 参加・発信機会` 節を設ける。verdictを `PILOT | WATCH | DROP` から1つ選び、現在試せる最小pilot、適合するAKC・Contemplative Agent・AAPの成果またはstandaloneなinteractive artifact、人間が保持すべき判断gate、利用条件・休眠・品質・attribution上のリスクと撤退条件を書く。Authorship Strategyへの接続は必須にしない
+- **研究ラインへの接続可能性節** (`maker` / `public_sphere_radar` 以外の自由探索 line のみ): `## この repo への寄与` の代わりに `## 研究ラインへの接続可能性` 節を設ける（テンプレート参照）。この発見が既存のrepo-backed lineの concept に将来接続しうるかを 2-3 文で書く。接続が見えなければ「純粋セレンディピティとして記録する」と明記してよい — 無理な接続をひねり出さない
 
 ### Step 5: 保存
 

@@ -53,10 +53,10 @@ target_graph = ".repo-graphs/repo_b.jsonld"
 target_doi = "10.xxxx/zenodo.xxxxxxxx"
 frontier_questions = []
 
-# A free-exploration line may set `report_variant = "maker"`: its reports then drop
-# the counter-evidence section and end with a "development ideas" section (1-3 things
-# the reader could build, derived from the research + [user_profile]) instead of the
-# research-line connection section.
+# A free-exploration line may set one of the supported report variants:
+#   maker — drop counter-evidence and end with 1-3 concrete development ideas
+#   public_sphere_radar — analyze a human-led AI-enabled public venue and end with
+#                         a PILOT | WATCH | DROP participation verdict
 [tracks.explore]
 name = "Free Exploration"
 report_variant = "maker"  # optional; omit for the default report format
@@ -72,6 +72,23 @@ scoring_criteria = [
   { name = "Serendipity", weight = 30, desc = "Distant from the saturated clusters in cluster-report; ideally a brand-new cluster" },
   { name = "Momentum", weight = 20, desc = "An actively evolving area, not static knowledge" },
   { name = "Whisper trend", weight = 20, desc = "A change not yet widely noticed" },
+]
+
+[tracks.publics]
+name = "Human-AI Publics Radar"
+report_variant = "public_sphere_radar"
+focus = "Find public venues where humans use AI to create, judge, share, and remix durable artifacts. Exclude agent-only networks, private productivity tools, generic model leaderboards, and inactive demo-only venues"
+sources = [
+  "Official platform documentation, changelogs, galleries, and participation rules",
+  "CHI / CSCW / arXiv cs.HC and cs.HCOMP",
+  "GitHub, Hacker News, Product Hunt, and active challenge or gallery pages",
+]
+scoring_criteria = [
+  { name = "Human agency", weight = 25, desc = "Humans remain visible authors and decision-makers" },
+  { name = "AI-native participation", weight = 25, desc = "AI materially enables the venue's participation model" },
+  { name = "Public persistence and remix lineage", weight = 20, desc = "Artifacts persist and can be referenced, reused, or derived with attribution" },
+  { name = "Actionable participation", weight = 15, desc = "A live, accessible entry point exists now" },
+  { name = "Novelty and momentum", weight = 15, desc = "The venue is both new to the history and demonstrably active" },
 ]
 
 # === Coverage / saturation thresholds ===
