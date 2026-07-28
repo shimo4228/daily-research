@@ -157,7 +157,7 @@ PASS1_EXIT=0
 PASS1_JSON=$(run_claude -p "$THEME_PROMPT" \
   --permission-mode default \
   --allowedTools "WebSearch,WebFetch,Read,Glob,Grep" \
-  --max-turns 15 \
+  --max-turns 25 \
   --model opus \
   --output-format stream-json \
   --verbose \
