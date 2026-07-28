@@ -6192,9 +6192,16 @@
       "datePublished": "2026-07-17",
       "track": "attribution",
       "mode": "frontier",
-      "contributesToRepo": ["aap"],
-      "challenges": ["aap/concept/approval-gate"],
-      "extends": ["aap/concept/accountability-distribution", "aap/concept/externalized-accountability"],
+      "contributesToRepo": [
+        "aap"
+      ],
+      "challenges": [
+        "aap/concept/approval-gate"
+      ],
+      "extends": [
+        "aap/concept/accountability-distribution",
+        "aap/concept/externalized-accountability"
+      ],
       "broadCluster": "dr:cluster/b2a_visibility_governance",
       "subCluster": [
         "dr:cluster/responsibility_vacuum",
@@ -6209,8 +6216,13 @@
       "datePublished": "2026-07-17",
       "track": "agent_cognition",
       "mode": "coverage",
-      "contributesToRepo": ["akc"],
-      "reinforces": ["akc/pattern/filter", "akc/concept/signal-first"],
+      "contributesToRepo": [
+        "akc"
+      ],
+      "reinforces": [
+        "akc/pattern/filter",
+        "akc/concept/signal-first"
+      ],
       "broadCluster": "dr:cluster/ai_developer_ecosystem",
       "subCluster": [
         "dr:cluster/skill_library_maintenance",
@@ -6228,6 +6240,772 @@
       "subCluster": [
         "dr:cluster/vision_language_action_models"
       ]
+    },
+    {
+      "@id": "dr:topic/2026-07-18_attribution_shrinking-lifespan-llm-science-scaffold-dissolution",
+      "@type": "Article",
+      "name": "LLMの『科学における寿命』は縮んでいる — Trišović が62モデル・10.8万引用論文で示す採用曲線の圧縮が、道具(scaffold)は消えるという Idea versus Scaffold 分離への実証的裏付けになる",
+      "datePublished": "2026-07-18",
+      "track": "attribution",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "authorship"
+      ],
+      "reinforces": [
+        "concept/idea-vs-scaffold-separation",
+        "concept/scarcity-to-diffusion-axis"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_authorship_attribution",
+        "dr:cluster/llm_memorization_attribution"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-18_agent_cognition_skill-sd-self-distillation-two-stage-distill",
+      "@type": "Article",
+      "name": "Skill-SD — スキル条件付き自己蒸留がRLと結合し、外部スキルを訓練足場として使い切って除去する内面化を cross-prompt 重要度重み付きKL推定で定式化する(2026)",
+      "datePublished": "2026-07-18",
+      "track": "agent_cognition",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "akc"
+      ],
+      "reinforces": [
+        "akc/concept/two-stage-distill",
+        "concept/scaffold-dissolution"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/skill_internalization_rl",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-18_tech_image-generation-factual-grounding-in-image-text",
+      "@type": "Article",
+      "name": "画像生成が『事実を正しく描く』段階に入った2026 — Nano Banana Pro の Gemini grounding と GPT Image 2 の多言語 in-image テキスト描画が、正確な単位・製品名・UIラベルを持つ infographic/図表生成を実用ラインに乗せた",
+      "datePublished": "2026-07-18",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/multimodal_voice_realtime_ai"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-18_human_adaptation_how-ai-impacts-skill-formation-shen-tamkin",
+      "@type": "Article",
+      "name": "AIは人間のスキル形成をいつ育て、いつ蝕むのか — Shen & Tamkin(2026)が提示する skill formation の条件分岐フレームワークと『考えずに頼ると最も学習が損なわれる』実証",
+      "datePublished": "2026-07-18",
+      "track": "human_adaptation",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/ai_deskilling_augmentation"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-19_attribution_faceted-transparent-attribution-ai-assisted-text",
+      "@type": "Article",
+      "name": "二値的開示表明から6ファセットのtaxonomyへ——AI支援テキスト生産の透明な帰属モデル (Xexéo, 2026)",
+      "datePublished": "2026-07-19",
+      "track": "attribution",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "authorship"
+      ],
+      "reinforces": [
+        "concept/authenticity"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_authorship_attribution",
+        "dr:cluster/developer_authenticity_ai_slop"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-19_agent_cognition_memtier-tiered-memory-architecture-ceiling",
+      "@type": "Article",
+      "name": "MemTierが暴いた階層メモリの『アーキテクチャ天井』——BM25検索構造が生成器スケーリングもRL重み最適化も無効化する三層不変性",
+      "datePublished": "2026-07-19",
+      "track": "agent_cognition",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "akc"
+      ],
+      "reinforces": [
+        "akc/concept/three-layer-structure"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_memory_context_engineering",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-19_tech_on-device-open-source-music-generation-2026",
+      "@type": "Article",
+      "name": "オンデバイス音楽生成が実用ラインを超えた2026——ACE-Step 1.5・HeartMuLa・Museのオープンソース化と量子化ネイティブランタイムが拓く『ローカルSuno』",
+      "datePublished": "2026-07-19",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/generative_music_audio_models"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-19_human_adaptation_workplace-genai-literacy-concealment-stigma",
+      "@type": "Article",
+      "name": "『隠せば隠すほど有能に見える』——生成AIリテラシー形成を蝕む職場の隠蔽規範とスティグマ",
+      "datePublished": "2026-07-19",
+      "track": "human_adaptation",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/workplace_ai_disclosure_stigma"
+      ]
+    },
+    {
+      "@id": "dr:cluster/generative_music_audio_models",
+      "@type": "Thing",
+      "name": "Generative music & audio models",
+      "broaderClusterOf": "dr:cluster/frontier_ai_models_platforms"
+    },
+    {
+      "@id": "dr:cluster/workplace_ai_disclosure_stigma",
+      "@type": "Thing",
+      "name": "Workplace AI disclosure & stigma dynamics",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:topic/2026-07-20_agent_systems_action-time-value-injection-vispa-value-layer",
+      "@type": "Article",
+      "name": "行為時価値注入とVISPA — 訓練時アラインメントを越える多元的価値切替と人間ゲートの緊張",
+      "datePublished": "2026-07-20",
+      "track": "agent_systems",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "contemplative"
+      ],
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#ca/concept/value-layer"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/action_time_value_injection",
+        "dr:cluster/contemplative_ai_alignment"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-20_human_ai_publics_multiplayer-human-ai-worldbuilding-public-sphere",
+      "@type": "Article",
+      "name": "集団で物語を統治する — Dunia と aiga_ が示す human-AI 協働ワールドビルディングの公共圏",
+      "datePublished": "2026-07-20",
+      "track": "human_ai_publics",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_collective_storytelling"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-20_tech_open-ml-compiler-war-mojo-tinygrad",
+      "@type": "Article",
+      "name": "開いたMLコンパイラ戦争 — Mojo OSS化とtinygradのカーネル最小主義が揺さぶるcomputeコモディティ化レイヤー",
+      "datePublished": "2026-07-20",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/ml_compiler_infrastructure"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-20_human_adaptation_faster-completion-less-learning-study-time",
+      "@type": "Article",
+      "name": "『速く終わる、だが学ばない』— 生成AIが数学学習から奪う時間の正体",
+      "datePublished": "2026-07-20",
+      "track": "human_adaptation",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/study_time_learning_tradeoff"
+      ]
+    },
+    {
+      "@id": "dr:cluster/action_time_value_injection",
+      "@type": "Thing",
+      "name": "Action-time value injection & pluralistic alignment",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:cluster/ai_collective_storytelling",
+      "@type": "Thing",
+      "name": "AI-mediated collective storytelling & worldbuilding venues",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:cluster/ml_compiler_infrastructure",
+      "@type": "Thing",
+      "name": "ML compiler & kernel infrastructure",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/study_time_learning_tradeoff",
+      "@type": "Thing",
+      "name": "Study-time reduction & learning quality tradeoff",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:cluster/self_play_diversity_illusion",
+      "@type": "Thing",
+      "name": "Self-play diversity illusion & echo-chamber detection",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:cluster/citizen_deliberation_platforms",
+      "@type": "Thing",
+      "name": "AI-augmented citizen deliberation platforms",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:cluster/generative_cad_3d_design",
+      "@type": "Thing",
+      "name": "Generative CAD & parametric 3D design tooling",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:topic/2026-07-21_agent_systems_diversity-illusion-r-diverse",
+      "@type": "Article",
+      "name": "R-Diverse が定式化する『多様性の錯覚』(Diversity Illusion)",
+      "datePublished": "2026-07-21",
+      "track": "agent_systems",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "contemplative"
+      ],
+      "reinforces": [
+        "ca/concept/pattern-composition-instruments"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/self_play_diversity_illusion",
+        "dr:cluster/agent_self_improvement"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-21_human_ai_publics_ai-augmented-citizen-deliberation",
+      "@type": "Article",
+      "name": "AI 拡張型市民熟議プラットフォームの2026",
+      "datePublished": "2026-07-21",
+      "track": "human_ai_publics",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/citizen_deliberation_platforms"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-21_tech_text-to-parametric-cad-2026",
+      "@type": "Article",
+      "name": "自然言語→parametric CAD が2026に実用化",
+      "datePublished": "2026-07-21",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/generative_cad_3d_design"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-21_human_adaptation_scaffold-stays-on-skill-screening",
+      "@type": "Article",
+      "name": "『足場を外さない』学習者は熟達を失うのか",
+      "datePublished": "2026-07-21",
+      "track": "human_adaptation",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/ai_deskilling_augmentation"
+      ]
+    },
+    {
+      "@id": "dr:cluster/consent_integrity_mechanisms",
+      "@type": "Thing",
+      "name": "Consent integrity & trusted-path approval rendering",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:cluster/agentic_document_processing",
+      "@type": "Thing",
+      "name": "Agentic document processing & structured document formats",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/controversy_peer_agents",
+      "@type": "Thing",
+      "name": "Constructive controversy & adversarial peer agent design",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:topic/2026-07-22_agent_systems_consent-integrity-approval-gate",
+      "@type": "Article",
+      "name": "承認は「エージェントの自己申告」でしかない — Consent Integrity が問う人間承認ゲートの再構築",
+      "datePublished": "2026-07-22",
+      "track": "agent_systems",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "akc"
+      ],
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#akc/concept/human-approval-gate",
+        "https://shimo4228.github.io/shimo4228/vocab#akc/concept/observed-vs-generated"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/responsibility_vacuum",
+        "dr:cluster/consent_integrity_mechanisms"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-22_human_ai_publics_ai-mediated-deliberation-platforms",
+      "@type": "Article",
+      "name": "台湾の AI 熟議インフラ再訪——Stanford Online Deliberation Platform は deliberation.io の別名ではない",
+      "datePublished": "2026-07-22",
+      "track": "human_ai_publics",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/citizen_deliberation_platforms"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-22_tech_ai-native-document-architecture",
+      "@type": "Article",
+      "name": "不透明バイナリからエージェント可読な構造化ドキュメントへ",
+      "datePublished": "2026-07-22",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agentic_document_processing"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-22_human_adaptation_constructive-controversy-peer-agents",
+      "@type": "Article",
+      "name": "わざと反論するAI——建設的論争ピアエージェントが割る学習者の価値観",
+      "datePublished": "2026-07-22",
+      "track": "human_adaptation",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/controversy_peer_agents"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-23_agent_systems_evoagentbench-ability-transfer",
+      "@type": "Article",
+      "name": "EvoAgentBench — エージェント自己進化のAbility Graph転移評価",
+      "datePublished": "2026-07-23",
+      "track": "agent_systems",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "akc"
+      ],
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#akc/concept/genre-neutral",
+        "https://shimo4228.github.io/shimo4228/vocab#concept/three-layer-structure"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_evaluation_benchmarks"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-23_human_ai_publics_deliberation-io-ai-mediated-civic-deliberation",
+      "@type": "Article",
+      "name": "Deliberation.io — AI媒介ソクラテス的対話による市民熟議基盤",
+      "datePublished": "2026-07-23",
+      "track": "human_ai_publics",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/citizen_deliberation_platforms"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-23_tech_llm-rtl-assertion-formal-verification-loop",
+      "@type": "Article",
+      "name": "LLM生成RTLの検証ボトルネックとアサーション×形式検証の閉ループ",
+      "datePublished": "2026-07-23",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/hardware_design_automation_llm"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-23_human_adaptation_genai-apprenticeship-tacit-knowledge",
+      "@type": "Article",
+      "name": "生成AIは徒弟制の暗黙知を明示知に変換できるか",
+      "datePublished": "2026-07-23",
+      "track": "human_adaptation",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/apprenticeship_tacit_knowledge"
+      ]
+    },
+    {
+      "@id": "dr:cluster/hardware_design_automation_llm",
+      "@type": "Thing",
+      "name": "Hardware design automation via LLM / LLMによるハードウェア設計自動化",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/apprenticeship_tacit_knowledge",
+      "@type": "Thing",
+      "name": "Apprenticeship & tacit knowledge externalization / 徒弟制と暗黙知の外化",
+      "broaderClusterOf": "dr:cluster/ai_alignment_contemplative"
+    },
+    {
+      "@id": "dr:topic/2026-07-24_agent_systems_agent-valuebench-plural-value-layer",
+      "@type": "Article",
+      "name": "Agent-ValueBench と PLURAL — エージェントの価値計測基盤と価値ステアリング信号",
+      "datePublished": "2026-07-24",
+      "track": "agent_systems",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "contemplative"
+      ],
+      "reinforces": [
+        "ca/concept/value-layer",
+        "concept/four-contemplative-axioms",
+        "ca/concept/worldview-integrity-check"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/action_time_value_injection"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-24_human_ai_publics_neurips-2026-ai-reviewing-experiment",
+      "@type": "Article",
+      "name": "NeurIPS 2026 AI-Assisted Reviewing Experiment",
+      "datePublished": "2026-07-24",
+      "track": "human_ai_publics",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/scholarly_novelty_verification"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-24_tech_local-first-sync-engine-stack-2026",
+      "@type": "Article",
+      "name": "ローカルファースト同期エンジン層の成熟 2026",
+      "datePublished": "2026-07-24",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/local_first_sync_engines"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-24_human_adaptation_effort-preserving-ai-learning-design",
+      "@type": "Article",
+      "name": "努力を保存する学習設計 — EFFORT-AI と The Effortless Trap",
+      "datePublished": "2026-07-24",
+      "track": "human_adaptation",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/study_time_learning_tradeoff"
+      ]
+    },
+    {
+      "@id": "dr:cluster/local_first_sync_engines",
+      "@type": "Thing",
+      "name": "Local-first sync engines & CRDT infrastructure / ローカルファースト同期エンジン基盤",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/ai_native_creative_jams",
+      "@type": "Thing",
+      "name": "AI-native creative jams and challenge venues",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/wifi_csi_spatial_sensing",
+      "@type": "Thing",
+      "name": "WiFi CSI camera-free spatial sensing",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:topic/2026-07-25_agent_systems_agent-accountability-litigation-internal-governance-2026",
+      "@type": "Article",
+      "name": "帰責が「規制文書」から「訴訟と社内統治」へ降りた2026年前半——Nippon Life v. OpenAI / Amazon v. Perplexity、6月大統領令によるDOJ執行、そして外部責任から内部ガバナンスへの重心移動",
+      "datePublished": "2026-07-25",
+      "track": "agent_systems",
+      "mode": "frontier",
+      "contributesToRepo": [
+        "aap"
+      ],
+      "challenges": [
+        "aap/concept/moral-crumple-zone"
+      ],
+      "extends": [
+        "aap/concept/accountability-distribution",
+        "aap/concept/externalized-accountability",
+        "aap/concept/pre-named-gap-bearer"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/moral_crumple_zone_evidence",
+        "dr:cluster/agent_identity_governance"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-25_human_ai_publics_ai-native-jam-and-challenge-venues-digest",
+      "@type": "Article",
+      "name": "AI を前提にした creative jam / challenge が常設会場化した2026",
+      "datePublished": "2026-07-25",
+      "track": "human_ai_publics",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/ai_native_creative_jams"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-25_tech_wifi-csi-sensing-oss-spatial-intelligence",
+      "@type": "Article",
+      "name": "カメラなしの空間知能——市販 WiFi の CSI から在室・呼吸・室内活動を推定する OSS（RuView 等）が2026年に開発者の手元へ降りてきた",
+      "datePublished": "2026-07-25",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/wifi_csi_spatial_sensing"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-25_software_paradigms_malleable-software-localfirst-convergence-2026",
+      "@type": "Article",
+      "name": "ソフトを「使う」から「その場で作り替える」へ——malleable software と local-first の合流点、Local-First Conf 2026 が掲げる fluid software 下のユーザ主権",
+      "datePublished": "2026-07-25",
+      "track": "software_paradigms",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/local_first_sync_engines"
+      ]
+    },
+    {
+      "@id": "dr:cluster/code_remix_galleries",
+      "@type": "Thing",
+      "name": "Code remix galleries & showcase venues",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/autoformalization_proof_engineering",
+      "@type": "Thing",
+      "name": "Autoformalization & proof engineering (Lean 4)",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/malleable_software_end_user_programming",
+      "@type": "Thing",
+      "name": "Malleable software & end-user programming",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:topic/2026-07-27_agent_systems_cross-scenario-generality-agentic-memory",
+      "@type": "Article",
+      "name": "エージェント記憶システムの genre 汎化を診断する——AutoMEM が示す cross-task 順位",
+      "datePublished": "2026-07-27",
+      "track": "agent_systems",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "akc"
+      ],
+      "reinforces": [
+        "akc/concept/genre-neutral"
+      ],
+      "challenges": [
+        "akc/pattern/orchestrator"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_memory_context_engineering",
+        "dr:cluster/agent_evaluation_benchmarks"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-27_human_ai_publics_ai-built-app-remix-galleries",
+      "@type": "Article",
+      "name": "AI 生成小規模アプリの remix 前提 gallery 探索",
+      "datePublished": "2026-07-27",
+      "track": "human_ai_publics",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/code_remix_galleries"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-27_tech_workflow-driven-lean-autoformalization",
+      "@type": "Article",
+      "name": "論文を丸ごと Lean プロジェクトへ——LeanFlow が示す「queue のあるワークフロー」の効き目",
+      "datePublished": "2026-07-27",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/autoformalization_proof_engineering"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-27_software_paradigms_malleable-software-point-of-use",
+      "@type": "Article",
+      "name": "PlayBookが開ける2026年——Ink & Switchのmalleable notebookとpoint-of-use改変スタックの現在地",
+      "datePublished": "2026-07-27",
+      "track": "software_paradigms",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/malleable_software_end_user_programming"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-28_agent_systems_gated-semantic-quality-diversity-harness-archive",
+      "@type": "Article",
+      "name": "GSME — 病理軸で刈り込む harness 自己進化アーカイブと、その決定論ゲートが背負う信頼性",
+      "datePublished": "2026-07-28",
+      "track": "agent_systems",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "akc",
+        "contemplative"
+      ],
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#akc/pattern/filter",
+        "https://shimo4228.github.io/shimo4228/vocab#ca/concept/pattern-composition-instruments"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/akc_agent_knowledge_cycle",
+        "dr:cluster/agent_self_improvement"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-28_human_ai_publics_vibecoded-artifact-feed-remix-platforms",
+      "@type": "Article",
+      "name": "AI で作った動く成果物を投稿・remix・スコア競争するフィード型 venue 探索",
+      "datePublished": "2026-07-28",
+      "track": "human_ai_publics",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/code_remix_galleries"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-28_tech_solver-grounded-cad-agents-2026",
+      "@type": "Article",
+      "name": "CAD が LLM エージェントの実行環境になった2026 — solver-grounded な三層設計と OSS カーネルの同時進行",
+      "datePublished": "2026-07-28",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/generative_cad_3d_design"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-28_software_paradigms_malleable-software-patchwork-gaios-2026",
+      "@type": "Article",
+      "name": "malleable software が製品層に降りてきた2026 — Ink & Switch の Patchwork 常用運用と派生プラットフォーム GAIOS",
+      "datePublished": "2026-07-28",
+      "track": "software_paradigms",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/malleable_software_end_user_programming",
+        "dr:cluster/local_first_sync_engines"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-29_agent_systems_llm-as-code-program-governs-control-flow",
+      "@type": "Article",
+      "name": "LLM-as-Code — 制御フローをプログラムに取り戻す agent harness アーキテクチャ",
+      "datePublished": "2026-07-29",
+      "track": "agent_systems",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "akc"
+      ],
+      "reinforces": [
+        "akc/pattern/orchestrator",
+        "akc/concept/code-llm-layering"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/compound_ai_orchestration"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-29_human_ai_publics_ai-music-sound-creation-venues-digest",
+      "@type": "Article",
+      "name": "AI 音楽・サウンド制作を『人間が出演し審査される場』として扱う venue の探索",
+      "datePublished": "2026-07-29",
+      "track": "human_ai_publics",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/ai_music_performance_contests"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-29_tech_interactive-world-models-as-infrastructure-2026",
+      "@type": "Article",
+      "name": "インタラクティブ world model が『使えるインフラ』になった2026 — AlayaWorld のオープンソース公開・Matrix-Game 3.0・WorldRoamBench",
+      "datePublished": "2026-07-29",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/world_models_neuromorphic"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-29_software_paradigms_wasm-component-model-as-distribution-unit",
+      "@type": "Article",
+      "name": "配布単位がコンテナからコンポーネントへ — WASI 1.0 と WebAssembly Component Model の 2026 年安定化",
+      "datePublished": "2026-07-29",
+      "track": "software_paradigms",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/wasm_component_model_distribution"
+      ]
+    },
+    {
+      "@id": "dr:cluster/ai_music_performance_contests",
+      "@type": "Thing",
+      "name": "AI music performance contests & human-judged live venues",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/wasm_component_model_distribution",
+      "@type": "Thing",
+      "name": "WASM Component Model & cross-language distribution",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
     }
   ]
 }
