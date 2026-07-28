@@ -1,7 +1,7 @@
 # Test fixture config — 4 lines (1 repo-backed + 3 free-exploration),
 # mirrors the structure of the real config.toml.
 [general]
-vault_path = "/tmp/fixture-vault"
+vault_path = "/nonexistent/fixture-vault"
 output_dir = "daily-research"
 
 [coverage]
@@ -16,18 +16,18 @@ aliases = ["agent_cognition", "akc", "contemplative", "aap"]
 
 [[tracks.agent_systems.repos]]
 key = "akc"
-target_repo = "/tmp/fixture-repos/agent-knowledge-cycle"
+target_repo = "/nonexistent/fixture-repos/agent-knowledge-cycle"
 target_graph = ".repo-graphs/akc.jsonld"
 frontier_questions = ["How can a knowledge cycle be evaluated?"]
 
 [[tracks.agent_systems.repos]]
 key = "contemplative"
-target_repo = "/tmp/fixture-repos/contemplative-agent"
+target_repo = "/nonexistent/fixture-repos/contemplative-agent"
 target_graph = ".repo-graphs/contemplative.jsonld"
 
 [[tracks.agent_systems.repos]]
 key = "aap"
-target_repo = "/tmp/fixture-repos/agent-attribution-practice"
+target_repo = "/nonexistent/fixture-repos/agent-attribution-practice"
 target_graph = ".repo-graphs/aap.jsonld"
 
 [tracks.human_ai_publics]

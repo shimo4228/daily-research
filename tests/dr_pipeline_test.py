@@ -471,14 +471,16 @@ def test_result_field_missing_is_empty(monkeypatch, capsys):
 def test_vault_path_reads_general(monkeypatch, capsys):
     rc, out, _ = run_cmd(monkeypatch, capsys, ["vault-path", CONFIG])
     assert rc == 0
-    assert out.strip() == "/tmp/fixture-vault"
+    assert out.strip() == "/nonexistent/fixture-vault"
 
 
 @pytest.mark.unit
 def test_vault_path_missing_is_empty(monkeypatch, capsys):
     rc, out, _ = run_cmd(monkeypatch, capsys, ["vault-path", CONFIG_NO_TRACKS])
     assert rc == 0
-    assert out.strip() == "/tmp/fixture-vault"  # no-tracks config も general は持つ
+    assert (
+        out.strip() == "/nonexistent/fixture-vault"
+    )  # no-tracks config も general は持つ
 
 
 # === report-dir ===
@@ -488,7 +490,7 @@ def test_vault_path_missing_is_empty(monkeypatch, capsys):
 def test_report_dir_joins_vault_and_output(monkeypatch, capsys):
     rc, out, _ = run_cmd(monkeypatch, capsys, ["report-dir", CONFIG])
     assert rc == 0
-    assert out.strip() == "/tmp/fixture-vault/daily-research"
+    assert out.strip() == "/nonexistent/fixture-vault/daily-research"
 
 
 @pytest.mark.unit
@@ -535,11 +537,17 @@ def test_tracks_emits_line_repo_tsv(monkeypatch, capsys):
     assert rc == 0
     lines = [ln for ln in out.splitlines() if ln]
     assert len(lines) == 3
-    assert "agent_systems\takc\t/tmp/fixture-repos/agent-knowledge-cycle" in lines
     assert (
-        "agent_systems\tcontemplative\t/tmp/fixture-repos/contemplative-agent" in lines
+        "agent_systems\takc\t/nonexistent/fixture-repos/agent-knowledge-cycle" in lines
     )
-    assert "agent_systems\taap\t/tmp/fixture-repos/agent-attribution-practice" in lines
+    assert (
+        "agent_systems\tcontemplative\t/nonexistent/fixture-repos/contemplative-agent"
+        in lines
+    )
+    assert (
+        "agent_systems\taap\t/nonexistent/fixture-repos/agent-attribution-practice"
+        in lines
+    )
     assert not any(
         ln.startswith(("human_ai_publics\t", "tech\t", "software_paradigms\t"))
         for ln in lines
@@ -804,7 +812,7 @@ name = "Line X"
 
 [[tracks.line_x.repos]]
 key = "repo_a"
-target_repo = "/tmp/fixture-repos/repo-a"
+target_repo = "/nonexistent/fixture-repos/repo-a"
 target_graph = "{repo_graph}"
 {q_line}
 
@@ -923,12 +931,12 @@ name = "Line X"
 
 [[tracks.line_x.repos]]
 key = "repo_a"
-target_repo = "/tmp/fixture-repos/repo-a"
+target_repo = "/nonexistent/fixture-repos/repo-a"
 target_graph = "{repo_a}"
 
 [[tracks.line_x.repos]]
 key = "repo_b"
-target_repo = "/tmp/fixture-repos/repo-b"
+target_repo = "/nonexistent/fixture-repos/repo-b"
 target_graph = "{repo_b}"
 """
     )
@@ -949,6 +957,287 @@ def test_coverage_report_old_schema_config_errors(monkeypatch, capsys):
     )
     assert rc == 1
     assert "legacy schema" in err
+
+
+# === metrics-append / metrics-backfill (ADR-0006) ===
+
+PASS1_JSON = '{"total_cost_usd":2.5,"num_turns":16,"duration_ms":255000,"usage":{"input_tokens":1480,"output_tokens":11101},"tool_counts":{"WebSearch":15,"WebFetch":2}}'
+PASS2_JSON = '{"total_cost_usd":7.5,"num_turns":10,"duration_ms":99000,"usage":{"input_tokens":20,"output_tokens":8719}}'
+
+
+@pytest.mark.unit
+def test_metrics_append_full_record(monkeypatch, capsys, tmp_path):
+    metrics = tmp_path / "metrics.jsonl"
+    lint = '{"date":"2026-07-29","files":4,"hard_fail":0,"soft_fail":1,"results":[]}'
+    rc, out, _ = run_cmd(
+        monkeypatch,
+        capsys,
+        ["metrics-append", str(metrics), "2026-07-29", "OK", "4", "1"],
+        f"{PASS1_JSON}\n{PASS2_JSON}\n{lint}",
+    )
+    assert rc == 0
+    rec = json.loads(metrics.read_text())
+    assert rec["date"] == "2026-07-29"
+    assert rec["final_class"] == "OK"
+    assert rec["report_count"] == 4
+    assert rec["fallback_used"] is True
+    assert rec["pass1"]["turns"] == 16
+    assert rec["pass1"]["searches"] == 17
+    assert rec["pass2"]["cost"] == 7.5
+    assert rec["lint"]["soft_fail"] == 1
+    assert rec["total_cost"] == 10.0
+
+
+@pytest.mark.unit
+def test_metrics_append_tolerates_empty_stdin_lines(monkeypatch, capsys, tmp_path):
+    metrics = tmp_path / "metrics.jsonl"
+    rc, _, _ = run_cmd(
+        monkeypatch,
+        capsys,
+        ["metrics-append", str(metrics), "2026-07-29", "E_NO_REPORT", "0", "0"],
+        "\n\n\n",
+    )
+    assert rc == 0
+    rec = json.loads(metrics.read_text())
+    assert rec["pass1"] is None and rec["pass2"] is None and rec["lint"] is None
+    assert rec["total_cost"] == 0
+    assert rec["fallback_used"] is False
+
+
+BACKFILL_LOG = """\
+[2026-07-29 05:00:00] === Starting daily research ===
+[2026-07-29 05:04:34] SUMMARY Pass1: cost=$2.7483 turns=16 duration=255s tokens_in=1480 tokens_out=11101 searches=17
+[2026-07-29 05:04:34] === Fallback: Sonnet handles theme selection + research ===
+[2026-07-29 05:05:53] SUMMARY Pass2: cost=$0.8994 turns=13 duration=77s tokens_in=4127 tokens_out=5350
+[2026-07-29 05:05:53] === Completed successfully ===
+[2026-07-29 05:58:28] === Starting daily research ===
+[2026-07-29 06:01:38] SUMMARY Pass1: cost=$2.1473 turns=15 duration=177s tokens_in=2922 tokens_out=8464 searches=10
+[2026-07-29 06:11:32] SUMMARY Pass2: cost=$7.5734 turns=10 duration=99s tokens_in=20 tokens_out=8719
+[2026-07-29 06:11:32] Report existence gate passed: 4 report(s) for 2026-07-29
+[2026-07-29 06:11:32] === Failed (E_NO_REPORT, exit code 0) ===
+"""
+
+
+@pytest.mark.unit
+def test_metrics_backfill_parses_runs_and_dedupes(monkeypatch, capsys, tmp_path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "2026-07-29.log").write_text(BACKFILL_LOG)
+    (logs / "launchd-stderr.log").write_text("noise")  # 日付形式でないログは無視
+    metrics = tmp_path / "metrics.jsonl"
+
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)]
+    )
+    assert rc == 0
+    assert "backfilled 2 run(s)" in out
+    recs = [json.loads(x) for x in metrics.read_text().splitlines()]
+    assert recs[0]["fallback_used"] is True
+    assert recs[0]["final_class"] == "OK"
+    assert recs[0]["pass1"]["searches"] == 17
+    assert recs[1]["fallback_used"] is False
+    assert recs[1]["report_count"] == 4
+    assert recs[1]["final_class"] == "E_NO_REPORT"
+    assert recs[1]["total_cost"] == pytest.approx(9.7207)
+
+    # 再実行しても重複しない (冪等)
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)]
+    )
+    assert "backfilled 0 run(s)" in out
+    assert len(metrics.read_text().splitlines()) == 2
+
+
+# === report-lint (ctl-016) ===
+
+GOOD_REPORT = (
+    "---\ndate: 2026-07-29\n---\n\n# T\n\n## なぜ今このテーマか\nx\n\n## 背景\nx\n\n"
+    "## 現在の状況\nx\n\n## 未解決の問い\nx\n\n## ソース\n"
+    + "\n".join(f"- [s{i}](https://example.com/{i})" for i in range(5))
+    + "\n"
+    + "p" * 1600
+)
+
+
+def _lint_args(report_dir, date="2026-07-29"):
+    # graph 不在 path を渡す → 飽和 cluster 検査は skip される
+    return ["report-lint", str(report_dir), date, CONFIG, "/nonexistent/graph.jsonld"]
+
+
+@pytest.mark.unit
+def test_report_lint_all_pass(monkeypatch, capsys, tmp_path):
+    (tmp_path / "2026-07-29_tech_good.md").write_text(GOOD_REPORT)
+    (tmp_path / "2026-07-28_tech_other-day.md").write_text("ignored")
+    rc, out, _ = run_cmd(monkeypatch, capsys, _lint_args(tmp_path))
+    assert rc == 0
+    d = json.loads(out)
+    assert d["files"] == 1 and d["hard_fail"] == 0 and d["soft_fail"] == 0
+
+
+@pytest.mark.unit
+def test_report_lint_hard_fail_no_sources(monkeypatch, capsys, tmp_path):
+    (tmp_path / "2026-07-29_tech_bad.md").write_text("# T\n\n本文だけ")
+    rc, out, _ = run_cmd(monkeypatch, capsys, _lint_args(tmp_path))
+    assert rc == 2
+    d = json.loads(out)
+    assert d["hard_fail"] == 1
+    hard = d["results"][0]["hard"]
+    assert any("ソース節" in h for h in hard)
+    assert any("0 件" in h for h in hard)
+
+
+@pytest.mark.unit
+def test_report_lint_soft_violations(monkeypatch, capsys, tmp_path):
+    # ソース節 + URL 2 件はあるが、必須節と本文長が不足 → soft のみ (exit 0)
+    text = "# T\n\n## ソース\n- [a](https://a.com)\n- [b](https://b.com)\n"
+    (tmp_path / "2026-07-29_tech_thin.md").write_text(text)
+    rc, out, _ = run_cmd(monkeypatch, capsys, _lint_args(tmp_path))
+    assert rc == 0
+    soft = json.loads(out)["results"][0]["soft"]
+    assert any("出典 URL 2 件" in s for s in soft)
+    assert any("必須節欠落" in s for s in soft)
+    assert any("本文" in s for s in soft)
+
+
+@pytest.mark.unit
+def test_report_lint_digest_variant_sections(monkeypatch, capsys, tmp_path):
+    text = (
+        "# T\n\n## 今日の探索アングル\nx\n\n## 総評\nx\n\n## ソース\n"
+        + "\n".join(f"- [s{i}](https://example.com/{i})" for i in range(5))
+        + "\n"
+        + "p" * 1600
+    )
+    (tmp_path / "2026-07-29_human_ai_publics_digest.md").write_text(text)
+    rc, out, _ = run_cmd(monkeypatch, capsys, _lint_args(tmp_path))
+    assert rc == 0
+    assert json.loads(out)["soft_fail"] == 0
+
+
+@pytest.mark.unit
+def test_report_lint_saturated_cluster_violation(monkeypatch, capsys, tmp_path):
+    import datetime
+
+    today = datetime.date.today().isoformat()
+    stem = f"{today}_tech_hot-topic"
+    (tmp_path / f"{stem}.md").write_text(GOOD_REPORT)
+    # 直近 90 日に 3 回出た cluster (fixture の saturated_recent_min=3) + 当日 Article
+    arts = [
+        {
+            "@type": "Article",
+            "@id": f"dr:topic/{today}_tech_old{i}",
+            "datePublished": today,
+            "mode": "explore",
+            "subCluster": ["dr:cluster/hot"],
+        }
+        for i in range(3)
+    ]
+    arts.append(
+        {
+            "@type": "Article",
+            "@id": f"dr:topic/{stem}",
+            "datePublished": today,
+            "mode": "explore",
+            "subCluster": ["dr:cluster/hot"],
+        }
+    )
+    graph = tmp_path / "graph.jsonld"
+    graph.write_text(json.dumps({"@graph": arts}))
+    rc, out, _ = run_cmd(
+        monkeypatch,
+        capsys,
+        ["report-lint", str(tmp_path), today, CONFIG, str(graph)],
+    )
+    assert rc == 0  # cluster 違反は soft
+    soft = json.loads(out)["results"][0]["soft"]
+    assert any("飽和 cluster" in s for s in soft)
+
+
+# === wiki-quality-scan ===
+
+
+@pytest.mark.unit
+def test_wiki_quality_scan_attributes_lines(monkeypatch, capsys, tmp_path):
+    import datetime
+
+    today = datetime.date.today().isoformat()
+    concept = tmp_path / "wiki" / "concept"
+    concept.mkdir(parents=True)
+    (concept / "概念A.md").write_text(
+        f"通常の段落。\n\n"
+        f"FLAGGED（一次照合待ち）: 数値クレーム（出典: [[{today}_agent_systems_topic-a]]）。\n\n"
+        f"- 本ページの数値は一次未照合のため推定として扱う（出典: [[{today}_tech_topic-b]]）。\n\n"
+        f"古い注記 FLAGGED [[2020-01-01_tech_ancient-topic]]\n"
+    )
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["wiki-quality-scan", str(tmp_path), "30", CONFIG]
+    )
+    assert rc == 0
+    d = json.loads(out)
+    assert d["flagged_reports"] == 2  # 30 日 cutoff で 2020 年分は除外
+    assert d["by_line"] == {"agent_systems": 1, "tech": 1}
+    assert d["reports"][f"{today}_agent_systems_topic-a"] == ["概念A"]
+
+
+@pytest.mark.unit
+def test_wiki_quality_scan_missing_dir(monkeypatch, capsys, tmp_path):
+    rc, _, err = run_cmd(monkeypatch, capsys, ["wiki-quality-scan", str(tmp_path)])
+    assert rc == 1
+    assert "not found" in err
+
+
+# === review-age ===
+
+
+@pytest.mark.unit
+def test_review_age_never_and_days(monkeypatch, capsys, tmp_path):
+    import datetime
+
+    state = tmp_path / "dr-review-state.json"
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["review-age", str(state)])
+    assert rc == 0 and out.strip() == "never"
+
+    state.write_text(json.dumps({"last_review": datetime.date.today().isoformat()}))
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["review-age", str(state)])
+    assert rc == 0 and out.strip() == "0"
+
+
+# === expect-check (DR-Expect) ===
+
+
+@pytest.mark.unit
+def test_expect_check_verdicts(monkeypatch, capsys, tmp_path):
+    metrics = tmp_path / "metrics.jsonl"
+    recs = [
+        {
+            "date": f"2026-07-2{i}",
+            "final_class": "OK",
+            "report_count": 4,
+            "fallback_used": i == 5,
+            "pass1": {"turns": 10 + i, "cost": 2.0},
+            "pass2": {"turns": 10, "cost": 5.0},
+            "total_cost": 7.0,
+            "lint": {"hard_fail": 0},
+        }
+        for i in range(5, 9)  # 2026-07-25 .. 2026-07-28
+    ]
+    metrics.write_text("\n".join(json.dumps(r) for r in recs) + "\n")
+    stdin = (
+        "2026-07-24\tpass1_turns_max <= 18\n"
+        "2026-07-24\tpass1_turns_max <= 17\n"
+        "2026-07-24\tfallback_rate <= 0.25\n"
+        "2026-07-28\tno_report_count == 0\n"
+        "2026-07-30\tpass1_turns_p90 <= 20\n"
+        "2026-07-24\tgarbage line\n"
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["expect-check", str(metrics)], stdin)
+    assert rc == 0
+    lines = out.strip().splitlines()
+    assert lines[0].startswith("ACHIEVED\t")  # max turns = 18 <= 18
+    assert lines[1].startswith("NOT_ACHIEVED\t")
+    assert lines[2].startswith("ACHIEVED\t")  # 1/4 = 0.25
+    assert lines[3].startswith("ACHIEVED\t")  # 07-28 より後は 0 record でも count=0
+    assert lines[4].startswith("INSUFFICIENT_DATA\t")
+    assert lines[5].startswith("INVALID\t")
 
 
 # === dispatcher ===

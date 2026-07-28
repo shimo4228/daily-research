@@ -89,6 +89,7 @@ tail -f logs/$(date +%Y-%m-%d).log
 - **自由探索 line の cluster 反発**: `dr_pipeline.py cluster-report` が graph.jsonld の subCluster 頻度から飽和 cluster (全期間 top-N ∪ 直近 90 日 3+ 回) を算出し Pass 1 に注入、選定禁止にする (旧 tech track の固定 domains 飽和の再発防止)
 - Pass 1 失敗時は Sonnet が一括フォールバック（テーマ選定も担当）。フォールバックプロンプトにも coverage / cluster / past-themes レポートを注入する（Bash 不可のため自力実行はできない — 2026-07-29 の空振りの再発防止）
 - **レポート存在ゲート (ctl-015)**: Pass 2 が成功を返しても、当日の `{date}_*.md` が vault に 1 本もなければ失敗扱い（モデルが質問だけして end_turn する成功化けは `is_error` では検出できない）
+- **自己改善ループ (ADR-0006)**: 毎朝の run を `metrics.jsonl` (gitignore) に永続記録し、決定論レポート lint (ctl-016、hard fail のみ即日 notify) を実行。消費は対話 skill `/dr-review`（週 1 目安、`.claude/skills/dr-review/`）で人間が改善判断する。効果を意図した変更 commit には `DR-Expect:` trailer を付け、次回 review で実測と自動突合。LLM judge は復活させない（consumer 不在が死因 — ADR-0006）
 - **`--append-system-prompt-file`** を使用（`--system-prompt-file` ではない）。Claude Code のデフォルト能力を保持するため
 - **`--allowedTools`** で最小権限。`--dangerously-skip-permissions` は使わない
   - Pass 1 (Opus): WebSearch, WebFetch, Read, Glob, Grep
@@ -122,7 +123,7 @@ tail -f logs/$(date +%Y-%m-%d).log
 
 ### 過去に試行・棄却した機能
 
-- **評価フレームワーク (LLM-as-Judge)**: 6次元ルーブリック（Factual Grounding / Depth / Coherence / Specificity / Novelty / Actionability、各1-5点）を Pass 2 成功後に Opus judge で採点していた。コスト対効果が低く 2026-02 以降運用停止 → 2026-06-29 に完全削除（`evals/` / `scripts/eval-run.sh` / `tests/test-eval.bats`）。コードは git history で復元可能
+- **評価フレームワーク (LLM-as-Judge)**: 6次元ルーブリック（Factual Grounding / Depth / Coherence / Specificity / Novelty / Actionability、各1-5点）を Pass 2 成功後に Opus judge で採点していた。コスト対効果が低く 2026-02 以降運用停止 → 2026-06-29 に完全削除（`evals/` / `scripts/eval-run.sh` / `tests/test-eval.bats`）。コードは git history で復元可能。2026-07-29 の再診断: 真因はコストでなく「スコアを消費する下流の不在」— 後継は決定論収集 + 人間 consumer の自己改善ループ（ADR-0006）
 - **エージェントチーム版**: コスト・時間対効果が低く棄却。詳細は `.notes/progress/` (gitignore、operator-private) のポストモーテム参照。コードは git history (`a79074e`) で復元可能
 - **Mem0 Cloud MCP 統合**: 2026-02-26 に main へマージしたが `.mcp.json` 不在 + ヘルスチェック形骸化により 32 日間ゼロ稼働。2026-05-23 撤去。後継はローカル JSON-LD concept cluster graph (`graph.jsonld`)
 - **汎用トレンドリサーチ (tech/personal/ai_dev)**: 固定 domains が構造的飽和を招いた（contemplative 系 37%）ため 2026-05-27 に廃止。各 track を研究 repo にマッピングする方式へ転換。**2026-07-07 に tech のみ「自由探索 line」として復活** — 固定 domains の代わりに graph.jsonld の cluster 統計による飽和 cluster 反発で新規性を機構的に担保する (ADR-0004)

@@ -191,3 +191,19 @@ teardown() {
 @test "max-turns is configured for both passes" {
   grep -q '\-\-max-turns' "$SCRIPT"
 }
+
+# === 自己改善ループの計測 (ADR-0006) ===
+
+@test "daily-research.sh wires metrics collection non-fatally" {
+  grep -q 'metrics-append' "$SCRIPT"
+  grep -q 'report-lint' "$SCRIPT"
+  grep -q 'review-age' "$SCRIPT"
+  # 収集失敗が生成ジョブの成否 (FINAL_EXIT) を変えない non-fatal ガード
+  grep -q 'WARN: metrics-append failed (non-fatal)' "$SCRIPT"
+  # metrics-append は FINAL_EXIT 確定後 (exit 直前) に置かれている
+  awk '/metrics-append/{m=NR} /^exit "\$FINAL_EXIT"/{e=NR} END{exit !(m && e && m<e)}' "$SCRIPT"
+}
+
+@test "metrics.jsonl is gitignored (personal cost data, public repo)" {
+  grep -qx 'metrics.jsonl' "$PROJECT_DIR/.gitignore"
+}

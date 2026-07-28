@@ -451,16 +451,16 @@ def cmd_graph_health(argv):
     return 0
 
 
-# --- cluster-report [config_path] [graph_path]: 飽和 cluster レポートを出力 ---
-def cmd_cluster_report(argv):
-    """graph.jsonld の subCluster 頻度を集計し、自由探索ライン向けの
-    「飽和 cluster (選定禁止)」リストを出力する。旧 tech track の構造的飽和
-    (固定 domains への偏り) を、既出領域への機構的な反発で再発防止する。"""
+# --- 飽和 cluster 計算 (cluster-report / report-lint で共有) ---
+def _listify(v):
+    return v if isinstance(v, list) else ([v] if v else [])
+
+
+def _cluster_counters(config_path, graph_path):
+    """graph.jsonld を集計し (saturated_set, total, recent, broad, recent_days, top_n,
+    recent_min) を返す。graph が読めなければ ValueError。"""
     from collections import Counter
     from datetime import date, timedelta
-
-    config_path = argv[0] if len(argv) >= 1 else "config.toml"
-    graph_path = argv[1] if len(argv) >= 2 else "graph.jsonld"
 
     top_n, recent_days, recent_min = 15, 90, 3
     try:
@@ -477,25 +477,39 @@ def cmd_cluster_report(argv):
         with open(graph_path) as f:
             g = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError) as e:
-        print(f"cluster report unavailable: {e}", file=sys.stderr)
-        return 1
-
-    def listify(v):
-        return v if isinstance(v, list) else ([v] if v else [])
+        raise ValueError(f"cluster report unavailable: {e}")
 
     total, recent, broad = Counter(), Counter(), Counter()
     cutoff = (date.today() - timedelta(days=recent_days)).isoformat()
     for n in g.get("@graph", []):
         if n.get("@type") != "Article":
             continue
-        subs = listify(n.get("subCluster"))
+        subs = _listify(n.get("subCluster"))
         total.update(subs)
         if n.get("datePublished", "") >= cutoff:
             recent.update(subs)
-        broad.update(listify(n.get("broadCluster")))
+        broad.update(_listify(n.get("broadCluster")))
 
     saturated = {c for c, _ in total.most_common(top_n)}
     saturated |= {c for c, cnt in recent.items() if cnt >= recent_min}
+    return saturated, total, recent, broad, recent_days, top_n, recent_min
+
+
+# --- cluster-report [config_path] [graph_path]: 飽和 cluster レポートを出力 ---
+def cmd_cluster_report(argv):
+    """graph.jsonld の subCluster 頻度を集計し、自由探索ライン向けの
+    「飽和 cluster (選定禁止)」リストを出力する。旧 tech track の構造的飽和
+    (固定 domains への偏り) を、既出領域への機構的な反発で再発防止する。"""
+    config_path = argv[0] if len(argv) >= 1 else "config.toml"
+    graph_path = argv[1] if len(argv) >= 2 else "graph.jsonld"
+
+    try:
+        saturated, total, recent, broad, recent_days, top_n, recent_min = (
+            _cluster_counters(config_path, graph_path)
+        )
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 1
 
     print("=== Cluster saturation report (自由探索ライン用) ===")
     print("以下の飽和 cluster に主に属するテーマは選定禁止。既存 cluster から遠い、")
@@ -675,6 +689,471 @@ def cmd_coverage_report(argv):
     return 0
 
 
+# === 自己改善ループ (ADR-0006): 計測の永続化と決定論 lint =====================
+#
+# consumer は人間 (/dr-review skill)。ここは判断材料の収集・整形のみを担い、
+# LLM による品質再採点や自動改変は行わない。
+
+
+def _pass_metrics(d):
+    """claude -p result JSON から 1 pass 分の metric dict を抽出する。"""
+    d = _result_dict(d) or {}
+    tc = d.get("tool_counts", {})
+    return {
+        "cost": round(float(d.get("total_cost_usd", 0) or 0), 4),
+        "turns": int(d.get("num_turns", 0) or 0),
+        "duration_s": round((d.get("duration_ms", 0) or 0) / 1000),
+        "tokens_in": int(d.get("usage", {}).get("input_tokens", 0) or 0),
+        "tokens_out": int(d.get("usage", {}).get("output_tokens", 0) or 0),
+        "searches": int(tc.get("WebSearch", 0)) + int(tc.get("WebFetch", 0)),
+    }
+
+
+def _load_metrics(metrics_path):
+    """metrics.jsonl を list[dict] で返す。壊れた行は skip (収集は non-fatal)。"""
+    records = []
+    try:
+        with open(metrics_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+    except FileNotFoundError:
+        pass
+    return records
+
+
+# --- metrics-append <metrics_path> <date> <final_class> <report_count> <fallback:0|1> ---
+# stdin 3 行: Pass1 JSON / Pass2 JSON / lint JSON (それぞれ空行可)。
+def cmd_metrics_append(argv):
+    from datetime import datetime
+
+    if len(argv) < 5:
+        print(
+            "usage: metrics-append <metrics_path> <date> <final_class> "
+            "<report_count> <fallback:0|1>",
+            file=sys.stderr,
+        )
+        return 64
+    metrics_path, date_s, final_class, report_count, fallback = argv[:5]
+
+    lines = sys.stdin.read().split("\n")
+
+    def parse_line(i):
+        try:
+            return json.loads(lines[i]) if i < len(lines) and lines[i].strip() else None
+        except json.JSONDecodeError:
+            return None
+
+    p1, p2, lint = parse_line(0), parse_line(1), parse_line(2)
+    record = {
+        "date": date_s,
+        "ts": datetime.now().isoformat(timespec="seconds"),
+        "source": "live",
+        "final_class": final_class,
+        "report_count": int(report_count or 0),
+        "fallback_used": fallback == "1",
+        "pass1": _pass_metrics(p1) if p1 else None,
+        "pass2": _pass_metrics(p2) if p2 else None,
+        "lint": lint,
+    }
+    record["total_cost"] = round(
+        sum(p["cost"] for p in (record["pass1"], record["pass2"]) if p), 4
+    )
+    with open(metrics_path, "a") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    print(f"metrics: appended {date_s} ({final_class}, {report_count} reports)")
+    return 0
+
+
+_SUMMARY_RE = re.compile(
+    r"\[([\d: -]+)\] SUMMARY (Pass[12]): cost=\$([\d.]+) turns=(\d+) "
+    r"duration=(\d+)s tokens_in=(\d+) tokens_out=(\d+)(?: searches=(\d+))?"
+)
+
+
+# --- metrics-backfill <metrics_path> <logs_dir>: 既存ログの SUMMARY 行から過去分を投入 ---
+# ログは 30 日ローテーションで消えるため、残存分を JSONL へ救済するワンショット。
+# 既存 metrics の (date, ts) と重複する run は skip する (再実行安全)。
+def cmd_metrics_backfill(argv):
+    import os
+
+    if len(argv) < 2:
+        print("usage: metrics-backfill <metrics_path> <logs_dir>", file=sys.stderr)
+        return 64
+    metrics_path, logs_dir = argv[:2]
+
+    existing = {(r.get("date"), r.get("ts")) for r in _load_metrics(metrics_path)}
+    appended = 0
+
+    log_files = sorted(
+        f for f in os.listdir(logs_dir) if re.fullmatch(r"\d{4}-\d{2}-\d{2}\.log", f)
+    )
+    with open(metrics_path, "a") as out:
+        for name in log_files:
+            date_s = name[:-4]
+            runs = []
+            run = None
+            with open(os.path.join(logs_dir, name)) as f:
+                for line in f:
+                    if "=== Starting daily research ===" in line:
+                        run = {
+                            "date": date_s,
+                            "ts": None,
+                            "source": "backfill",
+                            "final_class": None,
+                            "report_count": 0,
+                            "fallback_used": False,
+                            "pass1": None,
+                            "pass2": None,
+                            "lint": None,
+                        }
+                        runs.append(run)
+                        continue
+                    if run is None:
+                        continue
+                    m = _SUMMARY_RE.search(line)
+                    if m:
+                        ts, label = m.group(1), m.group(2)
+                        run["ts"] = ts.replace(" ", "T")
+                        run[label.lower()] = {
+                            "cost": float(m.group(3)),
+                            "turns": int(m.group(4)),
+                            "duration_s": int(m.group(5)),
+                            "tokens_in": int(m.group(6)),
+                            "tokens_out": int(m.group(7)),
+                            "searches": int(m.group(8) or 0),
+                        }
+                        continue
+                    if "=== Fallback:" in line:
+                        run["fallback_used"] = True
+                    elif "Report existence gate passed:" in line:
+                        cm = re.search(r"gate passed: (\d+) report", line)
+                        if cm:
+                            run["report_count"] = int(cm.group(1))
+                    elif "=== Completed successfully ===" in line:
+                        run["final_class"] = "OK"
+                    elif "=== Failed (" in line:
+                        fm = re.search(r"=== Failed \((\S+?),", line)
+                        run["final_class"] = fm.group(1) if fm else "FAIL"
+
+            for run in runs:
+                if run["pass1"] is None and run["pass2"] is None:
+                    continue  # SUMMARY 行のない中断 run はデータなし
+                run["total_cost"] = round(
+                    sum(p["cost"] for p in (run["pass1"], run["pass2"]) if p), 4
+                )
+                if (run["date"], run["ts"]) in existing:
+                    continue
+                out.write(json.dumps(run, ensure_ascii=False) + "\n")
+                appended += 1
+    print(f"metrics: backfilled {appended} run(s) from {len(log_files)} log file(s)")
+    return 0
+
+
+# --- report-lint <report_dir> <date> [config_path] [graph_path] ---
+# 当日レポートの決定論的品質検査 (ctl-016)。stdout に JSON 1 行。
+# exit 0 = 全 PASS または soft violation のみ / 2 = hard fail あり。
+# hard: ソース節不在・出典 URL 0 件 (レポートの体を成していない)
+# soft: 出典 <5 / 必須節欠落 / 本文長不足 / 飽和 cluster 違反 (自由探索のみ)
+def cmd_report_lint(argv):
+    import os
+
+    if len(argv) < 2:
+        print(
+            "usage: report-lint <report_dir> <date> [config_path] [graph_path]",
+            file=sys.stderr,
+        )
+        return 64
+    report_dir, date_s = argv[:2]
+    config_path = argv[2] if len(argv) >= 3 else "config.toml"
+    graph_path = argv[3] if len(argv) >= 4 else "graph.jsonld"
+
+    MIN_SOURCES = 5
+    MIN_BODY_CHARS = 1500
+    ARTICLE_SECTIONS = ["なぜ今このテーマか", "背景", "現在の状況", "未解決の問い"]
+    DIGEST_SECTIONS = ["今日の探索アングル", "総評"]
+
+    # 飽和 cluster 違反: graph.jsonld の当日 Article (mode=explore) を
+    # dr:topic/<report-stem> で結合して判定する。graph が読めなければ skip。
+    saturated_by_stem = {}
+    try:
+        saturated, *_ = _cluster_counters(config_path, graph_path)
+        with open(graph_path) as f:
+            for n in json.load(f).get("@graph", []):
+                if n.get("@type") != "Article" or n.get("datePublished") != date_s:
+                    continue
+                if n.get("mode") != "explore":
+                    continue  # cluster 反発は自由探索ラインのみ
+                stem = n.get("@id", "").removeprefix("dr:topic/")
+                hits = [c for c in _listify(n.get("subCluster")) if c in saturated]
+                if stem and hits:
+                    saturated_by_stem[stem] = hits
+    except (ValueError, OSError, json.JSONDecodeError):
+        pass
+
+    results = []
+    try:
+        files = sorted(
+            f
+            for f in os.listdir(report_dir)
+            if f.startswith(f"{date_s}_") and f.endswith(".md")
+        )
+    except FileNotFoundError:
+        files = []
+
+    for name in files:
+        hard, soft = [], []
+        try:
+            with open(os.path.join(report_dir, name)) as f:
+                text = f.read()
+        except OSError as e:
+            results.append({"file": name, "hard": [f"read error: {e}"], "soft": []})
+            continue
+
+        urls = re.findall(r"\[[^\]]*\]\((https?://[^)]+)\)", text)
+        n_sources = len(set(urls))
+        if "## ソース" not in text:
+            hard.append("ソース節がない")
+        if n_sources == 0:
+            hard.append("出典 URL が 0 件")
+        elif n_sources < MIN_SOURCES:
+            soft.append(f"出典 URL {n_sources} 件 (< {MIN_SOURCES})")
+
+        is_digest = "## 今日の探索アングル" in text
+        required = DIGEST_SECTIONS if is_digest else ARTICLE_SECTIONS
+        missing = [s for s in required if f"## {s}" not in text]
+        if missing:
+            soft.append(f"必須節欠落: {', '.join(missing)}")
+
+        if len(text) < MIN_BODY_CHARS:
+            soft.append(f"本文 {len(text)} 字 (< {MIN_BODY_CHARS})")
+
+        stem = name[:-3]
+        if stem in saturated_by_stem:
+            soft.append(f"飽和 cluster 違反: {', '.join(saturated_by_stem[stem])}")
+
+        results.append({"file": name, "hard": hard, "soft": soft})
+
+    n_hard = sum(1 for r in results if r["hard"])
+    n_soft = sum(1 for r in results if r["soft"])
+    print(
+        json.dumps(
+            {
+                "date": date_s,
+                "files": len(results),
+                "hard_fail": n_hard,
+                "soft_fail": n_soft,
+                "results": results,
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 2 if n_hard else 0
+
+
+# --- wiki-quality-scan <vault_path> [days]: wiki 品質注記のレポート逆引き集計 ---
+# ingest 時に wiki/concept/*.md へ残る「FLAGGED」「一次未照合」注記を、
+# 同じ行ブロック内の [[<report-stem>]] リンクでレポート・line に逆引きする。
+# ingest 率は 98% で判別力がないため、品質信号はこの注記密度を使う (ADR-0006)。
+def cmd_wiki_quality_scan(argv):
+    import os
+    from collections import defaultdict
+    from datetime import date, timedelta
+
+    if len(argv) < 1:
+        print(
+            "usage: wiki-quality-scan <vault_path> [days] [config_path]",
+            file=sys.stderr,
+        )
+        return 64
+    vault_path = argv[0]
+    days = int(argv[1]) if len(argv) >= 2 else 90
+    config_path = argv[2] if len(argv) >= 3 else "config.toml"
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+
+    # line 逆引き用の既知 track 名 (現行 + aliases)。track 名はアンダースコアを
+    # 含みうる (agent_systems) ため、既知名の最長一致で切る。config が読めない
+    # 場合は「最初にハイフンを含むトークンの手前まで」の heuristic に落とす。
+    known_tracks = []
+    try:
+        _, tracks = _load_tracks(config_path)
+        for name, v in tracks.items():
+            known_tracks.append(name)
+            known_tracks.extend(v.get("aliases", []))
+        known_tracks.sort(key=len, reverse=True)
+    except (FileNotFoundError, ValueError):
+        pass
+
+    def line_of_stem(stem):
+        rest = stem[11:]  # "YYYY-MM-DD_" を除去
+        for k in known_tracks:
+            if rest == k or rest.startswith(k + "_"):
+                return k
+        head = []
+        for t in rest.split("_"):
+            if "-" in t:
+                break
+            head.append(t)
+        return "_".join(head) if head else rest
+
+    concept_dir = os.path.join(vault_path, "wiki", "concept")
+    link_re = re.compile(r"\[\[(\d{4}-\d{2}-\d{2}_[a-z_]+_[A-Za-z0-9-]+)")
+    flag_re = re.compile(r"FLAGGED|一次未照合|推定として扱う")
+
+    flagged = defaultdict(list)  # report_stem -> [concept_page, ...]
+    try:
+        pages = sorted(f for f in os.listdir(concept_dir) if f.endswith(".md"))
+    except FileNotFoundError:
+        print(f"wiki concept dir not found: {concept_dir}", file=sys.stderr)
+        return 1
+
+    for page in pages:
+        try:
+            with open(os.path.join(concept_dir, page)) as f:
+                text = f.read()
+        except OSError:
+            continue
+        # 段落 (空行区切り) 単位で注記とリンクを対応づける
+        for block in text.split("\n\n"):
+            if not flag_re.search(block):
+                continue
+            for stem in link_re.findall(block):
+                if stem[:10] >= cutoff:
+                    flagged[stem].append(page[:-3])
+
+    by_line = defaultdict(int)
+    for stem in flagged:
+        by_line[line_of_stem(stem)] += 1
+
+    print(
+        json.dumps(
+            {
+                "days": days,
+                "flagged_reports": len(flagged),
+                "by_line": dict(sorted(by_line.items())),
+                "reports": {
+                    stem: sorted(set(pages)) for stem, pages in sorted(flagged.items())
+                },
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 0
+
+
+# --- review-age <state_path>: 前回 /dr-review からの経過日数を出力 ---
+# state ファイル (.notes/dr-review-state.json) が無ければ "never" を出力する。
+def cmd_review_age(argv):
+    from datetime import date
+
+    if len(argv) < 1:
+        print("usage: review-age <state_path>", file=sys.stderr)
+        return 64
+    try:
+        with open(argv[0]) as f:
+            last = json.load(f).get("last_review", "")
+        d = date.fromisoformat(last[:10])
+        print((date.today() - d).days)
+    except (FileNotFoundError, json.JSONDecodeError, ValueError):
+        print("never")
+    return 0
+
+
+# --- expect-check <metrics_path>: DR-Expect trailer を metrics 実測と突合 ---
+# stdin 1 行 1 expect: "<commit_date>\t<metric> <op> <value>"。
+# commit_date より後の record 群で metric を評価し、verdict を 1 行ずつ出力。
+# metric 語彙: {pass1|pass2}_turns_{p50|p90|max} / {pass1|pass2}_cost_{mean|max} /
+#   total_cost_{mean|max} / fallback_rate / report_count_min / no_report_count /
+#   lint_hard_count
+def cmd_expect_check(argv):
+    if len(argv) < 1:
+        print("usage: expect-check <metrics_path>  (expects on stdin)", file=sys.stderr)
+        return 64
+    records = _load_metrics(argv[0])
+
+    def percentile(vals, p):
+        vals = sorted(vals)
+        if not vals:
+            return None
+        i = min(len(vals) - 1, max(0, round(p / 100 * (len(vals) - 1))))
+        return vals[i]
+
+    def metric_value(name, recs):
+        m = re.fullmatch(r"(pass1|pass2)_turns_(p50|p90|max)", name)
+        if m:
+            vals = [r[m.group(1)]["turns"] for r in recs if r.get(m.group(1))]
+            if not vals:
+                return None
+            return (
+                max(vals)
+                if m.group(2) == "max"
+                else percentile(vals, int(m.group(2)[1:]))
+            )
+        m = re.fullmatch(r"(pass1|pass2|total)_cost_(mean|max)", name)
+        if m:
+            key = m.group(1)
+            vals = [
+                (
+                    r.get("total_cost")
+                    if key == "total"
+                    else (r.get(key) or {}).get("cost")
+                )
+                for r in recs
+            ]
+            vals = [v for v in vals if v is not None]
+            if not vals:
+                return None
+            return max(vals) if m.group(2) == "max" else sum(vals) / len(vals)
+        if name == "fallback_rate":
+            return (
+                sum(1 for r in recs if r.get("fallback_used")) / len(recs)
+                if recs
+                else None
+            )
+        if name == "report_count_min":
+            vals = [r.get("report_count", 0) for r in recs]
+            return min(vals) if vals else None
+        if name == "no_report_count":
+            return sum(1 for r in recs if r.get("final_class") == "E_NO_REPORT")
+        if name == "lint_hard_count":
+            return sum((r.get("lint") or {}).get("hard_fail", 0) for r in recs)
+        return None
+
+    OPS = {
+        "<=": lambda a, b: a <= b,
+        ">=": lambda a, b: a >= b,
+        "<": lambda a, b: a < b,
+        ">": lambda a, b: a > b,
+        "==": lambda a, b: a == b,
+    }
+    expect_re = re.compile(r"(\S+)\s*(<=|>=|==|<|>)\s*([\d.]+)")
+
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        commit_date, _, expr = line.partition("\t")
+        m = expect_re.fullmatch(expr.strip())
+        if not m:
+            print(f"INVALID\t{expr}\t(書式不正)")
+            continue
+        name, op, target = m.group(1), m.group(2), float(m.group(3))
+        recs = [r for r in records if r.get("date", "") > commit_date]
+        val = metric_value(name, recs)
+        if val is None:
+            print(f"INSUFFICIENT_DATA\t{expr}\t(n={len(recs)})")
+        else:
+            verdict = "ACHIEVED" if OPS[op](val, target) else "NOT_ACHIEVED"
+            shown = round(val, 4) if isinstance(val, float) else val
+            print(f"{verdict}\t{expr}\t(実測 {shown}, n={len(recs)})")
+    return 0
+
+
 COMMANDS = {
     "parse-stream": cmd_parse_stream,
     "error-fields": cmd_error_fields,
@@ -690,6 +1169,12 @@ COMMANDS = {
     "graph-health": cmd_graph_health,
     "cluster-report": cmd_cluster_report,
     "coverage-report": cmd_coverage_report,
+    "metrics-append": cmd_metrics_append,
+    "metrics-backfill": cmd_metrics_backfill,
+    "report-lint": cmd_report_lint,
+    "wiki-quality-scan": cmd_wiki_quality_scan,
+    "review-age": cmd_review_age,
+    "expect-check": cmd_expect_check,
 }
 
 

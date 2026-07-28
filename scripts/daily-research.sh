@@ -301,6 +301,21 @@ if [ "$PASS2_CLASS" = "OK" ]; then
   fi
 fi
 
+# 決定論的レポート lint (ctl-016)。品質プロキシを metrics に残し、hard fail
+# (ソース節不在・出典 0 件) のみ即日 notify する。soft は /dr-review の材料。
+LINT_JSON=""
+if [ -n "$REPORT_DIR" ] && [ -d "$REPORT_DIR" ]; then
+  LINT_EXIT=0
+  LINT_JSON=$(python3 "$DR_PY" report-lint "$REPORT_DIR" "$DATE" \
+    "$PROJECT_DIR/config.toml" "$PROJECT_DIR/graph.jsonld" 2>> "$LOG_FILE") || LINT_EXIT=$?
+  if [ "$LINT_EXIT" = "2" ]; then
+    log "WARN: report lint hard fail (ctl-016): $LINT_JSON"
+    notify "レポート lint が hard fail を検出しました" "Daily Research Lint"
+  elif [ "$LINT_EXIT" != "0" ]; then
+    log "WARN: report lint could not run (exit $LINT_EXIT, non-fatal)"
+  fi
+fi
+
 if [ "$PASS2_CLASS" = "OK" ]; then
   FINAL_EXIT=0
   log "=== Completed successfully ==="
@@ -337,6 +352,23 @@ else
   else
     log "WARN: wiki ingest スクリプトが見つからない/実行不可: $VAULT_INGEST"
   fi
+fi
+
+# === 自己改善ループの計測 (ADR-0006): run 記録の永続化 + review リマインダー ===
+# logs/ は 30 日ローテーションで消えるため、metrics.jsonl (gitignore) に恒久保存する。
+# 収集は non-fatal — 計測の失敗で生成ジョブの成否を変えない。
+FALLBACK_FLAG=0
+[ "$USE_FALLBACK" = true ] && FALLBACK_FLAG=1
+printf '%s\n%s\n%s\n' "$PASS1_JSON" "$PASS2_JSON" "$LINT_JSON" \
+  | python3 "$DR_PY" metrics-append "$PROJECT_DIR/metrics.jsonl" "$DATE" \
+      "$PASS2_CLASS" "${REPORT_COUNT:-0}" "$FALLBACK_FLAG" >> "$LOG_FILE" 2>&1 \
+  || log "WARN: metrics-append failed (non-fatal)"
+
+# 前回 /dr-review からの経過日数。10 日を超えたら 1 行 notify (判断材料の腐敗防止)。
+REVIEW_AGE=$(python3 "$DR_PY" review-age "$PROJECT_DIR/.notes/dr-review-state.json" 2>/dev/null) || REVIEW_AGE="never"
+log "dr-review age: ${REVIEW_AGE} day(s) since last review"
+if [ "$REVIEW_AGE" != "never" ] && [ "$REVIEW_AGE" -ge 10 ] 2>/dev/null; then
+  notify "前回の /dr-review から ${REVIEW_AGE} 日経過しています" "Daily Research Review"
 fi
 
 exit "$FINAL_EXIT"

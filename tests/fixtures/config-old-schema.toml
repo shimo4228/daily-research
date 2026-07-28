@@ -1,12 +1,12 @@
 # Legacy (pre-line) schema fixture — target_repo directly under [tracks.X].
 # Used to test the old-schema detection guard.
 [general]
-vault_path = "/tmp/fixture-vault"
+vault_path = "/nonexistent/fixture-vault"
 
 [tracks.authorship]
 name = "Authorship Strategy"
-target_repo = "/tmp/fixture-repos/authorship-strategy"
+target_repo = "/nonexistent/fixture-repos/authorship-strategy"
 
 [tracks.contemplative]
 name = "Contemplative Agent"
-target_repo = "/tmp/fixture-repos/contemplative-agent"
+target_repo = "/nonexistent/fixture-repos/contemplative-agent"

@@ -467,3 +467,37 @@ EOF
   # コメント行を除外して、レガシーパターンがないことを確認
   ! grep -v '^#\|^[[:space:]]*#' "$MOCK_PROJECT/scripts/daily-research.sh" | grep -q 'gtimeout\|TIMEOUT_CMD\|timeout_secs'
 }
+
+# === Test: 自己改善ループの計測 (ADR-0006 / ctl-016) ===
+
+@test "E2E: metrics.jsonl is appended with run record and lint result" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+
+  run_script
+  local log_content
+  log_content=$(get_log)
+
+  # 成功完了と計測は独立に成立する
+  echo "$log_content" | grep -q "Completed successfully"
+
+  # metrics.jsonl に当日 run が 1 行記録されている
+  [ -f "$MOCK_PROJECT/metrics.jsonl" ]
+  run python3 - "$MOCK_PROJECT/metrics.jsonl" << 'PYEOF'
+import json, sys
+rec = json.loads(open(sys.argv[1]).read().splitlines()[0])
+assert rec["final_class"] == "OK", rec
+assert rec["report_count"] == 1, rec
+assert rec["source"] == "live", rec
+assert rec["pass1"]["turns"] == 5, rec
+assert rec["pass2"]["turns"] == 3, rec
+# mock レポート (# mock report) はソース節なし → lint hard fail が記録される
+assert rec["lint"]["hard_fail"] == 1, rec
+PYEOF
+  [ "$status" -eq 0 ]
+
+  # ctl-016 hard fail が WARN されるが、FINAL_EXIT には影響しない (advisory)
+  echo "$log_content" | grep -q "report lint hard fail (ctl-016)"
+
+  # review リマインダー: state 不在 → never をログ
+  echo "$log_content" | grep -q "dr-review age: never"
+}
