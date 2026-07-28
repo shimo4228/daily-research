@@ -63,7 +63,7 @@ daily-research/
 
 | Variable | Source | Purpose |
 |----------|--------|---------|
-| `PATH` | plist + script | Must include `/opt/homebrew/bin`, `/usr/local/bin`, `$HOME/.claude/local` |
+| `PATH` | plist + script | Must include `$HOME/.local/bin` (current Claude installer), `$HOME/.claude/local` (legacy), `/opt/homebrew/bin`, and `/usr/local/bin` |
 | `HOME` | plist | Required for Claude CLI to find auth tokens |
 | `ANTHROPIC_API_KEY` | **Must be unset** | If set, Claude uses per-token billing instead of Max plan |
 | `CLAUDE_TIMEOUT` | Script (internal) | Timeout in seconds for `claude -p` calls via `run_claude()`. 0 = no timeout (default); Pass 2 sets 1800s |

@@ -9,7 +9,11 @@ unset CLAUDECODE 2>/dev/null || true
 
 # launchd 環境は PATH が最小限。homebrew python3 (tomllib 必須, >=3.11) を先頭に明示設定。
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-# claude コマンドの local パスを追加
+# Claude Code の旧インストール先も互換性のため維持する。
 if [ -d "$HOME/.claude/local" ]; then
   export PATH="$HOME/.claude/local:$PATH"
+fi
+# 現行 native installer の配置先を優先する。
+if [ -d "$HOME/.local/bin" ]; then
+  export PATH="$HOME/.local/bin:$PATH"
 fi

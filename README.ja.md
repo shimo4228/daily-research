@@ -122,7 +122,7 @@ saturated_recent_days = 90
 saturated_recent_min = 3
 ```
 
-自由探索ラインでは、`report_variant = "maker"` を指定すると開発アイデアで、`report_variant = "public_sphere_radar"` を指定すると人間主体のAI協働型公共圏を分析した `PILOT | WATCH | DROP` の参加機会Radarでレポートが終わります。Radarは現在の実活動を確認し、agent-only network、generic model leaderboard、休眠したdemo-only venueを除外します。
+自由探索ラインでは、`report_variant = "maker"` を指定すると開発アイデアでレポートが終わり、`report_variant = "platform_digest"` を指定すると単一テーマの記事の代わりに、その日の探索で見つけた AI 親和プラットフォーム 3〜7 件を要約・実活動の証拠・参加入口・`PILOT | WATCH | DROP` 評価付きで列挙する digest になります。実活動を確認できない候補は掲載せず、掲載済みプラットフォームの再掲もしません。
 
 レポートはデフォルトで日本語生成です。出力言語は `prompts/research-protocol.md` の言語制約を変更します。リサーチ深度の調整・CLI フラグ・環境変数は [CONTRIB](docs/CONTRIB.md) を参照。
 

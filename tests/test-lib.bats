@@ -281,8 +281,28 @@ _fixtures() {
   [[ "$output" == *"UNSET"* ]]
 }
 
-@test "env.sh puts homebrew bin first on PATH" {
+@test "env.sh puts Claude install paths before homebrew bins" {
   run /bin/bash -c "source '$LIB_DIR/env.sh'; echo \"\$PATH\""
   [ "$status" -eq 0 ]
-  [[ "$output" == "/opt/homebrew/bin:"* ]] || [[ "$output" == *"$HOME/.claude/local:/opt/homebrew/bin:"* ]]
+  if [ -d "$HOME/.local/bin" ]; then
+    [[ "$output" == "$HOME/.local/bin:"* ]]
+  elif [ -d "$HOME/.claude/local" ]; then
+    [[ "$output" == "$HOME/.claude/local:"* ]]
+  else
+    [[ "$output" == "/opt/homebrew/bin:"* ]]
+  fi
+  [[ "$output" == *"/opt/homebrew/bin:/usr/local/bin:"* ]]
+}
+
+@test "env.sh finds Claude CLI installed in ~/.local/bin under launchd PATH" {
+  local mock_home="$TMP/home"
+  mkdir -p "$mock_home/.local/bin"
+  printf '#!/bin/bash\nexit 0\n' > "$mock_home/.local/bin/claude"
+  chmod +x "$mock_home/.local/bin/claude"
+
+  run env HOME="$mock_home" PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
+    /bin/bash -c "source '$LIB_DIR/env.sh'; command -v claude"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "$mock_home/.local/bin/claude" ]
 }

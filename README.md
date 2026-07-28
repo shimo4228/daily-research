@@ -122,7 +122,7 @@ saturated_recent_days = 90
 saturated_recent_min = 3
 ```
 
-Free-exploration lines may set `report_variant = "maker"` to end with buildable ideas, or `report_variant = "public_sphere_radar"` to analyze a human-led AI-enabled public venue and end with a `PILOT | WATCH | DROP` participation verdict. The radar verifies current activity and excludes agent-only networks, generic model leaderboards, and inactive demo-only venues.
+Free-exploration lines may set `report_variant = "maker"` to end with buildable ideas, or `report_variant = "platform_digest"` to replace the single-topic article with a digest listing 3–7 AI-friendly platforms found during that day's sweep — each with a summary, evidence of current activity, an entry point, and a `PILOT | WATCH | DROP` call. The digest skips candidates without verifiable activity and never re-lists platforms already covered.
 
 Reports are generated in Japanese by default; change the language constraint in `prompts/research-protocol.md`. See [CONTRIB](docs/CONTRIB.md) for tuning research depth, CLI flags, and environment variables.
 

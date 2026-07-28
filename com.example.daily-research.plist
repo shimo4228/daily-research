@@ -32,7 +32,7 @@
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
-    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <string>/Users/YOUR_USERNAME/.local/bin:/Users/YOUR_USERNAME/.claude/local:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     <key>HOME</key>
     <string>/Users/YOUR_USERNAME</string>
     <!-- MEM0_API_KEY: Set via 'launchctl setenv MEM0_API_KEY your-key' or in the actual plist.

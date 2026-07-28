@@ -75,10 +75,11 @@ teardown() {
   grep -q "常設フロンティア質問" "$PROJECT_DIR/prompts/theme-selection-prompt.md"
 }
 
-@test "public-sphere radar prompt and template contract is explicit" {
-  grep -q 'public_sphere_radar' "$PROJECT_DIR/prompts/research-protocol.md"
-  grep -q '公共圏としての構造' "$PROJECT_DIR/templates/report-template.md"
-  grep -q '参加・発信機会' "$PROJECT_DIR/templates/report-template.md"
+@test "platform digest prompt and template contract is explicit" {
+  grep -q 'platform_digest' "$PROJECT_DIR/prompts/research-protocol.md"
+  grep -q 'platform_digest' "$PROJECT_DIR/prompts/theme-selection-prompt.md"
+  grep -q '今日の探索アングル' "$PROJECT_DIR/templates/report-template.md"
+  grep -q '総評' "$PROJECT_DIR/templates/report-template.md"
   grep -q 'PILOT | WATCH | DROP' "$PROJECT_DIR/templates/report-template.md"
   grep -q '実活動' "$PROJECT_DIR/prompts/research-protocol.md"
 }
