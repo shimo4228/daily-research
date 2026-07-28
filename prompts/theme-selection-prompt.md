@@ -19,11 +19,14 @@
 
 複数 repo を持つ line では、1 repo に絞ったテーマでも、複数 repo の concept を横断する **交差テーマ** でもよい。交差テーマは単独 repo では出ない新規性を持つため歓迎される (その場合 `repos` に該当する key を列挙する)。
 
-### `public_sphere_radar` variant の選定条件
+### `platform_digest` variant の選定条件
 
-config.toml の line に `report_variant = "public_sphere_radar"` がある場合は、AI自体やAI agentを主体にせず、**AIを活用する人間が公開・参加・評価・remixする場**を選ぶ。候補には、人間の主体性、AI-nativeな参加機構、公開artifactの持続性、remix・attributionの経路、現在参加できる入口が必要である。公式ページが存在するだけの休眠venueやdemo-only企画は選ばず、直近の投稿・イベント・更新・参加者などの**実活動**を確認する。agent-only social network、非公開productivity tool、通常SNSへのAI機能追加、generic model leaderboard、投機中心marketplace、著者性・判断・系譜を欠くslop feedは除外する。
+config.toml の line に `report_variant = "platform_digest"` がある場合は、単一のテーマ・単一のプラットフォームを選ぶのではなく、**その日の探索アングル**を 1 つ選ぶ（例: 「creative coding 系の AI-native gallery」「AI 前提の新興 publishing venue」「human-AI challenge / competition の新規開催地」）。Pass 2 はこのアングルに沿って sources を横断スイープし、見つかった AI 親和プラットフォームを複数件（3〜7 件）要約付きで列挙する digest を書く。テーマ JSON の schema は他 line と同一 — `topic` に探索アングル名を書く。アングルは過去テーマ履歴・飽和 cluster と重ならないものを選び、実活動が観測できそうな領域を優先する。agent-only social network、通常SNSへの後付けAI機能、著者性・判断を欠くslop feedが主体の領域は選ばない。
 
 ## 手順
+
+**ツール制約**: Bash は許可されていない。graph・JSON の分析は Read / Grep で行う
+（python3 ワンライナーの実行を試みると denied されターンを浪費する。ターン上限は有限）。
 
 1. `config.toml` を読み、全 line の `name` / `focus` / `repos` / `sources` / `scoring_criteria` を把握する
 2. repo-backed line について、各 repo の graph を Read する: `.repo-graphs/{key}.jsonld`
@@ -71,7 +74,7 @@ themes 配列の要素数は config.toml の line 数と一致させること（
       "reinforces": [],
       "challenges": [],
       "extends": [],
-      "rationale": "人間が主体となる公共的な参加機構、直近の実活動、参加入口を 1-2 文で"
+      "rationale": "選んだ探索アングルと、そこで AI 親和プラットフォームが複数見つかる見込み・実活動の兆候を 1-2 文で"
     },
     {
       "track": "tech",
@@ -86,7 +89,7 @@ themes 配列の要素数は config.toml の line 数と一致させること（
       "rationale": "どの未踏 cluster に属し、なぜ今注目かを 1-2 文で"
     },
     {
-      "track": "human_adaptation",
+      "track": "software_paradigms",
       "repos": [],
       "mode": "explore",
       "topic": "...",
@@ -95,7 +98,7 @@ themes 配列の要素数は config.toml の line 数と一致させること（
       "reinforces": [],
       "challenges": [],
       "extends": [],
-      "rationale": "人間側の学習・認知・スキル形成における未踏領域と新展開を 1-2 文で"
+      "rationale": "ソフトウェアの作り方・持ち方のどんなパラダイム転換に属する未踏サブ領域か、なぜ今動いているかを 1-2 文で"
     }
   ]
 }

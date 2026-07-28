@@ -37,11 +37,13 @@ setup() {
 }
 EOF
 
-  # config.toml のミニマル版（新 line schema。vault_path を temp に向ける。
+  # config.toml のミニマル版（新 line schema。vault_path を MOCK_HOME 配下に向ける
+  # (report 存在ゲート ctl-015 のためテスト間で隔離)。
   # repo graph は不在 → sync は WARN (非 fatal) で素通りする）
-  cat > "$MOCK_PROJECT/config.toml" << 'EOF'
+  cat > "$MOCK_PROJECT/config.toml" << EOF
 [general]
-vault_path = "/tmp/mock-vault"
+vault_path = "$MOCK_HOME/mock-vault"
+output_dir = "daily-research"
 
 [tracks.agent_systems]
 name = "Agent Systems Line"
@@ -60,14 +62,15 @@ key = "aap"
 target_repo = "/tmp/mock-repos/agent-attribution-practice"
 
 [tracks.human_ai_publics]
-name = "Human-AI Publics"
-report_variant = "public_sphere_radar"
+name = "AI-Friendly Platform Digest"
+report_variant = "platform_digest"
 
 [tracks.tech]
 name = "Tech Free Exploration"
 
-[tracks.human_adaptation]
-name = "Human Adaptation"
+[tracks.software_paradigms]
+name = "Software Paradigms"
+aliases = ["human_adaptation"]
 report_variant = "maker"
 EOF
 
@@ -138,7 +141,7 @@ if [[ "$MODEL" == "opus" ]]; then
       # --output-format stream-json --verbose の NDJSON 形式。parse-stream.py が処理する
       cat << 'JSON'
 {"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"tool_use","name":"WebSearch","id":"toolu_mock01","input":{"query":"mock search"}}]}}
-{"type":"result","subtype":"success","is_error":false,"duration_ms":5000,"duration_api_ms":4500,"num_turns":5,"total_cost_usd":0.25,"usage":{"input_tokens":1000,"output_tokens":500,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"result":"{\"themes\": [{\"track\": \"agent_systems\", \"repos\": [\"akc\"], \"mode\": \"frontier\", \"topic\": \"Mock Agent Systems Topic for E2E Testing\", \"slug\": \"mock-agent-systems-topic\", \"score\": 85, \"challenges\": [\"concept/mock-akc\"], \"rationale\": \"E2E test rationale\"}, {\"track\": \"human_ai_publics\", \"repos\": [], \"mode\": \"explore\", \"topic\": \"Mock Human AI Publics Topic for E2E Testing\", \"slug\": \"mock-human-ai-publics-topic\", \"score\": 84, \"rationale\": \"E2E test rationale\"}, {\"track\": \"tech\", \"topic\": \"Mock Tech Topic for E2E Testing\", \"slug\": \"mock-tech-topic\", \"score\": 82, \"rationale\": \"E2E test rationale\"}, {\"track\": \"human_adaptation\", \"repos\": [], \"mode\": \"explore\", \"topic\": \"Mock Human Adaptation Topic for E2E Testing\", \"slug\": \"mock-human-adaptation-topic\", \"score\": 81, \"rationale\": \"E2E test rationale\"}]}"}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":5000,"duration_api_ms":4500,"num_turns":5,"total_cost_usd":0.25,"usage":{"input_tokens":1000,"output_tokens":500,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"result":"{\"themes\": [{\"track\": \"agent_systems\", \"repos\": [\"akc\"], \"mode\": \"frontier\", \"topic\": \"Mock Agent Systems Topic for E2E Testing\", \"slug\": \"mock-agent-systems-topic\", \"score\": 85, \"challenges\": [\"concept/mock-akc\"], \"rationale\": \"E2E test rationale\"}, {\"track\": \"human_ai_publics\", \"repos\": [], \"mode\": \"explore\", \"topic\": \"Mock Human AI Publics Topic for E2E Testing\", \"slug\": \"mock-human-ai-publics-topic\", \"score\": 84, \"rationale\": \"E2E test rationale\"}, {\"track\": \"tech\", \"topic\": \"Mock Tech Topic for E2E Testing\", \"slug\": \"mock-tech-topic\", \"score\": 82, \"rationale\": \"E2E test rationale\"}, {\"track\": \"software_paradigms\", \"repos\": [], \"mode\": \"explore\", \"topic\": \"Mock Software Paradigms Topic for E2E Testing\", \"slug\": \"mock-software-paradigms-topic\", \"score\": 81, \"rationale\": \"E2E test rationale\"}]}"}
 JSON
       exit 0
       ;;
@@ -178,6 +181,15 @@ if [[ "$MODEL" == "sonnet" ]]; then
   if [[ "$SCENARIO" == "pass2-iserror" ]]; then
     echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"error","is_error":true,"total_cost_usd":0.05,"num_turns":55,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}}]'
     exit 0
+  fi
+
+  # pass2-noreport: success を返すがレポートを書かない (2026-07-29 の
+  # 「実行許可をいただけますか？」型の成功化け。ctl-015 が捕捉すべきケース)
+  if [[ "$SCENARIO" != "pass2-noreport" ]]; then
+    # 成功シナリオでは当日レポートを模擬生成 (report 存在ゲート ctl-015 の対象)
+    REPORT_DIR="$MOCK_HOME_DIR/mock-vault/daily-research"
+    mkdir -p "$REPORT_DIR"
+    echo "# mock report" > "$REPORT_DIR/$(date +%Y-%m-%d)_tech_mock-report.md"
   fi
 
   # --output-format json は JSON array を返す場合がある
@@ -238,7 +250,7 @@ get_log() {
   echo "$sonnet_prompt" | grep -q "mock-agent-systems-topic"
   echo "$sonnet_prompt" | grep -q "mock-human-ai-publics-topic"
   echo "$sonnet_prompt" | grep -q "mock-tech-topic"
-  echo "$sonnet_prompt" | grep -q "mock-human-adaptation-topic"
+  echo "$sonnet_prompt" | grep -q "mock-software-paradigms-topic"
   echo "$sonnet_prompt" | grep -q "選定済みテーマ"
 
   # validate-theme が mode / repos を正規化して透過している
@@ -287,6 +299,24 @@ get_log() {
 
   # 選定済みテーマ セクションは含まれない
   ! echo "$sonnet_prompt" | grep -q "選定済みテーマ"
+}
+
+@test "E2E fallback: Sonnet fallback prompt injects coverage/cluster/past-themes (no Bash needed)" {
+  echo "pass1-fail" > "$MOCK_HOME/.mock_scenario"
+
+  run_script
+
+  local sonnet_prompt
+  sonnet_prompt=$(cat "$MOCK_HOME/.sonnet_prompt")
+
+  # Bash 不可 + 注入済みレポートを正本とする指示 (2026-07-29 空振りの再発防止)
+  echo "$sonnet_prompt" | grep -q "Bash は許可されていない"
+  echo "$sonnet_prompt" | grep -q "注入済みのレポートを正本として使うこと"
+
+  # 3 レポートが本体または生成失敗フォールバック文字列として存在する
+  # (mock 環境では repo graph 不在のため coverage は fallback 文字列になりうる)
+  echo "$sonnet_prompt" | grep -q "coverage"
+  echo "$sonnet_prompt" | grep -q "cluster"
 }
 
 # === Test: JSON validation failure fallback ===
@@ -360,6 +390,35 @@ get_log() {
   ! echo "$log_content" | grep -q "Completed successfully"
   # E_FATAL として失敗報告される
   echo "$log_content" | grep -q "Failed (E_FATAL"
+}
+
+# === Test: Report existence gate (ctl-015) ===
+
+@test "E2E: Pass 2 success without report files is reported as Failed (report existence gate)" {
+  # 2026-07-29 の回帰: Sonnet が is_error:false のまま質問して end_turn → 成功化け。
+  # classify_exit では検出不能なので、当日レポートの不在で失敗判定されることを固定する
+  echo "pass2-noreport" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -ne 0 ]
+
+  local log_content
+  log_content=$(get_log)
+
+  ! echo "$log_content" | grep -q "Completed successfully"
+  echo "$log_content" | grep -q "ctl-015"
+  echo "$log_content" | grep -q "Failed (E_NO_REPORT"
+}
+
+@test "E2E: report existence gate passes when today's report exists" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+
+  run_script
+  local log_content
+  log_content=$(get_log)
+
+  echo "$log_content" | grep -q "Report existence gate passed: 1 report(s)"
+  echo "$log_content" | grep -q "Completed successfully"
 }
 
 # === Test: Legacy config schema fail-fast (ADR-0004) ===

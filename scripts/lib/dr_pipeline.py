@@ -333,6 +333,19 @@ def cmd_vault_path(argv):
     return 0
 
 
+# --- report-dir [config_path]: レポート出力先 {vault_path}/{output_dir} を出力 ---
+# どちらか欠けている config では空文字を出力する (呼び出し側はゲートを skip する)。
+def cmd_report_dir(argv):
+    config_path = argv[0] if argv else "config.toml"
+    tomllib = _tomllib()
+    with open(config_path, "rb") as f:
+        general = tomllib.load(f).get("general", {})
+    vault = general.get("vault_path", "")
+    output_dir = general.get("output_dir", "")
+    print(f"{vault}/{output_dir}" if vault and output_dir else "")
+    return 0
+
+
 # --- themes-log <theme_json>: 選定テーマを 1 行ログ用に整形 ---
 def cmd_themes_log(argv):
     d = json.loads(argv[0])
@@ -670,6 +683,7 @@ COMMANDS = {
     "validate-theme": cmd_validate_theme,
     "result-field": cmd_result_field,
     "vault-path": cmd_vault_path,
+    "report-dir": cmd_report_dir,
     "themes-log": cmd_themes_log,
     "tracks": cmd_tracks,
     "past-themes": cmd_past_themes,

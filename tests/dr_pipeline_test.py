@@ -10,9 +10,8 @@ import json
 import pathlib
 import sys
 
-import pytest
-
 import dr_pipeline
+import pytest
 
 FIXTURES = pathlib.Path(__file__).parent / "fixtures"
 CONFIG = str(FIXTURES / "config-lines.toml")
@@ -238,7 +237,7 @@ def _valid_themes():
                     "reinforces": [],
                 },
                 {
-                    "track": "human_adaptation",
+                    "track": "software_paradigms",
                     "repos": [],
                     "mode": "explore",
                     "topic": "T",
@@ -262,9 +261,7 @@ def test_validate_theme_valid(monkeypatch, capsys):
 
 @pytest.mark.unit
 @pytest.mark.parametrize("old_track", ["attribution", "agent_cognition"])
-def test_validate_theme_rejects_retired_line_keys(
-    monkeypatch, capsys, old_track
-):
+def test_validate_theme_rejects_retired_line_keys(monkeypatch, capsys, old_track):
     data = json.loads(_valid_themes())
     data["themes"][0]["track"] = old_track
     rc, _, err = run_cmd(
@@ -484,6 +481,24 @@ def test_vault_path_missing_is_empty(monkeypatch, capsys):
     assert out.strip() == "/tmp/fixture-vault"  # no-tracks config も general は持つ
 
 
+# === report-dir ===
+
+
+@pytest.mark.unit
+def test_report_dir_joins_vault_and_output(monkeypatch, capsys):
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["report-dir", CONFIG])
+    assert rc == 0
+    assert out.strip() == "/tmp/fixture-vault/daily-research"
+
+
+@pytest.mark.unit
+def test_report_dir_missing_output_dir_is_empty(monkeypatch, capsys):
+    # output_dir 欠落時は空文字 → 呼び出し側 (ctl-015) はゲートを skip する
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["report-dir", CONFIG_NO_TRACKS])
+    assert rc == 0
+    assert out.strip() == ""
+
+
 # === themes-log ===
 
 
@@ -522,12 +537,11 @@ def test_tracks_emits_line_repo_tsv(monkeypatch, capsys):
     assert len(lines) == 3
     assert "agent_systems\takc\t/tmp/fixture-repos/agent-knowledge-cycle" in lines
     assert (
-        "agent_systems\tcontemplative\t/tmp/fixture-repos/contemplative-agent"
-        in lines
+        "agent_systems\tcontemplative\t/tmp/fixture-repos/contemplative-agent" in lines
     )
     assert "agent_systems\taap\t/tmp/fixture-repos/agent-attribution-practice" in lines
     assert not any(
-        ln.startswith(("human_ai_publics\t", "tech\t", "human_adaptation\t"))
+        ln.startswith(("human_ai_publics\t", "tech\t", "software_paradigms\t"))
         for ln in lines
     )
 
@@ -580,14 +594,17 @@ def test_past_themes_groups_aliases_into_line(monkeypatch, capsys, tmp_path):
     )
     rc, out, _ = run_cmd(monkeypatch, capsys, ["past-themes", str(past), CONFIG])
     assert rc == 0
-    assert "Track: agent_systems (旧 track: agent_cognition, akc, contemplative, aap を含む)" in out
+    assert (
+        "Track: agent_systems (旧 track: agent_cognition, akc, contemplative, aap を含む)"
+        in out
+    )
     assert "Old cognition topic" in out
     assert "Old AAP topic" in out
     assert "Old AKC topic" in out
     assert "Track: tech" in out
     assert "Old ai_dev topic" in out  # tech の alias ai_dev も集約
     assert "Track: human_ai_publics" not in out  # 新 line は旧履歴を継承しない
-    assert "Track: human_adaptation" not in out  # 履歴が無い line は表示しない
+    assert "Track: software_paradigms" not in out  # 履歴が無い line は表示しない
     assert "should be filtered" not in out  # 未定義 track は除外
     assert "Old attribution line should stay historical" not in out
 

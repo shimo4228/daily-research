@@ -2,6 +2,7 @@
 # mirrors the structure of the real config.toml.
 [general]
 vault_path = "/tmp/fixture-vault"
+output_dir = "daily-research"
 
 [coverage]
 frontier_threshold = 0
@@ -30,13 +31,14 @@ target_repo = "/tmp/fixture-repos/agent-attribution-practice"
 target_graph = ".repo-graphs/aap.jsonld"
 
 [tracks.human_ai_publics]
-name = "Human-AI Publics"
-report_variant = "public_sphere_radar"
+name = "AI-Friendly Platform Digest"
+report_variant = "platform_digest"
 
 [tracks.tech]
 name = "Tech Free Exploration"
 aliases = ["tech", "ai_dev"]
 
-[tracks.human_adaptation]
-name = "Human Adaptation"
+[tracks.software_paradigms]
+name = "Software Paradigms"
+aliases = ["human_adaptation"]
 report_variant = "maker"

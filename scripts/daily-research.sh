@@ -212,7 +212,23 @@ if [ "$USE_FALLBACK" = true ]; then
 5. 各テーマのレポートを生成し、Obsidian vault に保存する
 6. past_topics.json を更新する
 
-research-protocol.md に記載されたプロトコルに厳密に従ってください。"
+research-protocol.md に記載されたプロトコルに厳密に従ってください。
+
+注意: Bash は許可されていない。coverage-report.sh や dr_pipeline.py を自分で実行しようと
+せず、以下に注入済みのレポートを正本として使うこと (2026-07-29 のフォールバックは
+coverage-report.sh の実行許可を求めて空振りした)。JSON の検証は Read で行う。
+
+---
+
+$COVERAGE
+
+---
+
+$CLUSTER
+
+---
+
+$PAST_THEMES"
 else
   log "Pass 1 completed: themes selected by Opus"
   # 選定テーマをログに記録
@@ -261,6 +277,30 @@ fi
 # classify_exit で Pass 2 の成否を判定。
 # exit 0 でも is_error:true (max-turns 空振り等, ctl-003) なら失敗扱いにする = 成功化け防止。
 PASS2_CLASS=$(classify_exit "$PASS2_EXIT" "$PASS2_JSON")
+
+# 当日レポートの存在ゲート (ctl-015)。モデルが仕事をせず質問だけして end_turn すると
+# is_error:false / subtype:success になり classify_exit では検出できない (2026-07-29 に実証:
+# フォールバック Sonnet が「実行許可をいただけますか？」で終了し成功化け)。
+# 成否は「当日のレポートファイルが vault に存在するか」という決定論条件で最終判定する。
+REPORT_DIR=$(python3 "$DR_PY" report-dir "$PROJECT_DIR/config.toml" 2>> "$LOG_FILE") || REPORT_DIR=""
+if [ "$PASS2_CLASS" = "OK" ]; then
+  if [ -n "$REPORT_DIR" ]; then
+    # dir 不在 = レポート 0 本 (find の非ゼロ exit が set -e で script を落とすため先に分岐)
+    REPORT_COUNT=0
+    if [ -d "$REPORT_DIR" ]; then
+      REPORT_COUNT=$(find "$REPORT_DIR" -maxdepth 1 -name "${DATE}_*.md" 2>/dev/null | wc -l | tr -d ' ')
+    fi
+    if [ "$REPORT_COUNT" -eq 0 ]; then
+      PASS2_CLASS="E_NO_REPORT"
+      log "WARN: Pass 2 reported success but no ${DATE}_*.md found in $REPORT_DIR (ctl-015)"
+    else
+      log "Report existence gate passed: $REPORT_COUNT report(s) for $DATE"
+    fi
+  else
+    log "WARN: vault_path/output_dir が config.toml に未設定。report 存在ゲート (ctl-015) を skip"
+  fi
+fi
+
 if [ "$PASS2_CLASS" = "OK" ]; then
   FINAL_EXIT=0
   log "=== Completed successfully ==="
