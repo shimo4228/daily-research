@@ -7006,6 +7006,147 @@
       "@type": "Thing",
       "name": "WASM Component Model & cross-language distribution",
       "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:topic/2026-07-30_agent_systems_context-value-action-living-specification",
+      "@type": "Article",
+      "name": "文脈が価値を呼び出す — Context-Value-Action アーキテクチャと『生きた仕様』が問う行為時価値注入の可能性と脆さ",
+      "datePublished": "2026-07-30",
+      "track": "agent_systems",
+      "mode": "coverage",
+      "contributesToRepo": [
+        "contemplative"
+      ],
+      "reinforces": [
+        "https://shimo4228.github.io/shimo4228/vocab#ca/concept/value-layer"
+      ],
+      "challenges": [
+        "https://shimo4228.github.io/shimo4228/vocab#ca/concept/value-layer"
+      ],
+      "extends": [
+        "https://shimo4228.github.io/shimo4228/vocab#ca/concept/value-layer"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/action_time_value_injection"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-30_human_ai_publics_ai-visual-art-contest-venues",
+      "@type": "Article",
+      "name": "AI-native な視覚芸術・イラストレーションの批評・コンテスト venue (掲載: NightCafe Studio Daily Challenges, 第五回AIアートグランプリ, AI Design Awards 2026, Artiver AI Art Awards 2026, TCCP GENERATE 2026)",
+      "datePublished": "2026-07-30",
+      "track": "human_ai_publics",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_visual_art_contest_venues"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-30_tech_physical-ai-open-source-robot-learning-stack",
+      "@type": "Article",
+      "name": "『physical AIのChatGPTモーメント』——オープンソース・ロボット学習スタックが個人の手に届いた2026年",
+      "datePublished": "2026-07-30",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/physical_ai_robot_learning"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-30_software_paradigms_home-cooked-software-barefoot-developers",
+      "@type": "Article",
+      "name": "『家庭料理』としてのソフトウェア — barefoot developerとend-user programmingの再興",
+      "datePublished": "2026-07-30",
+      "track": "software_paradigms",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/home_cooked_software_end_user"
+      ]
+    },
+    {
+      "@id": "dr:cluster/ai_visual_art_contest_venues",
+      "@type": "Thing",
+      "name": "AI-native visual art critique & contest venues",
+      "broaderClusterOf": "dr:cluster/b2a_visibility_governance"
+    },
+    {
+      "@id": "dr:cluster/physical_ai_robot_learning",
+      "@type": "Thing",
+      "name": "Physical AI & open-source robot learning stacks",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:cluster/home_cooked_software_end_user",
+      "@type": "Thing",
+      "name": "Home-cooked software & barefoot developers",
+      "broaderClusterOf": "dr:cluster/ai_developer_ecosystem"
+    },
+    {
+      "@id": "dr:topic/2026-07-31_agent_systems_measuring-accumulated-harness-and-memory",
+      "@type": "Article",
+      "name": "蓄積したハーネスと記憶は本当に効いているのか——harness evolution 評価の交絡と ground-truth-first 縦断計器が暴く tenure crossover",
+      "datePublished": "2026-07-31",
+      "track": "agent_systems",
+      "mode": "frontier",
+      "contributesToRepo": [
+        "akc",
+        "contemplative"
+      ],
+      "reinforces": [
+        "ca/concept/pattern-composition-instruments"
+      ],
+      "challenges": [
+        "akc/concept/genre-neutral"
+      ],
+      "extends": [
+        "akc/concept/harness-alignment",
+        "akc/concept/observed-vs-generated"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_evaluation_benchmarks",
+        "dr:cluster/agent_memory_context_engineering"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-31_human_ai_publics_human-authored-ai-music-contest-venues",
+      "@type": "Article",
+      "name": "人間の著者性を出品要件に据える AI 音楽コンテスト・リミックス venue 探索",
+      "datePublished": "2026-07-31",
+      "track": "human_ai_publics",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/ai_music_performance_contests"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-31_tech_playable-world-models-run-local",
+      "@type": "Article",
+      "name": "playable world model がローカルで走る段階へ——Matrix-Game 3.0・AlayaWorld・マルチプレイヤー化",
+      "datePublished": "2026-07-31",
+      "track": "tech",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/frontier_ai_models_platforms",
+      "subCluster": [
+        "dr:cluster/world_models_neuromorphic"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-07-31_software_paradigms_disposable-vs-malleable-software-2026",
+      "@type": "Article",
+      "name": "使い捨てソフトウェアか、改造できるソフトウェアか——malleable software の2026年実装 (Ink & Switch Embark)",
+      "datePublished": "2026-07-31",
+      "track": "software_paradigms",
+      "mode": "explore",
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/malleable_software_end_user_programming"
+      ]
     }
   ]
 }
