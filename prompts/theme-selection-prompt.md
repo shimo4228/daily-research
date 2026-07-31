@@ -53,7 +53,7 @@ themes 配列の要素数は config.toml の line 数と一致させること（
 {
   "themes": [
     {
-      "track": "agent_systems",
+      "track": "akc",
       "repos": ["akc"],
       "mode": "coverage",
       "topic": "テーマのタイトル（日本語、200 文字以内）",
@@ -65,40 +65,40 @@ themes 配列の要素数は config.toml の line 数と一致させること（
       "rationale": "補強対象の concept 名と、この外部研究がどう補強するかを 1-2 文で（500 文字以内）"
     },
     {
-      "track": "human_ai_publics",
-      "repos": [],
-      "mode": "explore",
+      "track": "contemplative",
+      "repos": ["contemplative"],
+      "mode": "frontier",
       "topic": "...",
       "slug": "...",
       "score": 4.1,
       "reinforces": [],
-      "challenges": [],
+      "challenges": ["https://github.com/shimo4228/contemplative-agent#concept/xxx"],
       "extends": [],
-      "rationale": "選んだ探索アングルと、そこで AI 親和プラットフォームが複数見つかる見込み・実活動の兆候を 1-2 文で"
+      "rationale": "挑戦・拡張の対象 concept 名と、この外部研究が何を突きつける/広げるかを 1-2 文で"
     },
     {
-      "track": "tech",
-      "repos": [],
-      "mode": "explore",
+      "track": "aap",
+      "repos": ["aap"],
+      "mode": "coverage",
       "topic": "...",
       "slug": "...",
       "score": 4.0,
-      "reinforces": [],
+      "reinforces": ["..."],
       "challenges": [],
       "extends": [],
-      "rationale": "どの未踏 cluster に属し、なぜ今注目かを 1-2 文で"
+      "rationale": "..."
     },
     {
-      "track": "software_paradigms",
-      "repos": [],
-      "mode": "explore",
+      "track": "authorship",
+      "repos": ["authorship"],
+      "mode": "coverage",
       "topic": "...",
       "slug": "...",
       "score": 3.8,
-      "reinforces": [],
+      "reinforces": ["..."],
       "challenges": [],
       "extends": [],
-      "rationale": "ソフトウェアの作り方・持ち方のどんなパラダイム転換に属する未踏サブ領域か、なぜ今動いているかを 1-2 文で"
+      "rationale": "..."
     }
   ]
 }

@@ -503,6 +503,19 @@ def cmd_cluster_report(argv):
     config_path = argv[0] if len(argv) >= 1 else "config.toml"
     graph_path = argv[1] if len(argv) >= 2 else "graph.jsonld"
 
+    # cluster 反発は自由探索 line 専用。全 line が repo-backed の構成では、
+    # 「選定禁止」文が repo 寄与テーマ (関心ど真ん中の領域) にまで波及しないよう
+    # レポート自体を不適用にする (ADR-0007)。
+    try:
+        _, tracks = _load_tracks(config_path)
+    except Exception as e:
+        print(f"cluster report unavailable: {e}", file=sys.stderr)
+        return 1
+    if tracks and all(_track_repos(v) for v in tracks.values()):
+        print("=== Cluster saturation report ===")
+        print("(自由探索ラインなし — 全 line が repo 寄与のため cluster 反発は不適用)")
+        return 0
+
     try:
         saturated, total, recent, broad, recent_days, top_n, recent_min = (
             _cluster_counters(config_path, graph_path)

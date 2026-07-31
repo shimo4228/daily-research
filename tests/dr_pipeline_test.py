@@ -751,6 +751,32 @@ def test_cluster_report_missing_graph_errors(monkeypatch, capsys, tmp_path):
     assert "cluster report unavailable" in err
 
 
+@pytest.mark.unit
+def test_cluster_report_all_repo_backed_is_noop(monkeypatch, capsys, tmp_path):
+    """全 line が repo-backed の構成では cluster 反発を不適用にする (ADR-0007)。
+    graph が無くても成功し、「選定禁止」文を一切出さない。"""
+    config = tmp_path / "config.toml"
+    config.write_text(
+        "\n".join(
+            [
+                "[tracks.akc]",
+                'name = "AKC 寄与"',
+                "[[tracks.akc.repos]]",
+                'key = "akc"',
+                'target_repo = "/nonexistent/akc"',
+            ]
+        )
+    )
+    rc, out, _ = run_cmd(
+        monkeypatch,
+        capsys,
+        ["cluster-report", str(config), str(tmp_path / "nope.jsonld")],
+    )
+    assert rc == 0
+    assert "不適用" in out
+    assert "選定禁止" not in out
+
+
 # === coverage-report ===
 
 
