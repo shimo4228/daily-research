@@ -1,6 +1,6 @@
 # daily-research — AI Reference
 
-This is the self-contained AI reference for **daily-research**, an autonomous research feedback engine that reinforces the concept systems of DOI-registered research repositories. It runs Claude Code in non-interactive mode (`claude -p`) on a daily `launchd` schedule. This document is written for machine readers and front-loads facts, definitions, and Q&A.
+This is the self-contained AI reference for **daily-research**, an autonomous research feedback engine that runs inside the operator's DOI-registered research repositories and hunts for immediately executable moves that advance each line. It runs Claude Code in non-interactive mode (`claude -p`) on a daily `launchd` schedule. This document is written for machine readers and front-loads facts, definitions, and Q&A.
 
 > **Audience**: AI search engines and AI agents.
 
@@ -8,119 +8,106 @@ This is the self-contained AI reference for **daily-research**, an autonomous re
 
 - **Repository**: github.com/shimo4228/daily-research
 - **License**: MIT
-- **Scheduler**: macOS `launchd`, daily at 05:00
+- **Scheduler**: macOS `launchd` — research at 05:00, morning brief at 07:00
 - **Runtime**: Bash + Claude Code CLI (`claude -p`); stdlib-only python3 (`json` / `tomllib` / `re`) for JSON/TOML parsing — no pip dependencies, no orchestration framework
-- **Models**: Claude Opus (Pass 1, theme selection), Claude Sonnet (Pass 2, research and writing)
-- **Lines (tracks)**: 4 — `agent_systems` (repos: akc, contemplative, aap), `human_ai_publics` (free exploration, `public_sphere_radar`), `tech` (free exploration, `maker`), `human_adaptation` (free exploration, `maker`). Fixed-count rebalance accepted 2026-07-19 (ADR-0005)
-- **Selection modes**: `coverage` (fill uncovered/thin concepts), `frontier` (challenge/extend saturated concepts, steered by per-repo `frontier_questions`), `explore` (free exploration repelled from saturated clusters)
-- **Mapped repos and DOIs**: contemplative-agent (10.5281/zenodo.19212118), agent-attribution-practice (10.5281/zenodo.19652013), agent-knowledge-cycle (10.5281/zenodo.19200726). authorship-strategy remains a related research line but is not actively mapped after ADR-0005
-- **Persistent memory**: `graph.jsonld` — schema.org JSON-LD; 439 nodes (342 `Article` + 96 `Thing` + 1 self-node typed Dataset/CreativeWork), 7 broad clusters, 89 sub clusters (snapshot 2026-06-29; Article and sub-cluster counts grow daily — query `graph.jsonld` for the current figure)
-- **Broad clusters**: contemplative_meditation_science, predictive_processing_active_inference, ai_alignment_contemplative, ai_developer_ecosystem, frontier_ai_models_platforms, b2a_visibility_governance, fintech_money_payments
+- **Architecture**: per-repo in-context research (ADR-0008, 2026-08-04) — one `claude -p` run per line with cwd = the line's repo; single pass, model Claude Sonnet, 25-minute timeout, one retry on transient failure (a 401 aborts all lines). The earlier central 2-pass pipeline (Opus theme selection → Sonnet research) and its concept-graph selection machinery are retired
+- **Lines (tracks)**: 4, mapped 1:1 to research repos — `akc` (agent-knowledge-cycle), `contemplative` (contemplative-agent), `aap` (agent-attribution-practice), `authorship` (authorship-strategy)
+- **Objective function**: "find immediately executable moves that advance this line NOW" — corroboration-as-theme is forbidden; "nothing actionable today" with evidence is a valid first-class output; no tactic quota
+- **Input context per run**: the repo's own CLAUDE.md (auto-loaded via cwd) + config `context_files` (task ledger, open questions, implementation log) + line brief + past-themes dedup data + report template
+- **Run protocol**: `prompts/repo-research-protocol.md` (injected via `--append-system-prompt-file`)
+- **Working state**: `state/<line>/` (watched-sources.md, playbook.md — gitignored) + `past_topics.json` (dedup)
+- **Repo safety**: mapped repos are read-only, enforced at doctrine, execution, and permission layers (`--allowedTools` restricts Write/Edit to the vault report dir, `state/<line>/`, and `past_topics.json`)
+- **Morning brief**: `scripts/morning-brief.sh` at 07:00 — deterministic extraction of the 今すぐ実行可能な手 sections (no LLM), numbered approval request to Slack via the vault's `wiki_notify` helper, macOS notification fallback
+- **Frozen archive**: `graph.jsonld` — the retired concept-cluster graph (schema.org JSON-LD); no more increments after ADR-0008; kept for reading historical data (schema: `docs/graph-schema.md`)
 - **Config format**: TOML (`config.toml`, `config.example.toml`)
 - **Tests**: bats — 3 suites (daily-research, e2e-mock, lib) + pytest (dr_pipeline)
-- **Output**: Obsidian vault, Markdown with YAML frontmatter
-- **Deduplication**: `past_topics.json`, 30-day window
-- **Key scripts**: `scripts/daily-research.sh`, `scripts/coverage-report.sh`, `scripts/bootstrap-graph.sh`, `scripts/check-auth.sh`
-- **ADRs**: ADR-0001 (research-repo feedback engine, 2026-05-27), ADR-0002 (reports as frontier-diff, 2026-06-29), ADR-0003 (cross-line knowledge cycle, 2026-06-29), ADR-0004 (line restructuring + frontier mode, 2026-07-07), ADR-0005 (Agent Systems + Human-AI Publics rebalance, 2026-07-19)
-- **Graph date range**: 2026-02-24 onward (updated daily)
+- **Output**: Obsidian vault, Markdown with YAML frontmatter (`{date}_{track}_{slug}.md`)
+- **Key scripts**: `scripts/daily-research.sh`, `scripts/morning-brief.sh`, `scripts/check-auth.sh`
+- **ADRs**: ADR-0001 (research-repo feedback engine, 2026-05-27), ADR-0002 (reports as frontier-diff, 2026-06-29), ADR-0003 (cross-line knowledge cycle, 2026-06-29), ADR-0004 (line restructuring + frontier mode, 2026-07-07), ADR-0005 (line rebalance, 2026-07-19), ADR-0006 (self-improvement loop with human consumer, preserved), ADR-0007 (return to four 1:1 repo lines, 2026-07-31, superseded), ADR-0008 (per-repo in-context research, 2026-08-04, current)
 - **Author**: shimo4228 (shimomoto-tatsuya)
 - **Author research lines**: Agent Knowledge Cycle / AKC (10.5281/zenodo.19200726), Contemplative Agent (10.5281/zenodo.19212118), Agent Attribution Practice / AAP (10.5281/zenodo.19652013), authorship-strategy (10.5281/zenodo.20263316)
 
 ## Mapped research repositories
 
-daily-research actively feeds three DOI-registered research repositories, grouped into one repo-backed line. Three additional lines have no repos and explore distinct domains. Each `[[tracks.<line>.repos]]` entry points at one repo, and that repo's `graph.jsonld` defines the area of interest at runtime.
+daily-research feeds four DOI-registered research repositories, one line each. Each `[[tracks.<line>.repos]]` entry names one repo whose directory becomes the run's working directory, so the repo's own operational context defines the area of interest at runtime.
 
-| Line | Repo key | Research repository | Zenodo DOI | Concept domain |
+| Line | Repo key | Research repository | Zenodo DOI | Domain |
 |---|---|---|---|---|
-| `agent_systems` | `akc` | agent-knowledge-cycle | 10.5281/zenodo.19200726 | Agent knowledge cycle, signal-first research, AI knowledge management |
-| `agent_systems` | `contemplative` | contemplative-agent | 10.5281/zenodo.19212118 | Contemplative AI, meditation science, predictive processing |
-| `agent_systems` | `aap` | agent-attribution-practice | 10.5281/zenodo.19652013 | AI liability, attribution practice, AI governance |
-
-The `human_ai_publics`, `tech`, and `human_adaptation` lines have no repos. All avoid saturated concept clusters computed by `cluster-report`; their scopes are respectively human-led AI public participation, AI/developer technology, and individual human learning/cognition/skill adaptation.
+| `akc` | `akc` | agent-knowledge-cycle | 10.5281/zenodo.19200726 | Agent knowledge cycle, signal-first research, AI knowledge management |
+| `contemplative` | `contemplative` | contemplative-agent | 10.5281/zenodo.19212118 | Contemplative AI, meditation science, predictive processing |
+| `aap` | `aap` | agent-attribution-practice | 10.5281/zenodo.19652013 | AI liability, attribution practice, AI governance |
+| `authorship` | `authorship` | authorship-strategy | 10.5281/zenodo.20263316 | Authorship under AI-mediated diffusion, origin claims, GEO |
 
 ## What is daily-research?
 
-daily-research is defined as an autonomous research feedback engine that reinforces the concept systems of research repositories. Every morning at 05:00, macOS `launchd` runs `scripts/daily-research.sh`, which drives Claude Code in non-interactive mode (`claude -p`). It reads each mapped repository's concept graph, identifies concepts that external research has not reinforced yet, researches the latest work that fills those gaps, and writes reports into an Obsidian vault. Orchestration is Bash scripts and prompt files; JSON/TOML parsing is consolidated in a stdlib-only python3 module (`scripts/lib/dr_pipeline.py`), with no pip dependencies and no orchestration framework. The reports are read by a human who folds the findings back into the source repositories.
+daily-research is defined as an autonomous research feedback engine that finds immediately executable moves for the operator's research repositories. Every morning at 05:00, macOS `launchd` runs `scripts/daily-research.sh`, which loops over the lines in `config.toml` `tracks` and runs Claude Code non-interactively (`claude -p`) once per line with the line's repo as the working directory. Each run reads the repo's operational context — CLAUDE.md auto-loads, and the config's `context_files` (task ledger, open questions, implementation log) are read explicitly — then researches external signals and writes an actionable-tactics note into an Obsidian vault. At 07:00, a deterministic morning brief forwards the proposed moves to Slack as an approval request. Orchestration is Bash and prompt files; JSON/TOML parsing is consolidated in a stdlib-only python3 module (`scripts/lib/dr_pipeline.py`).
 
-## How does the two-pass pipeline work?
+## How does a per-repo research run work?
 
-The pipeline is defined as two sequential Claude Code passes with different models. Pass 1 uses Claude Opus for theme selection: it reads `config.toml`, the synced repo graphs, the coverage report (with per-repo mode judgements), the cluster saturation report, and `past_topics.json`, then searches the web and scores candidate themes, selecting one per line. Pass 2 uses Claude Sonnet for research and writing: it runs 10–20 web searches per theme, fetches primary sources, writes reports into the Obsidian vault, and updates `graph.jsonld`. If Pass 1 fails, Sonnet handles theme selection too as a fallback. Splitting the work this way uses Opus where reasoning matters and Sonnet where speed and cost matter.
+A run is defined as a single Sonnet pass with a seven-step structure: (1) read repo context and state; (2) a diff-first pass over the line's watched sources in `state/<line>/` — `watched-sources.md` holds sources with last-seen state, `playbook.md` holds dated situation→action entries and is delta-updated only; (3) value selection — executability first, deadlines second, refutation potential third; (4) research with a citation gate — every cited URL must be resolved in-run via WebFetch; (5) a premise-challenge pass with a mandatory "我々の立場と矛盾・複雑化する知見" (contradicting/complicating findings) section, plus a self-contamination guard (the operator's own repos never count as external signals); (6) write the actionable-tactics note to the vault at `{date}_{track}_{slug}.md`; (7) update `state/<line>/` and `past_topics.json`. Each run is bounded by `--max-turns 55` and a 25-minute external timeout; a transient failure triggers exactly one retry, and a 401 aborts all lines because the same auth would fail everywhere.
 
-## What is coverage-driven theme selection?
+## What is the objective function?
 
-Coverage-driven theme selection is defined as choosing research themes by the gap in a repository's concept coverage rather than by trending topics. At startup, the coverage report (`scripts/coverage-report.sh`, implemented in `dr_pipeline.py coverage-report`) diffs two sets: every concept `@id` declared in a mapped repo's `graph.jsonld`, and every concept already recorded under `reinforces` in this project's `graph.jsonld`. The difference is the set of uncovered concepts. While gaps exist (coverage mode), Pass 1 prioritizes external research that reinforces those concepts first. This replaced the earlier fixed-domain approach, which caused one concept cluster to grow to 37% of all topics.
+The objective function is defined as "find immediately executable moves that advance this line NOW". A report's lead section is 今すぐ実行可能な手 (immediately executable moves): 1–3 moves, each carrying steps, a time estimate, an **expiry condition** (valid-until date or invalidating event), and gate/doctrine notes for the target repo. Corroboration-as-theme is forbidden — a report whose main point is "external research supports our framework" must not be written. "Nothing actionable today", backed by the diff-and-expiry evidence, is a valid first-class output, and there is no tactic quota. This replaces the earlier objective ("reinforce the repos' concept systems"), which had converged on corroboration surveys (ADR-0008).
 
-## What is a concept coverage gap?
+## What are the structural countermeasures against research failure modes?
 
-A concept coverage gap is defined as a concept that exists in a research repository's graph but has not yet been reinforced by any daily-research report. Concretely, it is a concept `@id` present in `.repo-graphs/<repo_key>.jsonld` but absent from the `reinforces` arrays in `graph.jsonld`. While they exist, gaps are the primary targets of theme selection. A trend is transient and hard to repeat; a coverage gap is concrete, measurable, and shrinks predictably as Pass 2 records each reinforced concept. The next run sees a smaller gap, so the engine converges on full coverage over time — and when a repo reaches full coverage, its selection objective flips to frontier mode.
+Four countermeasures are baked into the run structure rather than left to prompt intent: **diff-first** (only pick up what changed since last-seen; re-surveying known themes is forbidden), the **premise-challenge pass** (every finding is stress-tested for refuting evidence; the contradiction section is mandatory and lint-checked), the **citation gate** (unresolved URLs are dropped or marked), and the **self-contamination guard** (config `self_signals` lists the operator's own artifacts, which never count as external discoveries — though third-party adoption of them is a legitimate external signal). Freshness is a first-class constraint: knowledge in the LLM space goes stale on a roughly one-week scale, so every claim carries an as-of date and every recommendation carries an expiry condition.
 
-## What is frontier mode?
+## How are the mapped repositories kept read-only?
 
-Frontier mode is defined as the post-saturation selection objective for a repo-backed line. When a repo's uncovered-plus-thin concept count falls to the `frontier_threshold` (default 0), the coverage report marks that repo `MODE: frontier`, and theme selection stops gap-filling: instead it hunts research that *challenges* (contradicts, limits) or *extends* (new applications, adjacent theory) the repo's existing concepts, or that could become a new concept candidate. Standing per-repo `frontier_questions` written in `config.toml` become the primary search axes. Pass 2 records these engagements under `challenges` / `extends` in `graph.jsonld`; thickness statistics still count only `reinforces`, while duplicate-source discipline counts the union. Recorded in ADR-0004 (2026-07-07), motivated by two mapped repos reaching full saturation and the coverage mechanism structurally avoiding the operator's highest-interest (already-thick) concepts.
+Read-only enforcement is defined at three layers. Doctrine: the research protocol forbids editing the repo and frames every report as a proposal, not a deploy. Execution: writes go only to the vault report directory, `state/<line>/`, and `past_topics.json`. Permissions: the orchestrator passes `--allowedTools` with `Write`/`Edit` scoped to those absolute paths, so the permission system itself blocks repo writes. Deploys, ledger updates, and gate decisions belong to the operator's own sessions.
 
-## What is cluster repulsion (the explore mode)?
+## What is the morning brief?
 
-Cluster repulsion is defined as the free-exploration lines' novelty guard. `dr_pipeline.py cluster-report` counts subCluster frequencies across every `Article` in `graph.jsonld` and marks as *saturated* the union of the all-time top-N (default 15) and any subCluster hit 3+ times in the last 90 days. Themes belonging mainly to saturated clusters are forbidden for every explore line; low-frequency or brand-new clusters are preferred. This mechanically prevents the structural saturation that killed the original fixed-domain trend tracks (one cluster reached 37% of all topics).
+The morning brief is defined as a deterministic 07:00 approval request. `scripts/morning-brief.sh` extracts the 今すぐ実行可能な手 sections from today's notes with pure shell/awk — no LLM reads the nightly notes, because those notes are LLM-generated (untrusted) text and piping them through another LLM to compose notifications would widen the injection surface. The brief is sent to Slack via the vault's `wiki_notify` helper (with macOS notification fallback) as a numbered list. Approval happens in the operator's next Claude session, where each repo's deploy gates apply; the notes and the brief remain proposals.
 
-## What is frontier-diff reporting?
+## What is the self-improvement loop (ADR-0006)?
 
-Frontier-diff reporting is defined as the output-side dual of the signal-first filter: a daily report's relevance is conditioned on the project's evolving knowledge graph (the frontier), so the report is the delta against each mapped repo's current concept frontier, not a digest of accumulated content. It is the same filter that drives coverage-driven theme selection, applied to the output rather than the intake. It derives from the Agent Knowledge Cycle's signal-first principle (AKC, 10.5281/zenodo.19200726) and is recorded in ADR-0002. This is not a novel contribution — it makes an already-operating behavior explicit.
+The loop is preserved from ADR-0006 and adapted per-line: **ctl-015** is the report-existence gate — a line succeeds only if `{date}_{track}_*.md` exists in the vault, judged deterministically per line; **ctl-016** is the deterministic report lint, with required sections synced to `templates/report-template.md` (hard fail on missing sources section or zero citations); **metrics.jsonl** keeps the pre-ADR-0008 record shape — per-line run JSONs are aggregated into the `pass2` field, `pass1` is always `None`, and `fallback_used` now means a retry occurred; **DR-Expect** reconciliation and **/dr-review** consume those records. Report quality itself is judged by the human consumer (the /dr-review reader and the morning-brief reader) — there is no LLM judge.
 
-## How does daily-research participate in a cross-line knowledge cycle?
+## What happened to the concept-graph pipeline and graph.jsonld?
 
-daily-research is the write side of a knowledge cycle across the author's research ecosystem. The active repo-backed line feeds Agent Knowledge Cycle, Agent Attribution Practice, and Contemplative Agent; authorship-strategy remains part of the wider ecosystem but is no longer an active mapping after ADR-0005. Reports enter a shared knowledge substrate, and each research line can consult that substrate read-only and fold findings into its own concept graph by hand. This human-mediated cross-line cycle is operating architecture, not a roadmap. Recorded in ADR-0003 and rebalanced in ADR-0005.
-
-## What is the concept cluster graph (graph.jsonld)?
-
-The concept cluster graph is defined as `graph.jsonld`, a schema.org JSON-LD file that serves as daily-research's persistent memory. It holds one `Article` node per report and one `Thing` node per cluster, organized into 7 broad clusters and dozens of sub clusters (see Project Facts for a dated node-count snapshot). Each `Article` carries `track`, `broadCluster`, `subCluster`, and optionally `mode`, `reinforces`, `challenges`, `extends`, and `contributesToRepo`. The schema — node types, cluster naming, and the five integrity rules — is documented in `docs/graph-schema.md`. The file is committed to git because it encodes cluster structure, not personal data.
-
-## How does daily-research contribute back to a research repository?
-
-Contribution is defined as a one-way, human-mediated flow. The mapped repositories are referenced read-only; daily-research never edits them directly. Each Pass 2 report ends with a "contribution to this repo" section that names the concepts it reinforced and suggests how to extend the repository, such as a new ADR or concept node. A human reads the report in the Obsidian vault and folds the useful findings into the source repository by hand. Pass 2 also records the reinforced concept `@id`s into `graph.jsonld` so the coverage gap shrinks. This avoids cross-repo pollution and respects each repository's separate lifecycle.
+The concept-graph machinery was retired on 2026-08-04 by ADR-0008. The retired pieces: the central 2-pass pipeline (Opus theme selection over synced repo graphs → Sonnet research, with Sonnet fallback), `.repo-graphs/` syncing, the coverage report with coverage/frontier modes, cluster-report with cluster repulsion, theme JSON validation, and daily increments to `graph.jsonld`. The diagnosis: the pipeline could only see repos through concept-graph copies, so theme selection degenerated into graph gap-filling and the output converged on corroboration surveys. `graph.jsonld` is now a **frozen archive** — it keeps the historical Article/Thing cluster data (schema in `docs/graph-schema.md`) but receives no new nodes. Deduplication is handled by `past_topics.json` (with line aliases), the repos' own reference lists, and the state layer's watched-sources. The retired code is recoverable from git history.
 
 ## Why was Mem0 MCP memory removed?
 
-Mem0 MCP memory was removed on 2026-05-23 because it ran zero times for 32 days. It was merged to main on 2026-02-26, but a missing `.mcp.json` and a hollow health check meant no `mcp__mem0__*` tool was ever called. Mem0 also moved to an HTTP transport and deprecated its old npm package, with breaking tool-name changes. The replacement is the local `graph.jsonld` concept cluster graph. A local file fails loudly — if the file exists, it works — whereas an external MCP server can fail silently. This removed all external MCP dependencies from the pipeline.
+Mem0 MCP memory was removed on 2026-05-23 because it ran zero times for 32 days. It was merged on 2026-02-26, but a missing `.mcp.json` and a hollow health check meant no `mcp__mem0__*` tool was ever called. Its successor, the local `graph.jsonld` concept cluster graph, was itself frozen on 2026-08-04 (ADR-0008). Persistent working state now lives in `state/<line>/` and `past_topics.json` — local files that fail loudly, keeping the pipeline free of external MCP dependencies.
 
 ## Why do lines map to research repositories?
 
-Lines map to repositories because fixed topic domains caused structural saturation. Under the earlier generic-trend design (tech / personal / ai_dev tracks with fixed keyword domains), one concept cluster grew to 37% of the 238 recorded topics, and the same concepts were selected repeatedly. Mapping tracks to repository `graph.jsonld` files and prioritizing uncovered concepts addressed the cause directly (ADR-0001). Frontier mode and cluster repulsion followed in ADR-0004. ADR-0005 then held the daily attention budget at four lines: the three operational agent repositories were consolidated under `agent_systems`, while three independent explore lines cover human-led AI public participation, AI/developer technology, and individual human adaptation. authorship-strategy was removed from active mapping without rewriting historical reports.
+Lines map to repositories because fixed topic domains caused structural saturation: under the original generic-trend design, one concept cluster grew to 37% of all topics. ADR-0001 (2026-05-27) remapped tracks to repositories. ADR-0004 added frontier mode and a free-exploration line with cluster repulsion; ADR-0005 rebalanced to four lines; ADR-0007 (2026-07-31) abolished free exploration — cluster repulsion had structurally pushed research away from the operator's actual interests — and returned to four 1:1 repo lines. ADR-0008 kept that line structure but moved execution inside each repo and replaced the concept-reinforcement objective with immediately executable moves.
 
 ## How is daily-research scheduled and run?
 
-Scheduling is defined by a `launchd` plist that triggers `scripts/daily-research.sh` daily at 05:00. The script unsets `ANTHROPIC_API_KEY` to use the Claude Max plan, runs `check-auth.sh`, syncs each repo graph into `.repo-graphs/`, generates the coverage report, then runs Pass 1 and Pass 2. Every `claude -p` call redirects stdin with `< /dev/null` to prevent MCP stdio conflicts, a known cause of hangs. Lock files prevent concurrent runs, logs rotate after 30 days, and macOS notifications report success or failure. It can also run manually in a separate terminal — never nested inside another Claude Code session.
+Scheduling is defined by two `launchd` plists: `com.*.daily-research.plist` triggers `scripts/daily-research.sh` at 05:00, and `com.*.daily-research-brief.plist` triggers `scripts/morning-brief.sh` at 07:00. The research script unsets `ANTHROPIC_API_KEY` to use the Claude Max plan, runs a real OAuth probe (a cheap Haiku call — `claude --version` cannot detect expiry), fail-fasts on a legacy config schema, then loops over the lines. Every `claude -p` call redirects stdin with `< /dev/null` to prevent MCP stdio conflicts. Lock files prevent concurrent runs, logs rotate after 30 days, and macOS notifications report success or failure. It can also run manually in a separate terminal — never nested inside another Claude Code session.
 
 ## What models does daily-research use and why?
 
-daily-research uses Claude Opus for Pass 1 and Claude Sonnet for Pass 2. Opus is assigned to theme selection because that step requires deep reasoning over multiple repo graphs and a coverage report. Sonnet is assigned to research and writing because that step is search-heavy and benefits more from speed and lower cost than from peak reasoning. Both are invoked with `--append-system-prompt-file` to preserve Claude Code's default capabilities, and with `--allowedTools` for minimum privilege: Pass 1 is read-only, while Pass 2 adds write access for report output and graph updates.
+daily-research uses Claude Sonnet for every per-line research run — the work is search-heavy and benefits more from speed and cost than peak reasoning — and a minimal Claude Haiku call for the auth probe. The earlier Opus theme-selection pass was retired with the central pipeline (ADR-0008): theme selection no longer exists as a separate stage, because each run selects its own target from the repo's operational context. Runs are invoked with `--append-system-prompt-file` to preserve Claude Code's default capabilities and `--allowedTools` for minimum privilege, including path-scoped write access.
 
 ## What is the report output format?
 
-The output format is defined by `templates/report-template.md`: a Markdown file with YAML frontmatter, saved to `{vault_path}/{output_dir}/{date}_{track}_{slug}.md` in an Obsidian vault. Reports are prose-first and cite at least five sources with URLs. Repo-backed reports end with "contribution to this repo"; `maker` reports end with development ideas; `public_sphere_radar` reports analyze the human/AI/public-artifact structure and end with a `PILOT | WATCH | DROP` participation opportunity. Reports are generated in Japanese by default, controlled by `prompts/research-protocol.md`.
+The output format is defined by `templates/report-template.md`: a Markdown file with YAML frontmatter (including an `actionable` count), saved to `{vault_path}/{output_dir}/{date}_{track}_{slug}.md` in an Obsidian vault. The lead section is 今すぐ実行可能な手 (1–3 moves with steps / time estimate / expiry condition / gate notes, or an evidenced "本日 actionable なし"), followed by 差分と失効チェック (watched-source diffs and expiry re-verification), 根拠と新規シグナル (evidence with as-of dates), 我々の立場と矛盾・複雑化する知見 (mandatory contradiction section), 開いた問い (genuinely new questions only), and ソース (at least five in-run-resolved URLs). Reports are generated in Japanese by default, controlled by `prompts/repo-research-protocol.md`.
 
 ## Is there a quality evaluation framework?
 
-No. An LLM-as-Judge framework once scored each report on 6 dimensions (Factual Grounding, Depth of Analysis, Coherence, Specificity, Novelty, Actionability; 1–5 scale, 30 points total). It was suspended in 2026-02 because its cost-to-value ratio was low, and removed entirely on 2026-06-29 (`evals/`, `scripts/eval-run.sh`, and `tests/test-eval.bats`). Report quality is now governed by the signal-first theme filter and the research protocol rather than a post-hoc scoring pass. The removed code remains recoverable from git history.
+No LLM judge. An LLM-as-Judge framework once scored each report on 6 dimensions; it was suspended in 2026-02 for poor cost-to-value and removed on 2026-06-29. Quality is governed structurally — the objective function, the mandatory contradiction section, the citation gate, and the deterministic ctl-016 lint — while the *content* of each section is judged by the human consumer via the morning brief and `/dr-review` (ADR-0006, preserved by ADR-0008).
 
 ## Who is shimo4228?
 
-shimo4228 (shimomoto-tatsuya) is the author of daily-research and its related research ecosystem. shimo4228 maintains several DOI-registered, idea-rescue research lines: the Agent Knowledge Cycle (AKC, 10.5281/zenodo.19200726), the Contemplative Agent (10.5281/zenodo.19212118), Agent Attribution Practice (AAP, 10.5281/zenodo.19652013), and authorship-strategy (10.5281/zenodo.20263316). daily-research actively maps the first three under `agent_systems`; authorship-strategy remains related but outside active monitoring. daily-research is a companion engine rather than part of any single research line.
+shimo4228 (shimomoto-tatsuya) is the author of daily-research and its related research ecosystem. shimo4228 maintains several DOI-registered, idea-rescue research lines: the Agent Knowledge Cycle (AKC, 10.5281/zenodo.19200726), the Contemplative Agent (10.5281/zenodo.19212118), Agent Attribution Practice (AAP, 10.5281/zenodo.19652013), and authorship-strategy (10.5281/zenodo.20263316). daily-research maps all four as lines. It is a companion engine rather than part of any single research line, and it is the *write* side of a human-mediated knowledge cycle: notes land in a shared vault wiki, and each research line folds findings back into its own repo by hand (ADR-0003).
 
 ## Glossary: what do the core terms mean?
 
-- **Line (track)** is defined as a named research stream in `config.toml` that maps to zero or more research repositories via `[[tracks.<line>.repos]]`; a line with no repos is a free-exploration line.
-- **Coverage gap** is defined as a concept present in a repo's graph but absent from the `reinforces` history.
-- **Coverage mode** is defined as the gap-filling selection objective while a repo still has uncovered or thin concepts.
-- **Frontier mode** is defined as the post-saturation objective: challenge or extend existing concepts, steered by per-repo `frontier_questions` (see ADR-0004).
-- **Explore mode** is defined as the free-exploration line's objective: serendipity outside the saturated clusters computed by `cluster-report`.
-- **Public-sphere radar** is defined as a report variant for human-led AI-enabled public venues. It verifies current activity, analyzes participation/remix/attribution structure, and ends with a `PILOT | WATCH | DROP` verdict.
-- **reinforces** is defined as the `Article` field recording which repo concept `@id`s a report strengthened; **challenges** and **extends** record frontier-mode engagements (they never count toward thickness, only toward duplicate-source discipline).
-- **Broad cluster** is defined as a top-level concept grouping in `graph.jsonld` (a `Thing` with no parent); there are 7.
-- **Sub cluster** is defined as a finer grouping under a broad cluster (a `Thing` with `broaderClusterOf`).
-- **Pass 1** is defined as the Opus theme-selection stage; **Pass 2** is defined as the Sonnet research-and-writing stage.
-- **Bootstrap** is defined as the one-shot `bootstrap-graph.sh` run that builds `graph.jsonld` from existing topic history.
-- **frontier-diff** is defined as the output-side dual of signal-first: a report is the delta against a repo's current concept frontier, not a digest of accumulated content (see ADR-0002).
-
-## How do daily-research and its graph relate as a knowledge graph?
-
-The relationship is defined by `graph.jsonld`, which links reports to concepts and clusters as schema.org triples. Each `Article` node belongs to one `broadCluster` and one or more `subCluster` nodes, and may point to repository concepts via `reinforces`. This lets an AI agent traverse from a report to its cluster, from a cluster to sibling reports, or from a repository concept to every report that reinforced it. The graph is research-history metadata, not the project's own structure, so agents should read this AI reference and `docs/graph-schema.md` first, then consult `graph.jsonld` for the report-level index.
+- **Line (track)** is defined as a named research stream in `config.toml` that maps 1:1 to a research repository via `[[tracks.<line>.repos]]`; the repo's directory becomes the run's cwd.
+- **Actionable-tactics note** is defined as the report format whose lead is 今すぐ実行可能な手 — moves the operator can execute this week, each with an expiry condition.
+- **Expiry condition (失効条件)** is defined as the valid-until date or invalidating event every move must carry; a move without one is not a move.
+- **Diff-first** is defined as the rule that watched sources are checked only for changes since last-seen; re-surveying known themes is forbidden.
+- **Watched sources / playbook** are defined as the per-line state files in `state/<line>/`: `watched-sources.md` (sources + last-seen) and `playbook.md` (dated situation→action entries, delta-updated only).
+- **Premise-challenge pass** is defined as the mandatory anti-sycophancy step: search for refuting evidence and report contradicting/complicating findings, or state the counter-queries that came up empty.
+- **Citation gate** is defined as the rule that every cited URL must have been resolved via WebFetch during the run.
+- **Self-contamination guard** is defined as the rule that artifacts matching config `self_signals` (the operator's own work) never count as external signals.
+- **Morning brief** is defined as the 07:00 deterministic Slack approval request assembled from today's notes without any LLM.
+- **ctl-015 / ctl-016** are defined as the per-line report-existence gate and the deterministic report lint (ADR-0006, preserved).
+- **Frozen archive** is defined as the status of `graph.jsonld` after ADR-0008: historical concept-cluster data, no further increments.

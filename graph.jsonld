@@ -7147,6 +7147,256 @@
       "subCluster": [
         "dr:cluster/malleable_software_end_user_programming"
       ]
+    },
+    {
+      "@id": "dr:topic/2026-08-01_akc_skill-theater-reasoning-backroom",
+      "@type": "Article",
+      "name": "スキルは「使われた」のか「演じられた」のか——Skill Use or Skill Theater?(arXiv 2607.27484) が暴く Reasoning Backroom と、介入ベース監査でしか測れない因果的依存",
+      "datePublished": "2026-08-01",
+      "track": "akc",
+      "mode": "frontier",
+      "contributesToRepo": ["akc"],
+      "challenges": [
+        "concept/scaffold-dissolution"
+      ],
+      "extends": [
+        "akc/concept/observed-vs-generated",
+        "concept/three-layer-structure"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/skill_internalization_rl",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-08-01_contemplative_engineered-persistent-agent-identity-vs-absence",
+      "@type": "Article",
+      "name": "エージェントに「持続する自己」を設計する潮流——Measuring What Persists・Persistent Identity・Layered Mutability が security-by-absence と空の公理に突きつける逆方向の処方",
+      "datePublished": "2026-08-01",
+      "track": "contemplative",
+      "mode": "frontier",
+      "contributesToRepo": ["contemplative"],
+      "challenges": [
+        "concept/security-by-absence",
+        "concept/four-contemplative-axioms"
+      ],
+      "extends": [
+        "ca/concept/worldview-integrity-check"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/contemplative_ai_alignment",
+        "dr:cluster/agent_identity_governance",
+        "dr:cluster/embedded_agency_self_boundary"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-08-01_aap_governed-individuation-authority-decoupling",
+      "@type": "Article",
+      "name": "帰責を「学習しても広がらない権限」に固定する——Governed Individuation(arXiv 2607.04613)と NIST エージェント識別イニシアチブが示す accountability の暗号的実装",
+      "datePublished": "2026-08-01",
+      "track": "aap",
+      "mode": "frontier",
+      "contributesToRepo": ["aap"],
+      "challenges": [
+        "aap/concept/prohibition-strength-hierarchy"
+      ],
+      "extends": [
+        "aap/concept/accountability-distribution",
+        "aap/concept/pre-named-gap-bearer"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/agent_constitutional_governance",
+        "dr:cluster/agent_identity_governance",
+        "dr:cluster/cross_agency_attribution_gap"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-08-01_authorship_reprorepo-doctrine-implementation-pair-audit",
+      "@type": "Article",
+      "name": "公開された「実装」は本当にドクトリンと対をなしているか——ReproRepo が 1,149 論文の repo を GitHub issue 教師信号で監査し、対の破れを大規模計測する",
+      "datePublished": "2026-08-01",
+      "track": "authorship",
+      "mode": "coverage",
+      "contributesToRepo": ["authorship"],
+      "reinforces": [
+        "concept/abstract-doctrine-worked-implementation-pair",
+        "concept/idea-vs-scaffold-separation"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/scientific_paper_reproducibility"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-08-02_akc_agentspec-scaffold-composition-interaction",
+      "@type": "Article",
+      "name": "足場の効果は部品ごとに測れない——AgentSpec (arXiv 2606.14674) が型付き統制合成で示す「モジュール単体の強さより足場間の互換性と相互作用が性能を支配する」という観測前提への挑戦",
+      "datePublished": "2026-08-02",
+      "track": "akc",
+      "mode": "frontier",
+      "contributesToRepo": ["akc"],
+      "challenges": [
+        "concept/three-layer-structure",
+        "akc/concept/harness-alignment"
+      ],
+      "extends": [
+        "concept/scaffold-dissolution"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/harness_engineering_externalization",
+        "dr:cluster/agent_evaluation_benchmarks",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-08-02_contemplative_positive-alignment-flourishing-axiom-extension",
+      "@type": "Article",
+      "name": "4 公理の提唱者自身による次の一手と、その足元への反証——Positive Alignment (arXiv 2605.10310, v3 2026-06) が公理を「危害防止の先」へ拡張し、Flourishing Without a Subject が主体なき繁栄というカテゴリ錯誤を突く",
+      "datePublished": "2026-08-02",
+      "track": "contemplative",
+      "mode": "frontier",
+      "contributesToRepo": ["contemplative"],
+      "challenges": [
+        "concept/four-contemplative-axioms"
+      ],
+      "extends": [
+        "concept/four-contemplative-axioms",
+        "ca/concept/value-layer"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/contemplative_ai_alignment",
+        "dr:cluster/superalignment_co_alignment"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-08-02_aap_existing-law-agent-accountability-sox-dora",
+      "@type": "Article",
+      "name": "帰責は AI 特化法ではなく既存の内部統制法から降りてきた——SOX / SEC / DORA が agent を適用除外なしで捕捉する一方、Colorado AI Act は 2026-04-27 に執行停止し DOJ が違憲訴訟に参戦した 2026 年の逆流",
+      "datePublished": "2026-08-02",
+      "track": "aap",
+      "mode": "frontier",
+      "contributesToRepo": ["aap"],
+      "challenges": [
+        "aap/concept/accountability-distribution"
+      ],
+      "extends": [
+        "aap/concept/externalized-accountability",
+        "aap/concept/pre-named-gap-bearer"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_regulation_policy",
+        "dr:cluster/cross_agency_attribution_gap",
+        "dr:cluster/agent_identity_governance"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-08-02_authorship_jsonld-schema-ai-citation-causal-null",
+      "@type": "Article",
+      "name": "構造化データは AI 引用を因果的に動かさなかった——Ahrefs の統制実験 (2026-05, 1,885 ページ vs 対照 4,000 ページ) が示す相関 3 倍と因果ゼロの断絶、そして RAG 検索では効くという channel 依存性",
+      "datePublished": "2026-08-02",
+      "track": "authorship",
+      "mode": "coverage",
+      "contributesToRepo": ["authorship"],
+      "reinforces": [
+        "concept/jsonld-knowledge-graph"
+      ],
+      "challenges": [
+        "concept/tactical-layer"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/geo_llm_citation_optimization"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-08-04_akc_temporal-memory-contamination-nullmemory-counterfactual",
+      "@type": "Article",
+      "name": "蓄積した記憶は無害な書き込みの積み重ねだけで危険になる——temporal memory contamination と NullMemory 反実仮想 × prefix 長プローブ",
+      "datePublished": "2026-08-04",
+      "track": "akc",
+      "mode": "frontier",
+      "contributesToRepo": ["akc"],
+      "challenges": [
+        "akc/concept/self-reingestion",
+        "akc/concept/human-approval-gate"
+      ],
+      "extends": [
+        "concept/three-layer-structure"
+      ],
+      "broadCluster": "dr:cluster/ai_developer_ecosystem",
+      "subCluster": [
+        "dr:cluster/agent_memory_context_engineering",
+        "dr:cluster/agent_memory_consolidation",
+        "dr:cluster/akc_agent_knowledge_cycle"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-08-04_contemplative_constitution-compliance-audit-atomic-tenets",
+      "@type": "Article",
+      "name": "憲法は「書いた通りに従われている」のか——205 tenetの原子分解とPetri多ターン敵対監査が暴く仕様遵守ギャップ",
+      "datePublished": "2026-08-04",
+      "track": "contemplative",
+      "mode": "frontier",
+      "contributesToRepo": ["contemplative"],
+      "challenges": [
+        "concept/four-contemplative-axioms",
+        "ca/concept/value-layer"
+      ],
+      "extends": [
+        "ca/concept/worldview-integrity-check"
+      ],
+      "broadCluster": "dr:cluster/ai_alignment_contemplative",
+      "subCluster": [
+        "dr:cluster/contemplative_ai_alignment",
+        "dr:cluster/agent_constitutional_governance",
+        "dr:cluster/interpretability_model_control"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-08-04_aap_eu-ai-act-enforcement-live-omnibus-deferral-asymmetry",
+      "@type": "Article",
+      "name": "2026-08-02 EU AI Act 執行発動と Digital Omnibus 繰延の非対称 — 降りてきたのは『AIと話している』開示義務と GPAI 制裁だけ",
+      "datePublished": "2026-08-04",
+      "track": "aap",
+      "mode": "frontier",
+      "contributesToRepo": ["aap"],
+      "challenges": [
+        "aap/concept/pre-named-gap-bearer",
+        "aap/concept/accountability-distribution"
+      ],
+      "extends": [
+        "concept/prohibition-strength-hierarchy"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/ai_regulation_policy",
+        "dr:cluster/cross_agency_attribution_gap"
+      ]
+    },
+    {
+      "@id": "dr:topic/2026-08-04_authorship_llms-txt-null-effect-300k-domains-agent-channel-split",
+      "@type": "Article",
+      "name": "llms.txt は誰にも読まれていない、ただしコーディングエージェントを除いて——SE Ranking 30万ドメイン調査が示す AI 検索面とエージェント面のチャネル分裂",
+      "datePublished": "2026-08-04",
+      "track": "authorship",
+      "mode": "coverage",
+      "contributesToRepo": ["authorship"],
+      "reinforces": [
+        "concept/llms-txt-convention",
+        "concept/four-layer-framework",
+        "concept/dual-entry-point"
+      ],
+      "broadCluster": "dr:cluster/b2a_visibility_governance",
+      "subCluster": [
+        "dr:cluster/geo_llm_citation_optimization",
+        "dr:cluster/llms_txt_b2a_protocols"
+      ]
     }
   ]
 }

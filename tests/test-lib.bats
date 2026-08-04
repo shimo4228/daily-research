@@ -112,68 +112,6 @@ teardown() {
   [ -d "$LOCK_DIR" ]   # 自分のものでないので消さない
 }
 
-# === graph.sh ===
-
-@test "check_graph_health passes for valid graph with @graph" {
-  PROJECT_DIR="$TMP/proj"
-  mkdir -p "$PROJECT_DIR"
-  echo '{"@graph": []}' > "$PROJECT_DIR/graph.jsonld"
-  LOG_FILE="$TMP/test.log"; : > "$LOG_FILE"
-  DR_PY="$(cd "$(dirname "$BATS_TEST_FILENAME")/../scripts/lib" && pwd)/dr_pipeline.py"
-  source "$LIB_DIR/log.sh"
-  source "$LIB_DIR/notify.sh"
-  source "$LIB_DIR/graph.sh"
-  run check_graph_health
-  [ "$status" -eq 0 ]
-  grep -q "health check passed" "$LOG_FILE"
-}
-
-@test "check_graph_health fails (non-zero) for missing graph" {
-  PROJECT_DIR="$TMP/proj-missing"
-  mkdir -p "$PROJECT_DIR"   # graph.jsonld は作らない
-  LOG_FILE="$TMP/test.log"; : > "$LOG_FILE"
-  DR_PY="$(cd "$(dirname "$BATS_TEST_FILENAME")/../scripts/lib" && pwd)/dr_pipeline.py"
-  source "$LIB_DIR/log.sh"
-  source "$LIB_DIR/notify.sh"
-  source "$LIB_DIR/graph.sh"
-  run check_graph_health
-  [ "$status" -ne 0 ]
-}
-
-@test "sync_repo_graphs copies each repo graph to .repo-graphs/<repo_key>.jsonld" {
-  PROJECT_DIR="$TMP/proj-sync"
-  mkdir -p "$PROJECT_DIR"
-  LOG_FILE="$TMP/test.log"; : > "$LOG_FILE"
-  DR_PY="$(cd "$(dirname "$BATS_TEST_FILENAME")/../scripts/lib" && pwd)/dr_pipeline.py"
-
-  # 2 repo を持つ line + repo graph 実体 (片方は不在 → WARN で継続)
-  mkdir -p "$TMP/repo-a"
-  echo '{"@graph": []}' > "$TMP/repo-a/graph.jsonld"
-  cat > "$PROJECT_DIR/config.toml" <<EOF
-[tracks.line_x]
-name = "Line X"
-
-[[tracks.line_x.repos]]
-key = "repo_a"
-target_repo = "$TMP/repo-a"
-
-[[tracks.line_x.repos]]
-key = "repo_b"
-target_repo = "$TMP/repo-b-missing"
-EOF
-
-  source "$LIB_DIR/log.sh"
-  source "$LIB_DIR/notify.sh"
-  source "$LIB_DIR/graph.sh"
-  run sync_repo_graphs
-  [ "$status" -eq 0 ]
-  # repo_key ベースのファイル名で sync される
-  [ -f "$PROJECT_DIR/.repo-graphs/repo_a.jsonld" ]
-  [ ! -f "$PROJECT_DIR/.repo-graphs/repo_b.jsonld" ]
-  grep -q "Synced repo graph: line_x/repo_a" "$LOG_FILE"
-  grep -q "WARN: repo graph not found for line_x/repo_b" "$LOG_FILE"
-}
-
 # === auth.sh (real_auth_probe) ===
 
 _dr_py() {

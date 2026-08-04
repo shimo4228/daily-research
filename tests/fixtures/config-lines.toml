@@ -1,44 +1,47 @@
-# Test fixture config — 4 lines (1 repo-backed + 3 free-exploration),
-# mirrors the structure of the real config.toml.
+# Test fixture config — 4 repo-backed lines (1 line = 1 repo),
+# mirrors the structure of the real config.toml (ADR-0008 per-repo research).
 [general]
 vault_path = "/nonexistent/fixture-vault"
 output_dir = "daily-research"
+self_signals = ["github.com/example-author", "Example Author"]
 
-[coverage]
-frontier_threshold = 0
-saturated_top_n = 2
-saturated_recent_days = 90
-saturated_recent_min = 3
+[report]
+min_sources = 5
 
-[tracks.agent_systems]
-name = "Agent Systems Line"
-aliases = ["agent_cognition", "akc", "contemplative", "aap"]
+[tracks.akc]
+name = "AKC Line"
+focus = "AKC line focus"
+aliases = ["agent_systems", "agent_cognition"]
+context_files = [".notes/TASKS.md", "docs/inspiration.md"]
+sources = ["fixture-source-a", "fixture-source-b"]
+scoring_criteria = [
+  { name = "実行可能性", weight = 45, desc = "今週実行できる手になるか" },
+  { name = "期限性・鮮度", weight = 25, desc = "期限付き機会か" },
+]
 
-[[tracks.agent_systems.repos]]
+[[tracks.akc.repos]]
 key = "akc"
 target_repo = "/nonexistent/fixture-repos/agent-knowledge-cycle"
-target_graph = ".repo-graphs/akc.jsonld"
-frontier_questions = ["How can a knowledge cycle be evaluated?"]
 
-[[tracks.agent_systems.repos]]
-key = "contemplative"
-target_repo = "/nonexistent/fixture-repos/contemplative-agent"
-target_graph = ".repo-graphs/contemplative.jsonld"
-
-[[tracks.agent_systems.repos]]
-key = "aap"
-target_repo = "/nonexistent/fixture-repos/agent-attribution-practice"
-target_graph = ".repo-graphs/aap.jsonld"
-
-[tracks.human_ai_publics]
-name = "AI-Friendly Platform Digest"
-report_variant = "platform_digest"
-
-[tracks.tech]
-name = "Tech Free Exploration"
+[tracks.contemplative]
+name = "Contemplative Line"
 aliases = ["tech", "ai_dev"]
 
-[tracks.software_paradigms]
-name = "Software Paradigms"
-aliases = ["human_adaptation"]
-report_variant = "maker"
+[[tracks.contemplative.repos]]
+key = "contemplative"
+target_repo = "/nonexistent/fixture-repos/contemplative-agent"
+
+[tracks.aap]
+name = "AAP Line"
+aliases = ["attribution"]
+
+[[tracks.aap.repos]]
+key = "aap"
+target_repo = "/nonexistent/fixture-repos/agent-attribution-practice"
+
+[tracks.authorship]
+name = "Authorship Line"
+
+[[tracks.authorship.repos]]
+key = "authorship"
+target_repo = "/nonexistent/fixture-repos/authorship-strategy"

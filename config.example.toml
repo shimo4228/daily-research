@@ -3,102 +3,49 @@ vault_path = "/path/to/your/obsidian/vault"
 output_dir = "daily-research"
 language = "ja"
 date_format = "%Y-%m-%d"
+# Self-contamination guard (ADR-0008): artifacts matching these strings are never
+# counted as "external signals" (third-party mentions/adoptions of them are fine).
+self_signals = [
+  "github.com/YOUR_GITHUB_HANDLE",
+  "Your Name",
+]
 
 [report]
 min_sources = 5
 
-# === Lines (tracks) ===
-# Each track is a research LINE. A line maps to zero or more research repositories
-# via [[tracks.<line>.repos]] entries:
-#   - Repo-backed line (1..N repos): Pass 1 reads each repo's synced graph
-#     (.repo-graphs/<key>.jsonld) plus the coverage report, and picks external
-#     research per line. Per-repo selection mode is decided by the coverage report:
-#       coverage — the repo still has uncovered / thin concepts; fill the gaps
-#       frontier — the repo is saturated; hunt research that CHALLENGES or EXTENDS
-#                  existing concepts, guided by the repo's frontier_questions
-#     A line with 2+ repos may also produce cross-repo themes.
-#   - Free-exploration line (no repos): serendipity-driven. Pass 1 avoids the
-#     saturated clusters reported by cluster-report and picks themes from
-#     low-frequency / brand-new clusters ("explore" mode).
-# `aliases` lists legacy track names whose past_topics.json history should keep
-# feeding this line's dedup context.
+# === Lines (tracks) — per-repo in-context research (ADR-0008) ===
+# Each track is a research LINE mapped 1:1 to a research repository via a
+# [[tracks.<line>.repos]] entry. Every night the orchestrator runs `claude -p`
+# once per line with cwd = target_repo, so the run reads the repo's own
+# operational context (CLAUDE.md auto-loads; context_files are read explicitly)
+# and produces an actionable-tactics note in the vault.
+#
+# context_files: repo-relative paths the run must Read in Step 1 (task ledger,
+# open questions, implementation log). Missing files are skipped.
+# aliases: former track names — keeps past_topics.json dedup working across
+# reorganizations.
 
-[tracks.line_a]
-name = "Research Line A (repo_a + repo_b)"
-focus = "Discover external research that reinforces, challenges, or extends the concept systems of repo A and repo B"
-aliases = ["old_track_a1", "old_track_a2"]
+[tracks.example_line]
+name = "Example Line 前進"
+focus = "example-repo line を今すぐ前に進める実行可能な手の発見 — 新 venue / 新機構 / 期限付き機会 / 反証"
+aliases = []
+context_files = [".notes/TASKS.md", "docs/manifesto.md"]
 sources = [
-  "Semantic Scholar (your repos' domain keywords)",
-  "arXiv (relevant categories for the repos)",
+  "arXiv / Semantic Scholar (your domain keywords) — ただし文献は手か反証になる場合のみ",
+  "関連 venue / registry / standard の新規開設・仕様変更",
 ]
 scoring_criteria = [
-  { name = "Concept reinforcement / frontier fit", weight = 35, desc = "Coverage mode: reinforces an uncovered or thin concept. Frontier mode: challenges or extends a concept, or answers a frontier question" },
-  { name = "Research recency", weight = 25, desc = "Latest 2026 research or development" },
-  { name = "Repo frontier fit", weight = 40, desc = "Serves the repos' next direction / open questions" },
+  { name = "実行可能性", weight = 45, desc = "調べた結果が、運用者が今週実行できる具体的な手になるか" },
+  { name = "期限性・鮮度", weight = 25, desc = "期限付き機会か。1 週間で陳腐化する前に動く価値があるか" },
+  { name = "反証性・前進性", weight = 30, desc = "repo の前提・open question を動かし、次の行動を変えるか" },
 ]
 
-[[tracks.line_a.repos]]
-key = "repo_a"                                   # used for .repo-graphs/<key>.jsonld and theme JSON `repos`
-target_repo = "/path/to/your/research-repo-a"
-target_graph = ".repo-graphs/repo_a.jsonld"      # cwd-relative path after sync
-target_doi = "10.xxxx/zenodo.xxxxxxxx"           # optional; the repo's DOI if it has one
-frontier_questions = [
-  "A standing open question that should drive theme selection once coverage saturates",
-]
-
-[[tracks.line_a.repos]]
-key = "repo_b"
-target_repo = "/path/to/your/research-repo-b"
-target_graph = ".repo-graphs/repo_b.jsonld"
-target_doi = "10.xxxx/zenodo.xxxxxxxx"
-frontier_questions = []
-
-# A free-exploration line may set one of the supported report variants:
-#   maker — drop counter-evidence and end with 1-3 concrete development ideas
-#   platform_digest — instead of a single-topic article, list 3-7 platforms found
-#                     during that day's sweep, each with a summary, evidence of
-#                     current activity, an entry point, and a PILOT | WATCH | DROP call
-[tracks.explore]
-name = "Free Exploration"
-report_variant = "maker"  # optional; omit for the default report format
-focus = "Serendipity line: define the domain to explore here (e.g. AI / developer technology). Themes mainly belonging to saturated clusters (including areas the repo-backed lines already cover) are banned — pick untouched sub-areas WITHIN this domain"
-aliases = ["old_free_track"]
-sources = [
-  "Hacker News top stories",
-  "GitHub Trending (past 7 days)",
-  "arXiv cs.* new papers",
-]
-scoring_criteria = [
-  { name = "Novelty", weight = 30, desc = "No similar theme in past_topics.json" },
-  { name = "Serendipity", weight = 30, desc = "Distant from the saturated clusters in cluster-report; ideally a brand-new cluster" },
-  { name = "Momentum", weight = 20, desc = "An actively evolving area, not static knowledge" },
-  { name = "Whisper trend", weight = 20, desc = "A change not yet widely noticed" },
-]
-
-[tracks.publics]
-name = "AI-Friendly Platform Digest"
-report_variant = "platform_digest"
-focus = "Discover new AI-native / AI-friendly platforms, venues, and communities where humans use AI to create, publish, participate, and get evaluated. Exclude agent-only networks, bolt-on AI features in ordinary SNS, and authorless slop feeds"
-sources = [
-  "Official platform documentation, changelogs, galleries, and participation rules",
-  "GitHub, Hacker News, Product Hunt, and active challenge or gallery pages",
-  "Indie maker communities and new platform launch announcements",
-]
-scoring_criteria = [
-  { name = "Discovery novelty", weight = 30, desc = "Not yet listed in past_topics.json or previous digests" },
-  { name = "AI affinity", weight = 30, desc = "AI materially enables the venue's participation model, not a bolt-on feature" },
-  { name = "Live activity", weight = 20, desc = "Recent posts, events, updates, or participants prove the venue is active now" },
-  { name = "Actionable participation", weight = 20, desc = "A live, accessible entry point exists now" },
-]
-
-# === Coverage / saturation thresholds ===
-[coverage]
-frontier_threshold = 0      # repo enters frontier mode when (uncovered + thin concepts) <= this value
-saturated_top_n = 15        # cluster repulsion: all-time top-N subClusters are off-limits for the explore line
-saturated_recent_days = 90  # ...plus any subCluster hit at least `saturated_recent_min` times in this window
-saturated_recent_min = 3
+[[tracks.example_line.repos]]
+key = "example"
+target_repo = "/Users/YOUR_USERNAME/path/to/example-repo"
+target_doi = "10.5281/zenodo.XXXXXXX"  # optional
 
 [user_profile]
-skills = ["Python", "Swift", "TypeScript", "iOS development"]
-interests = ["AI/ML", "Agents", "your research domains"]
-goal = "Continuously discover external research that advances the concept systems of the mapped research repositories, plus serendipitous findings from unrelated fields"
+skills = ["Python"]
+interests = ["AI/ML"]
+goal = "研究 repo を今すぐ前に進める実行可能な手を毎朝発見する (裏付けの蓄積ではなく行動の変化が成果)"

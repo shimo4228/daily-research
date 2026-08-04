@@ -17,34 +17,34 @@
 
 ```
 daily-research/
-├── config.example.toml                  # リサーチトラック、スコアリング、出力設定（テンプレート）
+├── config.example.toml                  # line → repo マッピング、context_files、スコアリング（テンプレート）
 ├── past_topics.json                     # テーマ履歴（重複防止用、gitignored）
 ├── prompts/
-│   ├── theme-selection-prompt.md       # Pass 1: テーマ選定指示（Opus）
-│   ├── task-prompt.md                   # Pass 2: リサーチ実行指示（Sonnet）
-│   └── research-protocol.md            # Pass 2: リサーチプロトコル（--append-system-prompt-file 用）
+│   └── repo-research-protocol.md       # per-repo リサーチプロトコル（--append-system-prompt-file 用）
 ├── templates/
-│   └── report-template.md              # Obsidian レポートフォーマット（frontmatter付き）
+│   └── report-template.md              # actionable-tactics note フォーマット（frontmatter付き）
 ├── scripts/
-│   ├── daily-research.sh               # メインエントリポイント（2パス: Opus → Sonnet）; lib/ を source
-│   ├── coverage-report.sh              # 未補強 concept レポート、Pass 1 へ注入
-│   ├── bootstrap-graph.sh              # graph.jsonld 初回 bootstrap（Opus clustering、ワンショット）
+│   ├── daily-research.sh               # メインエントリポイント（ライン単位ループ、cwd = 各 repo）; lib/ を source
+│   ├── morning-brief.sh                # 07:00 承認ブリーフ（決定論抽出 → Slack）
 │   ├── check-auth.sh                   # OAuth チェック（real_auth_probe()）+ macOS 通知
 │   ├── pre-commit.sh                   # secret / 構文ガード（git pre-commit hook）
 │   └── lib/                             # sourced shell ライブラリ + Python 解析モジュール
-│       ├── env.sh / log.sh / notify.sh / lock.sh / graph.sh / auth.sh / claude.sh
+│       ├── env.sh / log.sh / notify.sh / lock.sh / auth.sh / claude.sh
 │       └── dr_pipeline.py              # JSON/TOML 解析の単一 stdlib モジュール
-├── com.example.daily-research.plist   # launchd スケジュール（AM 5:00）
+├── state/                               # ラインごとの watched-sources / playbook / last-seen（gitignored）
+├── graph.jsonld                         # 凍結アーカイブ（退役した concept-graph パイプライン）
+├── com.example.daily-research.plist    # launchd スケジュール（AM 5:00、リサーチ）
+├── com.example.daily-research-brief.plist  # launchd スケジュール（AM 7:00、朝のブリーフ）
 ├── tests/
 │   ├── test-daily-research.bats        # ユニットテスト（構文、設定、セキュリティ）
-│   ├── test-e2e-mock.bats             # E2E モックテスト
-│   ├── test-lib.bats                  # lib/*.sh ユニットテスト（env, lock, graph, auth, claude）
+│   ├── test-e2e-mock.bats             # E2E モックテスト（ライン単位フロー）
+│   ├── test-lib.bats                  # lib/*.sh ユニットテスト（env, lock, auth, claude）
 │   └── dr_pipeline_test.py            # dr_pipeline.py の pytest（dev 専用、.venv）
 ├── logs/                                # 実行ログ（日付別、30日自動ローテーション）
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md      # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md      # 開発ガイド（本ファイル）
-│   ├── graph-schema.md                 # graph.jsonld スキーマ仕様
+│   ├── graph-schema.md                 # 凍結 graph.jsonld アーカイブのスキーマ（過去データ用）
 │   └── adr/                             # アーキテクチャ決定記録 (ADR)
 └── .claude/settings.local.json          # Claude Code プロジェクト権限設定
 ```
@@ -53,9 +53,8 @@ daily-research/
 
 | スクリプト | 説明 | 使い方 |
 |-----------|------|--------|
-| `scripts/daily-research.sh` | メインエントリポイント。2パス実行: Pass 1（Opus テーマ選定）→ Pass 2（Sonnet リサーチ・執筆）。`lib/` を source し、環境サニタイズ、認証 probe、repo graph 同期、coverage report、JSON バリデーション、Sonnet フォールバックを含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
-| `scripts/coverage-report.sh` | トラックごとの未補強 concept（repo graph − 補強済み concept）を算出し Pass 1 に注入。 | `./scripts/coverage-report.sh` |
-| `scripts/bootstrap-graph.sh` | 既存トピック履歴から `graph.jsonld` を初回 bootstrap（Opus clustering、ワンショット）。 | `./scripts/bootstrap-graph.sh` |
+| `scripts/daily-research.sh` | メインエントリポイント。`config.toml` の `tracks` のラインをループし、ラインごとに `claude -p` を 1 回、cwd = そのラインの `target_repo` で実行する（Sonnet、25 分タイムアウト、transient 失敗時リトライ 1 回。401 は全ライン中止）。`lib/` を source し、環境サニタイズ、認証 probe、config schema チェック、ライン単位レポートゲート (ctl-015)、レポート lint (ctl-016)、metrics 追記を含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
+| `scripts/morning-brief.sh` | 当日ノートの「今すぐ実行可能な手」節を決定論抽出し（純 shell/awk、LLM を挟まない）、vault の `wiki_notify` ヘルパ経由で Slack へ番号付き承認リクエストを送る（macOS 通知フォールバック）。launchd が AM 7:00 に呼び出す。 | `./scripts/morning-brief.sh` |
 | `scripts/check-auth.sh` | `real_auth_probe()`（共有 `lib/auth.sh`; `claude --version` ではなく実 Haiku API probe。`--version` は期限切れトークンでも成功するため）で OAuth トークンの有効性を確認。失敗時に macOS 通知を表示。 | `./scripts/check-auth.sh` |
 | `scripts/pre-commit.sh` | git pre-commit hook として走る secret / 構文ガード。 | （git が自動実行） |
 
@@ -66,17 +65,16 @@ daily-research/
 | `PATH` | plist + スクリプト | `$HOME/.local/bin`（現行 Claude installer）、`$HOME/.claude/local`（旧配置）、`/opt/homebrew/bin`、`/usr/local/bin` を含む必要がある |
 | `HOME` | plist | Claude CLI が認証トークンを見つけるために必要 |
 | `ANTHROPIC_API_KEY` | **未設定であること** | 設定されていると Max プランではなく従量課金になる |
-| `CLAUDE_TIMEOUT` | スクリプト（内部） | `run_claude()` 経由の `claude -p` 呼び出しのタイムアウト（秒）。0 = 無制限（デフォルト）。Pass 2 は 1800秒を設定 |
+| `CLAUDE_TIMEOUT` | スクリプト（内部） | `run_claude()` 経由の `claude -p` 呼び出しのタイムアウト（秒）。0 = 無制限（デフォルト）。ライン run ごとに 1500秒 (25 分) を設定 |
 | `DEBUG` | ユーザー設定 | `1` に設定するとデバッグログ（PATH、CLAUDE_CMD）を出力 |
 
 ## 設定ファイル (`config.toml`)
 
 | セクション | 用途 |
 |-----------|------|
-| `[general]` | Obsidian vault パス、出力ディレクトリ、言語、日付フォーマット |
+| `[general]` | Obsidian vault パス、出力ディレクトリ、言語、日付フォーマット、`self_signals`（自己汚染ガード: 運用者自身の成果物を外部シグナルとして数えない） |
 | `[report]` | 最低出典数 |
-| `[tracks.<name>]` | ライン 1 つにつき 1 ブロック: `focus`, `aliases`, `sources`, `scoring_criteria` + `[[tracks.<name>.repos]]` エントリ（`key`, `target_repo`, `target_graph`, `target_doi`, `frontier_questions`）。repos の無いラインは自由探索ライン（config.example.toml は `line_a` / `explore` テンプレートを同梱） |
-| `[coverage]` | frontier / 飽和の閾値: `frontier_threshold`, `saturated_top_n`, `saturated_recent_days`, `saturated_recent_min` |
+| `[tracks.<name>]` | ライン 1 つにつき 1 ブロック: `focus`, `aliases`, `context_files`（各 run の冒頭で Read する repo 相対パス — タスク台帳・open questions・実施履歴）, `sources`, `scoring_criteria` + `[[tracks.<name>.repos]]` エントリ 1 つ（`key`, `target_repo` — run の cwd になる, `target_doi` は任意） |
 | `[user_profile]` | 任意のスキル / 関心領域 / 目標ヒント |
 
 ## 開発ワークフロー
@@ -84,11 +82,10 @@ daily-research/
 ### リサーチ内容を変更する場合
 
 1. **スコアリング重み** -- `config.toml` の scoring_criteria を編集
-2. **情報源** -- `config.toml` の track sources を編集
-3. **レポートフォーマット** -- `templates/report-template.md` を編集
-4. **リサーチの深さ・プロセス** -- `prompts/research-protocol.md` を編集
-5. **テーマ選定** -- `prompts/theme-selection-prompt.md` を編集
-6. **実行指示** -- `prompts/task-prompt.md` を編集
+2. **情報源** -- `config.toml` の line sources を編集
+3. **各 run が読む repo 文脈** -- `config.toml` の `context_files` を編集
+4. **レポートフォーマット** -- `templates/report-template.md` を編集（ctl-016 lint の必須節と同期を保つ）
+5. **リサーチのプロセス・目的関数** -- `prompts/repo-research-protocol.md` を編集
 
 ### 実行処理を変更する場合
 
@@ -108,7 +105,7 @@ daily-research/
 cd ~/MyAI_Lab/daily-research
 # 別のターミナルで実行すること（Claude Code セッション内からは実行不可）
 claude
-# research-protocol.md の手順に沿って手動で確認
+# prompts/repo-research-protocol.md の手順に沿って手動で確認
 ```
 
 **重要**: `claude -p` は他の Claude Code セッション内から実行できない（ネストセッションチェック）。
@@ -128,47 +125,37 @@ bats tests/
 # - past_topics.json の妥当性
 # - セキュリティ（ハードコードされたキーなし、API キー未設定、ログ権限）
 # - 防御的プログラミング（set -euo pipefail, trap, max-turns）
-# - E2E モック: 2パスフロー、Sonnet フォールバック、JSON バリデーション
-# - gtimeout/timeout 非依存の確認
-# - lib/*.sh ユニット: env サニタイズ、アトミックロック、graph health、実 auth probe、exit 分類
+# - E2E モック: ライン単位フロー（cwd = repo、プロンプト注入）、リトライ、ライン単位レポートゲート
+# - lib/*.sh ユニット: env サニタイズ、アトミックロック、実 auth probe、exit 分類
 ```
 
 ## Claude Code CLI フラグ
 
-### Pass 1: テーマ選定 (Opus)
+### ライン単位リサーチ run (Sonnet、ラインごとに 1 回)
+
+run は `cd "$TARGET_REPO"` で起動されるため、repo 自身の CLAUDE.md が context として自動ロードされる。
 
 | フラグ | 値 | 用途 |
 |--------|---|------|
-| `-p` | theme-selection-prompt.md の内容 | 非対話モード |
+| `-p` | ライン単位プロンプト（`dr_pipeline.py line-brief` の line brief + 許可された書き込み先パス + 過去テーマ dedup データ + レポートテンプレート） | 非対話モード |
 | `--permission-mode` | `default` | デフォルトの権限処理を使用 |
-| `--allowedTools` | `WebSearch,WebFetch,Read,Glob,Grep` | 読み取り専用ツール（ファイル書き込み不可） |
-| `--max-turns` | `15` | テーマ選定のスコープ制限 |
-| `--model` | `opus` | テーマ品質のための深い推論 |
-| `--output-format` | `stream-json` | NDJSON ストリーム。`lib/dr_pipeline.py` で result + ツール使用数を抽出 |
-| `--verbose` | - | 詳細なイベントストリームを含む |
-| `--no-session-persistence` | - | 毎回クリーンなコンテキストで実行 |
-
-### Pass 2: リサーチ・執筆 (Sonnet)
-
-| フラグ | 値 | 用途 |
-|--------|---|------|
-| `-p` | task-prompt.md の内容（+ Pass 1 成功時はテーマ JSON） | 非対話モード |
-| `--permission-mode` | `default` | デフォルトの権限処理を使用 |
-| `--append-system-prompt-file` | `prompts/research-protocol.md` | デフォルト能力を保持しつつリサーチプロトコルを注入 |
-| `--allowedTools` | `WebSearch,WebFetch,Read,Write,Edit,Glob,Grep` | リサーチ・執筆用のフルツールアクセス |
+| `--append-system-prompt-file` | `prompts/repo-research-protocol.md` | デフォルト能力を保持しつつリサーチプロトコルを注入 |
+| `--allowedTools` | `WebSearch,WebFetch,Read,Glob,Grep` + 絶対パス制限付き `Write`/`Edit`（vault レポート dir、`state/<line>/`、`past_topics.json`） | permission 層でも repo を read-only に保つ。書き込みは宣言済み 3 箇所のみ |
 | `--max-turns` | `55` | リサーチ深度の目安 |
-| `--model` | `sonnet` | 速度とコスト効率 |
-| `--output-format` | `json` | メタデータ付き構造化出力 |
+| `--model` | `sonnet` | 速度とコスト効率（Opus パスは廃止） |
+| `--output-format` | `json` | メタデータ付き構造化出力（metrics に投入） |
 | `--no-session-persistence` | - | 毎回クリーンなコンテキストで実行 |
 
 **備考**: 全 `claude -p` 呼び出しは `run_claude()` ラッパー経由で `< /dev/null` stdin リダイレクトを使用する。これにより MCP の stdio 通信がターミナルの stdin と競合するのを防止する（過去 MCP ハングの根本原因だった）。
 
 ## アーキテクチャ補足
 
-2パス設計は、一度きりのブラインド評価で Opus のテーマ選定が +28% 優れていたことに基づく。追加コストは ~$0.30/回。
+per-repo 単一パス設計は、2026-08-04 に旧中央 2 パス（Opus テーマ選定 → Sonnet リサーチ）パイプラインを置き換えた。同期 concept graph 越しのテーマ選定は裏付けサーベイに収束し、「進めるべき価値」を知る運用文脈は各 repo の中にあるため（ADR-0008）。
 
-タイムアウトは `--max-turns` で制御する。外部プロセスタイムアウト（gtimeout/timeout）はシグナルで claude を kill し、データ損失を引き起こすため不使用。
+各ライン run は二重に制限される: `--max-turns 55` と 25 分の外部タイムアウト（`run_claude()` 経由の `CLAUDE_TIMEOUT=1500`。coreutils `timeout` が必要）。transient 失敗したラインは 1 回だけリトライされ、401 は同じ認証が全ラインで失敗するため即時全体中止となる。
+
+`metrics.jsonl` は `expect-check` / `/dr-review` との互換のため ADR-0008 以前のレコード形を維持する: ライン run 群の JSON は `pass2` フィールドに合算され、`pass1` は常に `None`、`fallback_used` は「リトライが発生した」の意味になる。
 
 ## 永続メモリ層
 
-2026-02-26 に Mem0 Cloud MCP を統合したが、`.mcp.json` 不在 + ヘルスチェック形骸化により 32 日間ゼロ稼働。2026-05-23 に撤去。今後はローカル JSON-LD concept cluster graph (`graph.jsonld`) を導入する方針（外部 MCP 依存を排除し、静かな失敗リスクを構造的に回避）。
+2026-02-26 に Mem0 Cloud MCP を統合したが、`.mcp.json` 不在 + ヘルスチェック形骸化により 32 日間ゼロ稼働。2026-05-23 に撤去。後継のローカル JSON-LD concept cluster graph (`graph.jsonld`) も 2026-08-04 に凍結された（ADR-0008）— 増分は停止し、読み出し可能なアーカイブとして残る。永続的な作業状態は現在 `state/<line>/`（watched-sources、playbook）と `past_topics.json` にあり、いずれも失敗が顕在化するローカルファイルである。

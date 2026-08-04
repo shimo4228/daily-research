@@ -1,8 +1,13 @@
 # graph.jsonld スキーマ仕様
 
-> daily-research の永続メモリ層 (Mem0 撤去後の後継)。
+> **凍結アーカイブ (2026-08-04)**: 本ドキュメントは [ADR-0008](adr/0008-per-repo-in-context-research.md)
+> で retire された concept-graph パイプラインの `graph.jsonld` を記述する。graph への日次増分は
+> 停止しており、本スキーマは**過去データを読むため**にのみ維持される。以下の本文は凍結時点の
+> 仕様であり、「Pass 1」「coverage-report」等の機構は現行アーキテクチャには存在しない。
+
+> daily-research の旧・永続メモリ層 (Mem0 撤去後の後継)。
 > schema.org 準拠の JSON-LD で、過去レポートを concept cluster に紐づけて
-> Pass 1 のテーマ選定に飽和警告を注入することが目的。
+> Pass 1 のテーマ選定に飽和警告を注入することが目的だった。
 
 ## 目的
 

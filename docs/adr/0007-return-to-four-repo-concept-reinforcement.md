@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR-0008](0008-per-repo-in-context-research.md) (2026-08-04)
 
 ## Date
 

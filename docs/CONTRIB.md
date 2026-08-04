@@ -17,34 +17,34 @@
 
 ```
 daily-research/
-├── config.example.toml                  # Research tracks, scoring, output settings (template)
+├── config.example.toml                  # Line → repo mapping, context_files, scoring (template)
 ├── past_topics.json                     # Topic history (deduplication, gitignored)
 ├── prompts/
-│   ├── theme-selection-prompt.md       # Pass 1: Theme selection instruction (Opus)
-│   ├── task-prompt.md                   # Pass 2: Research instruction (Sonnet)
-│   └── research-protocol.md            # Pass 2: Research protocol (--append-system-prompt-file)
+│   └── repo-research-protocol.md       # Per-repo research protocol (--append-system-prompt-file)
 ├── templates/
-│   └── report-template.md              # Obsidian report format with frontmatter
+│   └── report-template.md              # Actionable-tactics note format with frontmatter
 ├── scripts/
-│   ├── daily-research.sh               # Main entry point (2-pass: Opus → Sonnet); sources lib/
-│   ├── coverage-report.sh              # Uncovered-concept report, injected into Pass 1
-│   ├── bootstrap-graph.sh              # One-shot graph.jsonld bootstrap (Opus clustering)
+│   ├── daily-research.sh               # Main entry point (per-line loop, cwd = each repo); sources lib/
+│   ├── morning-brief.sh                # 07:00 approval brief (deterministic extraction → Slack)
 │   ├── check-auth.sh                   # OAuth check via real_auth_probe() + notification
 │   ├── pre-commit.sh                   # Secret / syntax guard (git pre-commit hook)
 │   └── lib/                             # Sourced shell libs + Python parser
-│       ├── env.sh / log.sh / notify.sh / lock.sh / graph.sh / auth.sh / claude.sh
+│       ├── env.sh / log.sh / notify.sh / lock.sh / auth.sh / claude.sh
 │       └── dr_pipeline.py              # Single stdlib-only JSON/TOML parsing module
-├── com.example.daily-research.plist   # launchd schedule (AM 5:00)
+├── state/                               # Per-line watched-sources / playbook / last-seen (gitignored)
+├── graph.jsonld                         # FROZEN archive (retired concept-graph pipeline)
+├── com.example.daily-research.plist    # launchd schedule (AM 5:00, research)
+├── com.example.daily-research-brief.plist  # launchd schedule (AM 7:00, morning brief)
 ├── tests/
 │   ├── test-daily-research.bats        # Unit tests (syntax, config, security)
-│   ├── test-e2e-mock.bats             # E2E mock tests
-│   ├── test-lib.bats                  # lib/*.sh unit tests (env, lock, graph, auth, claude)
+│   ├── test-e2e-mock.bats             # E2E mock tests (per-line flow)
+│   ├── test-lib.bats                  # lib/*.sh unit tests (env, lock, auth, claude)
 │   └── dr_pipeline_test.py            # pytest for dr_pipeline.py (dev-only, .venv)
 ├── logs/                                # Execution logs (date-stamped, auto-rotated 30d)
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md      # Operations guide
 │   ├── CONTRIB.md / CONTRIB.ja.md      # Development guide (this file)
-│   ├── graph-schema.md                 # graph.jsonld schema spec
+│   ├── graph-schema.md                 # Frozen graph.jsonld archive schema (historical)
 │   └── adr/                             # Architecture Decision Records
 └── .claude/settings.local.json          # Claude Code project permissions
 ```
@@ -53,9 +53,8 @@ daily-research/
 
 | Script | Description | Usage |
 |--------|-------------|-------|
-| `scripts/daily-research.sh` | Main entry point. 2-pass execution: Pass 1 (Opus theme selection) → Pass 2 (Sonnet research & writing). Sources `lib/`; includes env sanitization, auth probe, repo-graph sync, coverage report, JSON validation, and Sonnet fallback. Called by launchd at AM 5:00. | `./scripts/daily-research.sh` |
-| `scripts/coverage-report.sh` | Computes uncovered concepts per track (repo graph minus reinforced concepts); injected into Pass 1. | `./scripts/coverage-report.sh` |
-| `scripts/bootstrap-graph.sh` | One-shot `graph.jsonld` bootstrap from existing topic history (Opus clustering). | `./scripts/bootstrap-graph.sh` |
+| `scripts/daily-research.sh` | Main entry point. Loops over the lines in `config.toml` `tracks`; for each line runs `claude -p` once with cwd = the line's `target_repo` (Sonnet, 25-min timeout, one retry on transient failure; 401 aborts all lines). Sources `lib/`; includes env sanitization, auth probe, config schema check, per-line report gate (ctl-015), report lint (ctl-016), and metrics append. Called by launchd at AM 5:00. | `./scripts/daily-research.sh` |
+| `scripts/morning-brief.sh` | Deterministically extracts the 今すぐ実行可能な手 sections from today's notes (pure shell/awk, no LLM) and sends a numbered approval request to Slack via the vault's `wiki_notify` helper (macOS notification fallback). Called by launchd at AM 7:00. | `./scripts/morning-brief.sh` |
 | `scripts/check-auth.sh` | Checks Claude OAuth token validity via `real_auth_probe()` (shared `lib/auth.sh`; a real Haiku API probe, not `claude --version`, which succeeds even with an expired token). Shows macOS notification on failure. | `./scripts/check-auth.sh` |
 | `scripts/pre-commit.sh` | Secret / syntax guard run as a git pre-commit hook. | (auto-run by git) |
 
@@ -66,17 +65,16 @@ daily-research/
 | `PATH` | plist + script | Must include `$HOME/.local/bin` (current Claude installer), `$HOME/.claude/local` (legacy), `/opt/homebrew/bin`, and `/usr/local/bin` |
 | `HOME` | plist | Required for Claude CLI to find auth tokens |
 | `ANTHROPIC_API_KEY` | **Must be unset** | If set, Claude uses per-token billing instead of Max plan |
-| `CLAUDE_TIMEOUT` | Script (internal) | Timeout in seconds for `claude -p` calls via `run_claude()`. 0 = no timeout (default); Pass 2 sets 1800s |
+| `CLAUDE_TIMEOUT` | Script (internal) | Timeout in seconds for `claude -p` calls via `run_claude()`. 0 = no timeout (default); each per-line run sets 1500s (25 min) |
 | `DEBUG` | User-set | Set to `1` to enable debug logging (PATH, CLAUDE_CMD) |
 
 ## Configuration (`config.toml`)
 
 | Section | Purpose |
 |---------|---------|
-| `[general]` | Obsidian vault path, output directory, language, date format |
+| `[general]` | Obsidian vault path, output directory, language, date format, `self_signals` (self-contamination guard: the operator's own artifacts never count as external signals) |
 | `[report]` | Minimum source count |
-| `[tracks.<name>]` | One block per line: `focus`, `aliases`, `sources`, `scoring_criteria`, plus `[[tracks.<name>.repos]]` entries (`key`, `target_repo`, `target_graph`, `target_doi`, `frontier_questions`); a line with no repos is a free-exploration line (config.example.toml ships `line_a` / `explore` templates) |
-| `[coverage]` | Frontier / saturation thresholds: `frontier_threshold`, `saturated_top_n`, `saturated_recent_days`, `saturated_recent_min` |
+| `[tracks.<name>]` | One block per line: `focus`, `aliases`, `context_files` (repo-relative paths read at the start of each run — task ledger, open questions, implementation log), `sources`, `scoring_criteria`, plus one `[[tracks.<name>.repos]]` entry (`key`, `target_repo` — becomes the run's cwd, `target_doi` optional) |
 | `[user_profile]` | Optional skills / interests / goal hints |
 
 ## Development Workflow
@@ -84,11 +82,10 @@ daily-research/
 ### Making Changes to Research Behavior
 
 1. **Scoring weights** -- Edit `config.toml` scoring_criteria
-2. **Research sources** -- Edit `config.toml` track sources
-3. **Report format** -- Edit `templates/report-template.md`
-4. **Research depth/process** -- Edit `prompts/research-protocol.md`
-5. **Theme selection** -- Edit `prompts/theme-selection-prompt.md`
-6. **Execution instruction** -- Edit `prompts/task-prompt.md`
+2. **Research sources** -- Edit `config.toml` line sources
+3. **Repo context read by each run** -- Edit `config.toml` `context_files`
+4. **Report format** -- Edit `templates/report-template.md` (keep ctl-016 lint sections in sync)
+5. **Research process / objective function** -- Edit `prompts/repo-research-protocol.md`
 
 ### Making Changes to Execution
 
@@ -108,7 +105,7 @@ daily-research/
 cd ~/MyAI_Lab/daily-research
 # Use a SEPARATE terminal (not inside Claude Code session)
 claude
-# Then manually follow research-protocol.md steps
+# Then manually follow prompts/repo-research-protocol.md steps
 ```
 
 **Important**: `claude -p` cannot be run from inside another Claude Code session (nested session check).
@@ -128,47 +125,37 @@ bats tests/
 # - past_topics.json validity
 # - Security (no hardcoded keys, API key unset, log permissions)
 # - Defensive programming (set -euo pipefail, trap, max-turns)
-# - E2E mock: 2-pass flow, Sonnet fallback, JSON validation
-# - No gtimeout/timeout dependency
-# - lib/*.sh units: env sanitize, atomic lock, graph health, real auth probe, exit classify
+# - E2E mock: per-line flow (cwd = repo, prompt injection), retry, per-line report gate
+# - lib/*.sh units: env sanitize, atomic lock, real auth probe, exit classify
 ```
 
 ## Claude Code CLI Flags
 
-### Pass 1: Theme Selection (Opus)
+### Per-line research run (Sonnet, one per line)
+
+The run is invoked with `cd "$TARGET_REPO"` so the repo's own CLAUDE.md auto-loads as context.
 
 | Flag | Value | Purpose |
 |------|-------|---------|
-| `-p` | theme-selection-prompt.md content | Non-interactive mode |
+| `-p` | Per-line prompt (line brief from `dr_pipeline.py line-brief` + allowed write paths + past-themes dedup data + report template) | Non-interactive mode |
 | `--permission-mode` | `default` | Use default permission handling |
-| `--allowedTools` | `WebSearch,WebFetch,Read,Glob,Grep` | Read-only tools (no file writing) |
-| `--max-turns` | `15` | Limit theme selection scope |
-| `--model` | `opus` | Deep reasoning for theme quality |
-| `--output-format` | `stream-json` | NDJSON stream, parsed by `lib/dr_pipeline.py` to extract result + tool counts |
-| `--verbose` | - | Include detailed event stream |
-| `--no-session-persistence` | - | Fresh context each run |
-
-### Pass 2: Research & Writing (Sonnet)
-
-| Flag | Value | Purpose |
-|------|-------|---------|
-| `-p` | task-prompt.md content (+ theme JSON if Pass 1 succeeded) | Non-interactive mode |
-| `--permission-mode` | `default` | Use default permission handling |
-| `--append-system-prompt-file` | `prompts/research-protocol.md` | Inject research protocol while preserving defaults |
-| `--allowedTools` | `WebSearch,WebFetch,Read,Write,Edit,Glob,Grep` | Full tool access for research and writing |
+| `--append-system-prompt-file` | `prompts/repo-research-protocol.md` | Inject the research protocol while preserving defaults |
+| `--allowedTools` | `WebSearch,WebFetch,Read,Glob,Grep` + `Write`/`Edit` scoped to absolute paths (vault report dir, `state/<line>/`, `past_topics.json`) | Repo stays read-only at the permission layer; writes go only to the three declared targets |
 | `--max-turns` | `55` | Guideline limit for research depth |
-| `--model` | `sonnet` | Speed + cost efficiency |
-| `--output-format` | `json` | Structured output with metadata |
+| `--model` | `sonnet` | Speed + cost efficiency (no Opus pass anymore) |
+| `--output-format` | `json` | Structured output with metadata (fed to metrics) |
 | `--no-session-persistence` | - | Fresh context each run |
 
 **Note**: All `claude -p` calls use `< /dev/null` stdin redirect via the `run_claude()` wrapper. This prevents MCP stdio communication from conflicting with terminal stdin, which was a root cause of past MCP hangs.
 
 ## Architecture Notes
 
-The 2-pass design was chosen based on a one-time blind evaluation showing Opus produces +28% better theme selection while adding minimal cost (~$0.30 per run).
+The per-repo single-pass design replaced the earlier central 2-pass (Opus theme selection → Sonnet research) pipeline on 2026-08-04: theme selection through synced concept graphs converged on corroboration surveys, while the operational context that knows what to advance lives inside each repo (ADR-0008).
 
-Timeout is controlled via `--max-turns` rather than external process timeouts (gtimeout/timeout). External timeouts kill the claude process via signals, which can cause data loss.
+Each per-line run is bounded two ways: `--max-turns 55` and a 25-minute external timeout (`CLAUDE_TIMEOUT=1500` via `run_claude()`, requires coreutils `timeout`). A transiently failed line is retried once; a 401 aborts all lines since the same auth would fail everywhere.
+
+`metrics.jsonl` keeps the pre-ADR-0008 record shape for compatibility with `expect-check` / `/dr-review`: the per-line run JSONs are aggregated into the `pass2` field, `pass1` is always `None`, and `fallback_used` now means "a retry occurred".
 
 ## Persistent Memory Layer
 
-A Mem0 Cloud MCP integration was merged on 2026-02-26 but remained in zero-operation state for 32 days due to a missing `.mcp.json` and a non-functional health check. It was removed on 2026-05-23. The successor is a local JSON-LD concept cluster graph (`graph.jsonld`) that eliminates external MCP dependency and the structural risk of silent failures.
+A Mem0 Cloud MCP integration was merged on 2026-02-26 but remained in zero-operation state for 32 days due to a missing `.mcp.json` and a non-functional health check. It was removed on 2026-05-23. Its successor, the local JSON-LD concept cluster graph (`graph.jsonld`), was itself frozen on 2026-08-04 (ADR-0008) — it receives no more increments and is kept as a readable archive. Persistent working state now lives in `state/<line>/` (watched-sources, playbook) and `past_topics.json`, both local files that fail loudly.

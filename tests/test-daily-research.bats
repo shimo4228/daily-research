@@ -1,10 +1,11 @@
 #!/usr/bin/env bats
-# Tests for daily-research project
+# Tests for daily-research project (per-repo in-context research, ADR-0008)
 # Run: bats tests/test-daily-research.bats
 
 # テストファイルからの相対パスでプロジェクトルートを解決
 PROJECT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 SCRIPT="$PROJECT_DIR/scripts/daily-research.sh"
+BRIEF="$PROJECT_DIR/scripts/morning-brief.sh"
 
 # === Setup / Teardown ===
 
@@ -27,68 +28,77 @@ teardown() {
   bash -n "$PROJECT_DIR/scripts/check-auth.sh"
 }
 
-@test "all 3 entrypoints share real_auth_probe (no formalized --version auth)" {
-  # auth-002: check-auth.sh は本 flow に未配線だった。lib/auth.sh で正本化し 3 つが共有
+@test "morning-brief.sh has valid syntax" {
+  bash -n "$BRIEF"
+}
+
+@test "entrypoints share real_auth_probe (no formalized --version auth)" {
+  # auth-002: lib/auth.sh で正本化し共有 (bootstrap-graph.sh は ADR-0008 で retire)
   grep -q 'real_auth_probe' "$SCRIPT"
   grep -q 'real_auth_probe' "$PROJECT_DIR/scripts/check-auth.sh"
-  grep -q 'real_auth_probe' "$PROJECT_DIR/scripts/bootstrap-graph.sh"
-  # 形骸化した「--version で認証確認」が残っていない
   ! grep -qi 'version.*authentication\|authentication.*version' "$PROJECT_DIR/scripts/check-auth.sh"
 }
 
-@test "coverage-report.sh has valid syntax" {
-  bash -n "$PROJECT_DIR/scripts/coverage-report.sh"
+# === Per-repo 実行の配線 (ADR-0008) ===
+
+@test "orchestrator loops lines via tracks and runs claude with cwd=target_repo" {
+  grep -q 'dr_pipeline.py" tracks\|DR_PY" tracks' "$SCRIPT" || grep -q '"\$DR_PY" tracks' "$SCRIPT"
+  grep -q 'cd "\$TARGET_REPO"' "$SCRIPT"
 }
 
-# === Theme dedup (重複テーマ防止) ===
-
-@test "coverage-report shows reinforcing source history" {
-  run "$PROJECT_DIR/scripts/coverage-report.sh"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"既出:"* ]]
-}
-
-@test "coverage-report lists repo ExternalReference as forbidden sources" {
-  run "$PROJECT_DIR/scripts/coverage-report.sh"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"repo 取り込み済み外部文献"* ]]
-}
-
-@test "daily-research.sh injects past themes into Pass 1 prompt" {
-  grep -q "過去テーマ履歴" "$SCRIPT"
+@test "orchestrator injects past themes and line brief into per-line prompt" {
+  grep -q '過去テーマ履歴' "$SCRIPT"
   grep -q 'PAST_THEMES' "$SCRIPT"
+  grep -q 'line-brief' "$SCRIPT"
 }
 
-@test "daily-research.sh injects cluster saturation report into Pass 1 prompt" {
-  # 自由探索ラインの cluster 反発 (旧 tech track の固定 domains 飽和の再発防止)
-  grep -q 'CLUSTER' "$SCRIPT"
-  grep -q 'cluster-report' "$SCRIPT"
+@test "orchestrator restricts file writes to vault, state, and past_topics (repo read-only)" {
+  # path 規則は Edit(path) だけが consult される仕様 — Write(path) 規則は書かない
+  grep -q 'Edit(//' "$SCRIPT"
+  ! grep -q 'Write(' "$SCRIPT"
+  grep -q 'past_topics.json)' "$SCRIPT"
+  # 無条件の Write/Edit (path 制限なし) を allowedTools に入れていない
+  ! grep -qE 'ALLOWED_TOOLS="[^"]*,(Write|Edit),' "$SCRIPT"
 }
 
-@test "theme-selection-prompt forbids reusing the same primary source" {
-  grep -q "ソース単位の重複禁止" "$PROJECT_DIR/prompts/theme-selection-prompt.md"
+@test "orchestrator uses per-repo research protocol as system prompt" {
+  grep -q 'append-system-prompt-file' "$SCRIPT"
+  grep -q 'repo-research-protocol.md' "$SCRIPT"
 }
 
-@test "theme-selection-prompt documents coverage/frontier/explore modes" {
-  grep -q "frontier" "$PROJECT_DIR/prompts/theme-selection-prompt.md"
-  grep -q "explore" "$PROJECT_DIR/prompts/theme-selection-prompt.md"
-  grep -q "常設フロンティア質問" "$PROJECT_DIR/prompts/theme-selection-prompt.md"
+@test "concept-graph selection machinery is retired (ADR-0008)" {
+  ! grep -q 'coverage-report' "$SCRIPT"
+  ! grep -q 'cluster-report' "$SCRIPT"
+  ! grep -q 'sync_repo_graphs' "$SCRIPT"
+  ! grep -q 'validate_theme_json' "$SCRIPT"
+  [ ! -f "$PROJECT_DIR/scripts/coverage-report.sh" ]
+  [ ! -f "$PROJECT_DIR/scripts/bootstrap-graph.sh" ]
+  [ ! -f "$PROJECT_DIR/scripts/lib/graph.sh" ]
 }
 
-@test "platform digest prompt and template contract is explicit" {
-  grep -q 'platform_digest' "$PROJECT_DIR/prompts/research-protocol.md"
-  grep -q 'platform_digest' "$PROJECT_DIR/prompts/theme-selection-prompt.md"
-  grep -q '今日の探索アングル' "$PROJECT_DIR/templates/report-template.md"
-  grep -q '総評' "$PROJECT_DIR/templates/report-template.md"
-  grep -q 'PILOT | WATCH | DROP' "$PROJECT_DIR/templates/report-template.md"
-  grep -q '実活動' "$PROJECT_DIR/prompts/research-protocol.md"
+# === 新プロトコルの contract (repo-research-protocol.md) ===
+
+@test "protocol leads with actionable objective, not corroboration" {
+  grep -q '今すぐ前に進める、実行可能な手' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  grep -q '裏付け (corroboration) は成果ではない' "$PROJECT_DIR/prompts/repo-research-protocol.md"
 }
 
-@test "coverage-report emits per-repo MODE judgement" {
-  run "$PROJECT_DIR/scripts/coverage-report.sh"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"MODE:"* ]]
-  [[ "$output" == *"Line:"* ]]
+@test "protocol mandates diff-first, premise-challenge, citation gate, self-signal guard" {
+  grep -q 'diff パス' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  grep -q '前提挑戦パス' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  grep -q 'citation ゲート' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  grep -q '自己汚染ガード' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+}
+
+@test "protocol declares repo read-only and forbids tactic quota" {
+  grep -q 'repo は read-only' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  grep -q 'ノルマは存在しない' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+}
+
+@test "template requires expiry conditions and contradiction section" {
+  grep -q '失効条件' "$PROJECT_DIR/templates/report-template.md"
+  grep -q '我々の立場と矛盾・複雑化する知見' "$PROJECT_DIR/templates/report-template.md"
+  grep -q '今すぐ実行可能な手' "$PROJECT_DIR/templates/report-template.md"
 }
 
 # === Config files exist ===
@@ -97,12 +107,11 @@ teardown() {
   [ -f "$PROJECT_DIR/config.toml" ]
 }
 
-@test "task-prompt.md exists" {
-  [ -f "$PROJECT_DIR/prompts/task-prompt.md" ]
-}
-
-@test "research-protocol.md exists" {
-  [ -f "$PROJECT_DIR/prompts/research-protocol.md" ]
+@test "repo-research-protocol.md exists (old prompts retired)" {
+  [ -f "$PROJECT_DIR/prompts/repo-research-protocol.md" ]
+  [ ! -f "$PROJECT_DIR/prompts/theme-selection-prompt.md" ]
+  [ ! -f "$PROJECT_DIR/prompts/task-prompt.md" ]
+  [ ! -f "$PROJECT_DIR/prompts/research-protocol.md" ]
 }
 
 @test "report-template.md exists" {
@@ -128,14 +137,36 @@ teardown() {
   [ "$hour" = "5" ]
 }
 
+@test "brief plist is valid and scheduled at 7:00" {
+  plutil -lint "$PROJECT_DIR/com.shimomoto.daily-research-brief.plist"
+  local hour
+  hour=$(plutil -extract StartCalendarInterval.Hour raw \
+    "$PROJECT_DIR/com.shimomoto.daily-research-brief.plist")
+  [ "$hour" = "7" ]
+  plutil -extract ProgramArguments json \
+    "$PROJECT_DIR/com.shimomoto.daily-research-brief.plist" \
+    -o - | grep -q "morning-brief.sh"
+}
+
+# === Morning brief (7:00 Slack 承認リクエスト) ===
+
+@test "morning-brief extracts tactics deterministically (no LLM call)" {
+  # 抽出は awk、送信は wiki_notify (呼び出し元シェル)。claude 呼び出しを含まない
+  grep -q '今すぐ実行可能な手' "$BRIEF"
+  grep -q 'wiki_notify' "$BRIEF"
+  ! grep -q 'run_claude\|claude -p' "$BRIEF"
+}
+
+@test "morning-brief sends honest negative when no tactics" {
+  grep -q '本日 actionable なし' "$BRIEF"
+  grep -q 'ノートがありません\|ノートなし' "$BRIEF"
+}
+
 # === Lock mechanism ===
-# acquire_lock / release_lock の振る舞いテストは tests/test-lib.bats に集約 (S4)。
-# ここでは orchestrator が mkdir アトミックロックを採用していることを静的確認する。
 
 @test "orchestrator uses mkdir-atomic lock via lib/lock.sh" {
   grep -q 'source.*lock.sh' "$SCRIPT"
   grep -q 'acquire_lock' "$SCRIPT"
-  # check-then-write の旧パターン (echo \$\$ > LOCK_FILE) が残っていない
   ! grep -q 'echo \$\$ > "\$LOCK_FILE"' "$SCRIPT"
 }
 
@@ -164,17 +195,14 @@ teardown() {
 # === Security checks ===
 
 @test "env.sh source declares unset ANTHROPIC_API_KEY (static)" {
-  # 環境サニタイズは lib/env.sh に集約 (S3)。挙動テストは test-lib.bats 側
   grep -q "unset ANTHROPIC_API_KEY" "$PROJECT_DIR/scripts/lib/env.sh"
 }
 
 @test "no hardcoded API keys in script" {
-  # sk- followed by 20+ alphanumeric chars (actual API key pattern)
   ! grep -qE '(sk-[a-zA-Z0-9]{20,}|api_key\s*=\s*"[^"]+")' "$SCRIPT"
 }
 
 @test "log file permissions are restricted (chmod 600)" {
-  # ログ権限制限は lib/log.sh の log_init() に集約 (作成時 chmod, S3)
   grep -q 'chmod 600 "$LOG_FILE"' "$PROJECT_DIR/scripts/lib/log.sh"
 }
 
@@ -188,7 +216,7 @@ teardown() {
   grep -q 'trap release_lock EXIT' "$SCRIPT"
 }
 
-@test "max-turns is configured for both passes" {
+@test "max-turns is configured" {
   grep -q '\-\-max-turns' "$SCRIPT"
 }
 
@@ -204,6 +232,7 @@ teardown() {
   awk '/metrics-append/{m=NR} /^exit "\$FINAL_EXIT"/{e=NR} END{exit !(m && e && m<e)}' "$SCRIPT"
 }
 
-@test "metrics.jsonl is gitignored (personal cost data, public repo)" {
+@test "metrics.jsonl and state/ are gitignored (personal data, public repo)" {
   grep -qx 'metrics.jsonl' "$PROJECT_DIR/.gitignore"
+  grep -qx 'state/' "$PROJECT_DIR/.gitignore"
 }

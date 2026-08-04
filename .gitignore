@@ -47,3 +47,8 @@ docs/archive/
 .pytest_cache/
 __pycache__/
 .coverage
+
+# Per-line research state (watched-sources / playbook / last-seen; operational, private)
+state/
+com.*.daily-research-brief.plist
+!com.example.daily-research-brief.plist

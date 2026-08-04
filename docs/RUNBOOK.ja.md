@@ -12,21 +12,26 @@ cd /path/to/daily-research
 
 # 2. スクリプトに実行権限を付与
 chmod +x scripts/daily-research.sh
+chmod +x scripts/morning-brief.sh
 chmod +x scripts/check-auth.sh
 
 # 3. 認証を確認
 ./scripts/check-auth.sh
 
-# 4. テンプレートから plist を作成
+# 4. テンプレートから plist を作成 (リサーチ 05:00 + 朝のブリーフ 07:00)
 cp com.example.daily-research.plist com.daily-research.plist
-# com.daily-research.plist を編集: YOUR_USERNAME を macOS ユーザー名に置換
+cp com.example.daily-research-brief.plist com.daily-research-brief.plist
+# 両方の plist を編集: YOUR_USERNAME を macOS ユーザー名に置換
 
 # 5. launchd シンボリックリンクを作成
 ln -sf "$(pwd)/com.daily-research.plist" \
        ~/Library/LaunchAgents/com.daily-research.plist
+ln -sf "$(pwd)/com.daily-research-brief.plist" \
+       ~/Library/LaunchAgents/com.daily-research-brief.plist
 
 # 6. ジョブをロード
 launchctl load ~/Library/LaunchAgents/com.daily-research.plist
+launchctl load ~/Library/LaunchAgents/com.daily-research-brief.plist
 
 # 7. 登録を確認
 launchctl list | grep daily-research
@@ -50,24 +55,35 @@ launchctl start com.daily-research
 
 # 直接実行（Claude Code セッションとは別のターミナルで実行すること）
 ./scripts/daily-research.sh
+
+# 朝のブリーフのみ（決定論的。再実行しても安全）
+./scripts/morning-brief.sh
 ```
 
 ## アーキテクチャ
 
 ```
-daily-research.sh
+daily-research.sh (05:00)
 ├── ロック取得（アトミック mkdir）
 ├── 認証 probe（実 OAuth チェック）
-├── graph.jsonld ヘルスチェック
-├── repo graph 同期 → .repo-graphs/
-├── カバレッジレポート（未補強 concept → Pass 1 に注入）
-├── Pass 1: Opus テーマ選定 (--max-turns 15, stream-json)
-│   ├── 成功 → テーマを Sonnet に渡す
-│   └── 失敗 → Sonnet フォールバック（テーマ選定 + リサーチを一括実行）
-└── Pass 2: Sonnet リサーチ・執筆 (--max-turns 55)
-    ├── WebSearch + WebFetch（多段リサーチ）
-    ├── レポート書き込み → Obsidian vault
-    └── graph.jsonld を更新（補強した concept を記録）
+├── config schema チェック（ADR-0008 以前の旧 schema は fail-fast）
+├── ライン単位ループ — config.toml `tracks` の各ラインについて:
+│   ├── claude -p, cwd = ラインの target_repo (Sonnet, --max-turns 55,
+│   │   25 分タイムアウト, transient 失敗時リトライ 1 回; 401 は全ライン中止)
+│   │   ├── repo 文脈 (CLAUDE.md 自動ロード + context_files) + state/<line>/ を Read
+│   │   ├── watched sources の diff-first 確認 · citation ゲート付きリサーチ
+│   │   ├── 前提挑戦パス（矛盾節は必須）
+│   │   └── actionable-tactics note を vault に Write · state + past_topics.json 更新
+│   └── ctl-015 ライン単位レポート存在ゲート（vault の {date}_{track}_*.md）
+├── ctl-016 決定論的レポート lint（必須節は report-template.md に同期）
+├── Pass 3: Obsidian wiki ingest（vault 側スクリプト、non-fatal）
+└── metrics.jsonl 追記 + /dr-review 経過日数チェック
+
+morning-brief.sh (07:00)
+├── 当日ノートの「今すぐ実行可能な手」節を決定論抽出（LLM を挟まない）
+└── vault の wiki_notify ヘルパ経由で Slack へ番号付き承認リクエストを送信
+    (macOS 通知フォールバック)。承認は運用者の次の Claude セッションで行い、
+    その時点で各 repo の deploy 前 gate が適用される
 ```
 
 ## 監視
@@ -102,22 +118,24 @@ launchctl list | grep daily-research
 | 認証有効 | `./scripts/check-auth.sh` | "OK: Claude authentication is valid" |
 | 今日のログが存在 | `ls logs/$(date +%Y-%m-%d).log` | ファイルが存在 |
 | ログに成功メッセージ | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | マッチあり |
-| レポートが生成済み | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | 設定したトラック数のファイル |
+| レポートが生成済み | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | 設定したライン数のファイル |
 
 ### ログメッセージ一覧
 
 | メッセージ | 意味 |
 |---------|------|
-| `SUMMARY Pass1: cost=... turns=... duration=...` | Pass 1 の実行統計（コスト、ターン数、所要時間、トークン数） |
-| `Pass 1 completed: themes selected by Opus` | Opus テーマ選定が成功 |
-| `Pass 1 themes: <track>="...", ...` | トラックごとの選定テーマの記録 |
-| `WARN: Pass 1 failed (exit code N), falling back to Sonnet` | Opus 失敗、Sonnet が全処理を担当 |
-| `WARN: Pass 1 output failed JSON validation` | Opus が不正な JSON を返した、Sonnet フォールバック |
-| `Fallback: Sonnet handles theme selection + research` | Sonnet が全作業を実行（正常なフォールバック動作） |
-| `SUMMARY Pass2: cost=... turns=... duration=...` | Pass 2 の実行統計 |
-| `SUMMARY Total: cost=... duration=...` | 両パス合計のコスト・所要時間 |
-| `graph.jsonld health check passed` | concept graph が有効、パイプライン続行 |
-| `Completed successfully` | 全パス完了 |
+| `Auth probe passed` | 実 OAuth probe が成功 |
+| `Config schema check passed` | `config.toml` が現行 (ADR-0008) schema に適合 |
+| `=== Line: <track> (<repo パス>) ===` | その repo を cwd にしたライン run の開始 |
+| `SUMMARY Run(<track>): cost=... turns=... duration=...` | ライン run の実行統計（コスト、ターン数、所要時間、トークン数） |
+| `WARN: Line <track> failed (..., exit N) — retrying once` | transient 失敗。1 回きりのリトライを開始 |
+| `ERROR: Line <track> returned 401 — aborting all lines` | run 中に認証が期限切れ。後続ラインは実行しない |
+| `Line <track> report gate passed (N report)` | ctl-015: そのラインの `{date}_{track}_*.md` が vault に存在 |
+| `WARN: Line <track> produced no ..._*.md (ctl-015)` | run は走ったがレポートが無い — 失敗として計上 |
+| `Report existence gate passed: N report(s)` | 全ラインが ctl-015 を通過 |
+| `WARN: report lint hard fail (ctl-016): ...` | 決定論 lint がソース節不在・出典 0 件を検出 |
+| `Completed successfully` | 全ライン完了・レポートゲート通過 |
+| `Morning brief sent to Slack (...)` | 07:00 のブリーフ送信完了（`morning-brief.sh` 由来） |
 
 ## よくある問題と対処法
 
@@ -168,16 +186,16 @@ ps aux | grep daily-research
 rm -f .daily-research.lock
 ```
 
-### 4. Pass 1 (Opus) が常に失敗する
+### 4. 特定のラインが失敗し続ける
 
-**症状**: ログに常に `WARN: Pass 1 failed` が出力され、毎回 Sonnet フォールバックが実行される。
+**症状**: ログに `WARN: Line <track> failed after retry` または `WARN: Line <track> produced no ..._*.md (ctl-015)` が連日出力される。
 
 **原因**:
-- Opus レート制限（Claude Max プラン枠の消費）
-- WebSearch 中のネットワーク障害
-- `--max-turns 15` が不足
+- レート制限（Claude Max プラン枠の消費）または WebSearch 中のネットワーク障害
+- 深掘りしすぎた run がライン単位の 25 分タイムアウトを超過
+- `config.toml` の `target_repo` パスが存在しない・移動した
 
-**対処**: ログで具体的な exit code を確認する。Pass 1 の失敗は非致命的（Sonnet が代行する）。継続する場合は `--max-turns` の引き上げやプラン使用量の確認を検討する。
+**対処**: ログで exit 分類（`E_TRANSIENT` / `E_FATAL`）を確認する。1 ラインの失敗は他のラインを止めない — 他のレポートは生成・ingest される。`target_repo` の存在を確認してから手動で再実行する。401（`E_AUTH`）は OAuth 期限切れ: 問題 1 を参照。
 
 ### 5. `ANTHROPIC_API_KEY` が設定されている（従量課金）
 
@@ -206,7 +224,7 @@ ls "/path/to/your/obsidian/vault/daily-research/"
 
 ### 7. プラグインによる実行遅延・ハング
 
-**症状**: Pass 1 が通常の3〜5分ではなく30分以上かかる、または無限にハングする。ログに `No result event found in stream` が出力される。
+**症状**: ライン run が起動だけで 25 分タイムアウトの大半を消費する、または無限にハングする。
 
 **原因**: Claude Code のプラグイン（pyright, swift-lsp, hookify, mgrep, claude-mem 等）がグローバルにインストールされている。`claude -p` 呼び出しごとに全プラグインの MCP サーバーが初期化され、大幅なオーバーヘッドが発生する。
 
@@ -263,28 +281,25 @@ cp past_topics.json.bak past_topics.json
 
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.daily-research.plist
+launchctl unload ~/Library/LaunchAgents/com.daily-research-brief.plist
 ```
 
 ### 自動実行の再開
 
 ```bash
 launchctl load ~/Library/LaunchAgents/com.daily-research.plist
+launchctl load ~/Library/LaunchAgents/com.daily-research-brief.plist
 ```
 
 ## スケジュール
 
 | 時刻 | アクション |
 |------|-----------|
-| AM 5:00 | launchd が `daily-research.sh` を実行 |
+| AM 5:00 | launchd が `daily-research.sh` を実行（ライン単位リサーチ） |
+| AM 7:00 | launchd が `morning-brief.sh` を実行（Slack 承認ブリーフ） |
 
-5:00 に Mac がスリープ中だった場合、復帰時に launchd がジョブを実行する（`StartCalendarInterval` の仕様）。
+予定時刻に Mac がスリープ中だった場合、復帰時に launchd がジョブを実行する（`StartCalendarInterval` の仕様）。
 
 ## コスト
 
-| コンポーネント | モデル | 推定コスト/回 |
-|---------------|--------|-------------|
-| Pass 1: テーマ選定 | Opus | ~$0.30 |
-| Pass 2: リサーチ・執筆 | Sonnet | ~$1.50 |
-| **合計** | | **~$1.80** |
-
-Claude Max プランでは、これらのコストはサブスクリプションでカバーされる。従量課金は発生しない。
+Sonnet の run がライン数だけ走る（現行 4 ライン。全ラインがリトライした場合最大 8 回）。各 run は 25 分でタイムアウトする。朝のブリーフは純 shell でモデル呼び出しなし。Claude Max プランではモデル使用はサブスクリプションでカバーされ、従量課金は発生しない。ライン別のコスト・所要時間は `metrics.jsonl` に記録され、実測はそちらで確認する（ADR-0008 は初週の metrics でのコスト実測を求めている）。

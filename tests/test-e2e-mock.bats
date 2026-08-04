@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# E2E tests with mock claude command
+# E2E tests with mock claude command (per-repo in-context research, ADR-0008)
 # Run: bats tests/test-e2e-mock.bats
 #
 # mock claude を $MOCK_HOME/.claude/local/ に配置し、
@@ -22,56 +22,38 @@ setup() {
 
   # スクリプト・プロンプト・テンプレートをコピー
   cp "$REAL_PROJECT_DIR/scripts/daily-research.sh" "$MOCK_PROJECT/scripts/"
-  cp "$REAL_PROJECT_DIR/scripts/coverage-report.sh" "$MOCK_PROJECT/scripts/"
   cp -R "$REAL_PROJECT_DIR/scripts/lib" "$MOCK_PROJECT/scripts/"
-  cp "$REAL_PROJECT_DIR/prompts/theme-selection-prompt.md" "$MOCK_PROJECT/prompts/"
-  cp "$REAL_PROJECT_DIR/prompts/task-prompt.md" "$MOCK_PROJECT/prompts/"
-  cp "$REAL_PROJECT_DIR/prompts/research-protocol.md" "$MOCK_PROJECT/prompts/"
+  cp "$REAL_PROJECT_DIR/prompts/repo-research-protocol.md" "$MOCK_PROJECT/prompts/"
   cp "$REAL_PROJECT_DIR/templates/report-template.md" "$MOCK_PROJECT/templates/"
 
-  # graph.jsonld のミニマル版（起動時の健全性チェックが fatal のため必須）
-  cat > "$MOCK_PROJECT/graph.jsonld" << 'EOF'
-{
-  "@context": {"@vocab": "https://schema.org/"},
-  "@graph": []
-}
-EOF
+  # 対象 repo (cwd になる) を作る。akc / authorship の 2 line 構成
+  mkdir -p "$MOCK_HOME/mock-repos/agent-knowledge-cycle"
+  mkdir -p "$MOCK_HOME/mock-repos/authorship-strategy"
 
-  # config.toml のミニマル版（新 line schema。vault_path を MOCK_HOME 配下に向ける
-  # (report 存在ゲート ctl-015 のためテスト間で隔離)。
-  # repo graph は不在 → sync は WARN (非 fatal) で素通りする）
   cat > "$MOCK_PROJECT/config.toml" << EOF
 [general]
 vault_path = "$MOCK_HOME/mock-vault"
 output_dir = "daily-research"
+self_signals = ["github.com/example-author"]
 
-[tracks.agent_systems]
-name = "Agent Systems Line"
-aliases = ["agent_cognition", "akc", "contemplative", "aap"]
+[report]
+min_sources = 5
 
-[[tracks.agent_systems.repos]]
+[tracks.akc]
+name = "AKC Line"
+focus = "AKC line focus"
+
+[[tracks.akc.repos]]
 key = "akc"
-target_repo = "/tmp/mock-repos/agent-knowledge-cycle"
+target_repo = "$MOCK_HOME/mock-repos/agent-knowledge-cycle"
 
-[[tracks.agent_systems.repos]]
-key = "contemplative"
-target_repo = "/tmp/mock-repos/contemplative-agent"
+[tracks.authorship]
+name = "Authorship Line"
+focus = "Authorship line focus"
 
-[[tracks.agent_systems.repos]]
-key = "aap"
-target_repo = "/tmp/mock-repos/agent-attribution-practice"
-
-[tracks.human_ai_publics]
-name = "AI-Friendly Platform Digest"
-report_variant = "platform_digest"
-
-[tracks.tech]
-name = "Tech Free Exploration"
-
-[tracks.software_paradigms]
-name = "Software Paradigms"
-aliases = ["human_adaptation"]
-report_variant = "maker"
+[[tracks.authorship.repos]]
+key = "authorship"
+target_repo = "$MOCK_HOME/mock-repos/authorship-strategy"
 EOF
 
   # past_topics.json のミニマル版
@@ -99,7 +81,7 @@ teardown() {
 create_mock_claude() {
   cat > "$MOCK_HOME/.claude/local/claude" << 'MOCK_SCRIPT'
 #!/bin/bash
-# Mock claude for E2E testing
+# Mock claude for E2E testing (per-repo single-pass, ADR-0008)
 MOCK_HOME_DIR="$(dirname "$(dirname "$(dirname "$0")")")"
 SCENARIO=$(cat "$MOCK_HOME_DIR/.mock_scenario" 2>/dev/null || echo "normal")
 
@@ -109,21 +91,24 @@ if [[ "$1" == "--version" ]]; then
   exit 0
 fi
 
-# Parse --model flag
+# Parse flags (-p prompt / --model / --allowedTools)
 MODEL=""
+PROMPT=""
+ALLOWED=""
 PREV=""
 for arg in "$@"; do
-  if [[ "$PREV" == "--model" ]]; then
-    MODEL="$arg"
-  fi
+  case "$PREV" in
+    --model) MODEL="$arg" ;;
+    -p) PROMPT="$arg" ;;
+    --allowedTools) ALLOWED="$arg" ;;
+  esac
   PREV="$arg"
 done
 
-# --- Haiku (auth probe / health check) ---
+# --- Haiku (auth probe) ---
 if [[ "$MODEL" == "haiku" ]]; then
   case "$SCENARIO" in
     auth-fail|auth-401)
-      # OAuth 期限切れを模す: is_error/api_error_status:401 + 非ゼロ exit
       echo '{"type":"result","subtype":"error","is_error":true,"api_error_status":401,"total_cost_usd":0,"result":"Failed to authenticate. API Error: 401 Invalid authentication credentials"}'
       exit 1
       ;;
@@ -134,65 +119,52 @@ if [[ "$MODEL" == "haiku" ]]; then
   esac
 fi
 
-# --- Opus (Pass 1: theme selection) ---
-if [[ "$MODEL" == "opus" ]]; then
+# --- Sonnet (per-line research run) ---
+if [[ "$MODEL" == "sonnet" ]]; then
+  # プロンプトから track を抽出 (per-line プロンプトの "- line (track): X" 行)
+  TRACK=$(printf '%s\n' "$PROMPT" | sed -n 's/^- line (track): //p' | head -1)
+  TRACK=${TRACK:-unknown}
+
+  # 検証用にプロンプトと allowedTools を track 別に記録
+  printf '%s' "$PROMPT" > "$MOCK_HOME_DIR/.prompt_$TRACK"
+  printf '%s' "$ALLOWED" > "$MOCK_HOME_DIR/.allowed_$TRACK"
+  # 呼び出し回数カウンタ (retry テスト用)
+  COUNT_FILE="$MOCK_HOME_DIR/.calls_$TRACK"
+  COUNT=$(( $(cat "$COUNT_FILE" 2>/dev/null || echo 0) + 1 ))
+  echo "$COUNT" > "$COUNT_FILE"
+
   case "$SCENARIO" in
-    normal|pass2-iserror)
-      # --output-format stream-json --verbose の NDJSON 形式。parse-stream.py が処理する
-      cat << 'JSON'
-{"type":"assistant","message":{"model":"claude-haiku-4-5-20251001","content":[{"type":"tool_use","name":"WebSearch","id":"toolu_mock01","input":{"query":"mock search"}}]}}
-{"type":"result","subtype":"success","is_error":false,"duration_ms":5000,"duration_api_ms":4500,"num_turns":5,"total_cost_usd":0.25,"usage":{"input_tokens":1000,"output_tokens":500,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"result":"{\"themes\": [{\"track\": \"agent_systems\", \"repos\": [\"akc\"], \"mode\": \"frontier\", \"topic\": \"Mock Agent Systems Topic for E2E Testing\", \"slug\": \"mock-agent-systems-topic\", \"score\": 85, \"challenges\": [\"concept/mock-akc\"], \"rationale\": \"E2E test rationale\"}, {\"track\": \"human_ai_publics\", \"repos\": [], \"mode\": \"explore\", \"topic\": \"Mock Human AI Publics Topic for E2E Testing\", \"slug\": \"mock-human-ai-publics-topic\", \"score\": 84, \"rationale\": \"E2E test rationale\"}, {\"track\": \"tech\", \"topic\": \"Mock Tech Topic for E2E Testing\", \"slug\": \"mock-tech-topic\", \"score\": 82, \"rationale\": \"E2E test rationale\"}, {\"track\": \"software_paradigms\", \"repos\": [], \"mode\": \"explore\", \"topic\": \"Mock Software Paradigms Topic for E2E Testing\", \"slug\": \"mock-software-paradigms-topic\", \"score\": 81, \"rationale\": \"E2E test rationale\"}]}"}
-JSON
-      exit 0
-      ;;
-    pass1-fail)
-      echo "ERROR: Simulated Pass 1 failure" >&2
+    run-401)
+      echo '{"type":"result","subtype":"error","is_error":true,"api_error_status":401,"duration_ms":2700,"result":"Failed to authenticate. API Error: 401"}'
       exit 1
       ;;
-    pass1-bad-json)
-      # result フィールドに不正なテーマ JSON を含む（validate_theme_json が失敗する）
-      cat << 'JSON'
-{"type":"result","subtype":"success","is_error":false,"duration_ms":1000,"result":"This is not valid theme JSON at all"}
-JSON
-      exit 0
+    run-fail-once)
+      # 1 回目は失敗、リトライ (2 回目) で成功
+      if [[ "$COUNT" -eq 1 ]]; then
+        echo "ERROR: simulated transient failure" >&2
+        exit 1
+      fi
       ;;
-    pass1-401)
-      # auth probe は通過するが Pass 1 (Opus) が 401。Sonnet フォールバックしてはならない
-      cat << 'JSON'
-{"type":"result","subtype":"error","is_error":true,"api_error_status":401,"duration_ms":2700,"result":"Failed to authenticate. API Error: 401 Invalid authentication credentials"}
-JSON
-      exit 1
+    fail-one-line)
+      # authorship line だけ恒常失敗 (リトライも失敗) → 部分失敗
+      if [[ "$TRACK" == "authorship" ]]; then
+        echo "ERROR: simulated line failure" >&2
+        exit 1
+      fi
+      ;;
+    run-iserror)
+      echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"error","is_error":true,"total_cost_usd":0.05,"num_turns":55,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}}]'
+      exit 0
       ;;
   esac
-fi
 
-# --- Sonnet (Pass 2: research & writing) ---
-if [[ "$MODEL" == "sonnet" ]]; then
-  # 受け取ったプロンプトをファイルに記録（テストで検証用）
-  PREV=""
-  for arg in "$@"; do
-    if [[ "$PREV" == "-p" ]]; then
-      echo "$arg" > "$MOCK_HOME_DIR/.sonnet_prompt"
-    fi
-    PREV="$arg"
-  done
-
-  # pass2-iserror: exit 0 だが is_error:true (max-turns 空振り等)。成功化けを防げるか検証
-  if [[ "$SCENARIO" == "pass2-iserror" ]]; then
-    echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"error","is_error":true,"total_cost_usd":0.05,"num_turns":55,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}}]'
-    exit 0
-  fi
-
-  # pass2-noreport: success を返すがレポートを書かない (2026-07-29 の
-  # 「実行許可をいただけますか？」型の成功化け。ctl-015 が捕捉すべきケース)
-  if [[ "$SCENARIO" != "pass2-noreport" ]]; then
-    # 成功シナリオでは当日レポートを模擬生成 (report 存在ゲート ctl-015 の対象)
+  # noreport: success を返すがレポートを書かない (成功化け → ctl-015 が捕捉すべき)
+  if [[ "$SCENARIO" != "noreport" ]]; then
     REPORT_DIR="$MOCK_HOME_DIR/mock-vault/daily-research"
     mkdir -p "$REPORT_DIR"
-    echo "# mock report" > "$REPORT_DIR/$(date +%Y-%m-%d)_tech_mock-report.md"
+    echo "# mock report for $TRACK" > "$REPORT_DIR/$(date +%Y-%m-%d)_${TRACK}_mock-report.md"
   fi
 
-  # --output-format json は JSON array を返す場合がある
   echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.05,"num_turns":3,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}}]'
   exit 0
 fi
@@ -213,135 +185,105 @@ get_log() {
   cat "$MOCK_PROJECT/logs/$(date +%Y-%m-%d).log"
 }
 
-# === Test: Normal path (Opus → Sonnet) ===
+# === Test: Normal path (per-line runs) ===
 
-@test "E2E normal: Opus theme selection → Sonnet research" {
+@test "E2E normal: both lines run with repo cwd and reports pass the gate" {
   echo "normal" > "$MOCK_HOME/.mock_scenario"
 
   run_script
   local log_content
   log_content=$(get_log)
 
-  # Pass 1 成功
-  echo "$log_content" | grep -q "Pass 1 completed: themes selected by Opus"
-
-  # Pass 2 実行
-  echo "$log_content" | grep -q "Pass 2: Research & writing (Sonnet)"
-
-  # 成功完了
+  echo "$log_content" | grep -q "Line: akc"
+  echo "$log_content" | grep -q "Line: authorship"
+  echo "$log_content" | grep -q "Line akc report gate passed"
+  echo "$log_content" | grep -q "Line authorship report gate passed"
+  echo "$log_content" | grep -q "Report existence gate passed: 2 report(s)"
   echo "$log_content" | grep -q "Completed successfully"
-
-  # graph.jsonld ヘルスチェック通過 (Mem0 MCP は 2026-05-23 撤去済み)
-  echo "$log_content" | grep -q "graph.jsonld health check passed"
-
-  # CLAUDE_CMD がログに記録されている
   echo "$log_content" | grep -q "DEBUG: CLAUDE_CMD="
 }
 
-@test "E2E normal: Sonnet receives theme JSON in prompt" {
+@test "E2E normal: per-line prompt carries line brief, paths, and past themes" {
   echo "normal" > "$MOCK_HOME/.mock_scenario"
 
   run_script
 
-  # Sonnet に渡されたプロンプトにテーマ JSON が含まれる
-  local sonnet_prompt
-  sonnet_prompt=$(cat "$MOCK_HOME/.sonnet_prompt")
+  local prompt
+  prompt=$(cat "$MOCK_HOME/.prompt_akc")
+  echo "$prompt" | grep -q -- "- line (track): akc"
+  echo "$prompt" | grep -q "AKC line focus"
+  echo "$prompt" | grep -q "過去テーマ履歴"
+  echo "$prompt" | grep -q "state/akc"
+  echo "$prompt" | grep -q "past_topics.json"
+  echo "$prompt" | grep -q "今すぐ実行可能な手"   # テンプレート注入
+  echo "$prompt" | grep -q "github.com/example-author"  # self_signals
 
-  echo "$sonnet_prompt" | grep -q "mock-agent-systems-topic"
-  echo "$sonnet_prompt" | grep -q "mock-human-ai-publics-topic"
-  echo "$sonnet_prompt" | grep -q "mock-tech-topic"
-  echo "$sonnet_prompt" | grep -q "mock-software-paradigms-topic"
-  echo "$sonnet_prompt" | grep -q "選定済みテーマ"
-
-  # validate-theme が mode / repos を正規化して透過している
-  # (tech テーマは mode 省略 → explore に正規化される)
-  echo "$sonnet_prompt" | grep -q '"mode": "explore"'
-  echo "$sonnet_prompt" | grep -q '"challenges": \["concept/mock-akc"\]'
+  # authorship line も独立プロンプトで走る
+  local prompt2
+  prompt2=$(cat "$MOCK_HOME/.prompt_authorship")
+  echo "$prompt2" | grep -q -- "- line (track): authorship"
+  echo "$prompt2" | grep -q "Authorship line focus"
 }
 
-# === Test: Pass 1 failure fallback ===
+@test "E2E normal: file writes are path-restricted (repo read-only at permission layer)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
 
-@test "E2E fallback: Pass 1 failure triggers Sonnet fallback" {
-  echo "pass1-fail" > "$MOCK_HOME/.mock_scenario"
+  run_script
+
+  local allowed
+  allowed=$(cat "$MOCK_HOME/.allowed_akc")
+  # path 規則は Edit(path) だけが consult される仕様 — Write(path) 規則は書かない
+  echo "$allowed" | grep -q "Edit(//"
+  echo "$allowed" | grep -q "mock-vault/daily-research"
+  echo "$allowed" | grep -q "state/akc"
+  echo "$allowed" | grep -q "past_topics.json)"
+  ! echo "$allowed" | grep -q "Write("
+  # 無条件 Write/Edit は含まれない
+  ! printf '%s' "$allowed" | grep -qE '(^|,)Write(,|$)'
+  ! printf '%s' "$allowed" | grep -qE '(^|,)Edit(,|$)'
+}
+
+@test "E2E normal: state directories are created per line" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+
+  run_script
+  [ -d "$MOCK_PROJECT/state/akc" ]
+  [ -d "$MOCK_PROJECT/state/authorship" ]
+}
+
+# === Test: Retry (per-line, once) ===
+
+@test "E2E retry: transient failure retries once then succeeds" {
+  echo "run-fail-once" > "$MOCK_HOME/.mock_scenario"
 
   run_script
   local log_content
   log_content=$(get_log)
 
-  # フォールバック警告
-  echo "$log_content" | grep -q "WARN: Pass 1 failed"
-  echo "$log_content" | grep -q "falling back to Sonnet"
-
-  # Sonnet フォールバック実行
-  echo "$log_content" | grep -q "Fallback: Sonnet handles theme selection + research"
-
-  # Pass 2 は実行される（exit していない）
-  echo "$log_content" | grep -q "Pass 2: Research & writing (Sonnet)"
-
-  # 成功完了
+  echo "$log_content" | grep -q "retrying once"
   echo "$log_content" | grep -q "Completed successfully"
 }
 
-@test "E2E fallback: Sonnet fallback prompt includes theme selection step" {
-  echo "pass1-fail" > "$MOCK_HOME/.mock_scenario"
+@test "E2E partial: one failing line yields overall Failed but other line's report survives" {
+  echo "fail-one-line" > "$MOCK_HOME/.mock_scenario"
 
-  run_script
+  run run_script
+  [ "$status" -ne 0 ]
 
-  local sonnet_prompt
-  sonnet_prompt=$(cat "$MOCK_HOME/.sonnet_prompt")
-
-  # フォールバック時はテーマ選定ステップが含まれる
-  echo "$sonnet_prompt" | grep -q "テーマを 1 つずつ選定する"
-
-  # 動的 line 表現 (repo 寄与 / 自由探索の分岐) が含まれる
-  echo "$sonnet_prompt" | grep -q "config.toml"
-  echo "$sonnet_prompt" | grep -q "自由探索"
-
-  # 選定済みテーマ セクションは含まれない
-  ! echo "$sonnet_prompt" | grep -q "選定済みテーマ"
-}
-
-@test "E2E fallback: Sonnet fallback prompt injects coverage/cluster/past-themes (no Bash needed)" {
-  echo "pass1-fail" > "$MOCK_HOME/.mock_scenario"
-
-  run_script
-
-  local sonnet_prompt
-  sonnet_prompt=$(cat "$MOCK_HOME/.sonnet_prompt")
-
-  # Bash 不可 + 注入済みレポートを正本とする指示 (2026-07-29 空振りの再発防止)
-  echo "$sonnet_prompt" | grep -q "Bash は許可されていない"
-  echo "$sonnet_prompt" | grep -q "注入済みのレポートを正本として使うこと"
-
-  # 3 レポートが本体または生成失敗フォールバック文字列として存在する
-  # (mock 環境では repo graph 不在のため coverage は fallback 文字列になりうる)
-  echo "$sonnet_prompt" | grep -q "coverage"
-  echo "$sonnet_prompt" | grep -q "cluster"
-}
-
-# === Test: JSON validation failure fallback ===
-
-@test "E2E fallback: Bad JSON triggers Sonnet fallback" {
-  echo "pass1-bad-json" > "$MOCK_HOME/.mock_scenario"
-
-  run_script
   local log_content
   log_content=$(get_log)
 
-  # JSON バリデーション失敗
-  echo "$log_content" | grep -q "WARN: Pass 1 output failed JSON validation"
-  echo "$log_content" | grep -q "falling back to Sonnet"
-
-  # Sonnet フォールバック実行
-  echo "$log_content" | grep -q "Fallback: Sonnet handles theme selection + research"
-
-  # 成功完了
-  echo "$log_content" | grep -q "Completed successfully"
+  echo "$log_content" | grep -q "Line akc report gate passed"
+  echo "$log_content" | grep -q "report gate failed for line(s): authorship"
+  ! echo "$log_content" | grep -q "Completed successfully"
+  echo "$log_content" | grep -q "Failed (E_NO_REPORT"
+  # akc のレポートは存在する
+  ls "$MOCK_HOME/mock-vault/daily-research/$(date +%Y-%m-%d)_akc_"*.md
 }
 
-# === Test: Auth probe (real API check, not `claude --version`) ===
+# === Test: Auth probe / 401 ===
 
-@test "E2E auth: failed auth probe stops before Pass 1 (no Opus, no Sonnet)" {
+@test "E2E auth: failed auth probe stops before any line run" {
   echo "auth-fail" > "$MOCK_HOME/.mock_scenario"
 
   run run_script
@@ -350,16 +292,13 @@ get_log() {
   local log_content
   log_content=$(get_log)
 
-  # 認証 probe 失敗が loud にログされる
   echo "$log_content" | grep -q "Auth probe failed"
-
-  # Pass 1 (Opus) も Pass 2 (Sonnet) も実行されない
-  ! echo "$log_content" | grep -q "Pass 1: Theme selection (Opus)"
-  [ ! -f "$MOCK_HOME/.sonnet_prompt" ]
+  ! echo "$log_content" | grep -q "Line: akc"
+  [ ! -f "$MOCK_HOME/.prompt_akc" ]
 }
 
-@test "E2E auth: Pass 1 401 does NOT fall back to Sonnet (no double-401)" {
-  echo "pass1-401" > "$MOCK_HOME/.mock_scenario"
+@test "E2E auth: 401 during a line run aborts all lines (no retry, no later lines)" {
+  echo "run-401" > "$MOCK_HOME/.mock_scenario"
 
   run run_script
   [ "$status" -ne 0 ]
@@ -367,37 +306,28 @@ get_log() {
   local log_content
   log_content=$(get_log)
 
-  # 401 を検出してフォールバックを抑止
-  echo "$log_content" | grep -q "skipping Sonnet fallback"
-
-  # Sonnet フォールバックは起動しない
-  ! echo "$log_content" | grep -q "Fallback: Sonnet handles"
-  [ ! -f "$MOCK_HOME/.sonnet_prompt" ]
+  echo "$log_content" | grep -q "aborting all lines"
+  # 最初の line で停止 → 2 本目のプロンプトは記録されない
+  [ ! -f "$MOCK_HOME/.prompt_authorship" ]
 }
 
-# === Test: Pass 2 success masking (exit 0 but is_error) ===
+# === Test: 成功化け防止 (is_error / ctl-015) ===
 
-@test "E2E: Pass 2 exit 0 with is_error is reported as Failed (no success masking)" {
-  echo "pass2-iserror" > "$MOCK_HOME/.mock_scenario"
+@test "E2E: exit 0 with is_error is reported as Failed (no success masking)" {
+  echo "run-iserror" > "$MOCK_HOME/.mock_scenario"
 
   run run_script
-  [ "$status" -ne 0 ]   # FINAL_EXIT は非ゼロ (exit 0 だが is_error)
+  [ "$status" -ne 0 ]
 
   local log_content
   log_content=$(get_log)
 
-  # 「完成しました」と誤報告しない
   ! echo "$log_content" | grep -q "Completed successfully"
-  # E_FATAL として失敗報告される
-  echo "$log_content" | grep -q "Failed (E_FATAL"
+  echo "$log_content" | grep -q "Failed (E_NO_REPORT"
 }
 
-# === Test: Report existence gate (ctl-015) ===
-
-@test "E2E: Pass 2 success without report files is reported as Failed (report existence gate)" {
-  # 2026-07-29 の回帰: Sonnet が is_error:false のまま質問して end_turn → 成功化け。
-  # classify_exit では検出不能なので、当日レポートの不在で失敗判定されることを固定する
-  echo "pass2-noreport" > "$MOCK_HOME/.mock_scenario"
+@test "E2E: success without report files is reported as Failed (report existence gate)" {
+  echo "noreport" > "$MOCK_HOME/.mock_scenario"
 
   run run_script
   [ "$status" -ne 0 ]
@@ -410,21 +340,34 @@ get_log() {
   echo "$log_content" | grep -q "Failed (E_NO_REPORT"
 }
 
-@test "E2E: report existence gate passes when today's report exists" {
+# === Test: 不在 repo は skip され部分失敗になる ===
+
+@test "E2E: missing target_repo is skipped with WARN and counted as failed line" {
+  cat >> "$MOCK_PROJECT/config.toml" << EOF
+
+[tracks.ghost]
+name = "Ghost Line"
+
+[[tracks.ghost.repos]]
+key = "ghost"
+target_repo = "$MOCK_HOME/mock-repos/does-not-exist"
+EOF
+
   echo "normal" > "$MOCK_HOME/.mock_scenario"
 
-  run_script
+  run run_script
+  [ "$status" -ne 0 ]
+
   local log_content
   log_content=$(get_log)
 
-  echo "$log_content" | grep -q "Report existence gate passed: 1 report(s)"
-  echo "$log_content" | grep -q "Completed successfully"
+  echo "$log_content" | grep -q "target_repo が存在しない"
+  echo "$log_content" | grep -q "report gate failed for line(s):.*ghost"
 }
 
 # === Test: Legacy config schema fail-fast (ADR-0004) ===
 
-@test "E2E: legacy config schema stops before Pass 1 (fail-fast, no silent fallback)" {
-  # コードは新 schema・config は旧 schema のままの移行事故を fatal に止める
+@test "E2E: legacy config schema stops before any line run (fail-fast)" {
   cat > "$MOCK_PROJECT/config.toml" << 'EOF'
 [general]
 vault_path = "/tmp/mock-vault"
@@ -441,10 +384,7 @@ EOF
   log_content=$(get_log)
 
   echo "$log_content" | grep -q "config.toml schema check failed"
-
-  # Pass 1 (Opus) も Sonnet フォールバックも実行されない
-  ! echo "$log_content" | grep -q "Pass 1: Theme selection (Opus)"
-  [ ! -f "$MOCK_HOME/.sonnet_prompt" ]
+  [ ! -f "$MOCK_HOME/.prompt_authorship" ]
 }
 
 # === Test: Absolute path resolution ===
@@ -456,42 +396,41 @@ EOF
   local log_content
   log_content=$(get_log)
 
-  # CLAUDE_CMD が .claude/local のパスに解決されている
   echo "$log_content" | grep -q "DEBUG: CLAUDE_CMD=$MOCK_HOME/.claude/local/claude"
 }
 
 # === Test: No legacy gtimeout dependency ===
 
 @test "E2E: script does not use gtimeout or legacy timeout patterns" {
-  # gtimeout/TIMEOUT_CMD/timeout_secs はレガシーパターン。timeout (coreutils) は意図的に使用している
-  # コメント行を除外して、レガシーパターンがないことを確認
   ! grep -v '^#\|^[[:space:]]*#' "$MOCK_PROJECT/scripts/daily-research.sh" | grep -q 'gtimeout\|TIMEOUT_CMD\|timeout_secs'
 }
 
 # === Test: 自己改善ループの計測 (ADR-0006 / ctl-016) ===
 
-@test "E2E: metrics.jsonl is appended with run record and lint result" {
+@test "E2E: metrics.jsonl aggregates per-line runs into pass2 with lint result" {
   echo "normal" > "$MOCK_HOME/.mock_scenario"
 
   run_script
   local log_content
   log_content=$(get_log)
 
-  # 成功完了と計測は独立に成立する
   echo "$log_content" | grep -q "Completed successfully"
+  # per-line SUMMARY 行 (backfill regex の対象)
+  echo "$log_content" | grep -q "SUMMARY Run(akc):"
+  echo "$log_content" | grep -q "SUMMARY Run(authorship):"
 
-  # metrics.jsonl に当日 run が 1 行記録されている
   [ -f "$MOCK_PROJECT/metrics.jsonl" ]
   run python3 - "$MOCK_PROJECT/metrics.jsonl" << 'PYEOF'
 import json, sys
 rec = json.loads(open(sys.argv[1]).read().splitlines()[0])
 assert rec["final_class"] == "OK", rec
-assert rec["report_count"] == 1, rec
+assert rec["report_count"] == 2, rec
 assert rec["source"] == "live", rec
-assert rec["pass1"]["turns"] == 5, rec
-assert rec["pass2"]["turns"] == 3, rec
-# mock レポート (# mock report) はソース節なし → lint hard fail が記録される
-assert rec["lint"]["hard_fail"] == 1, rec
+assert rec["pass1"] is None, rec
+assert rec["pass2"]["turns"] == 6, rec  # 3 turns x 2 line
+assert rec["fallback_used"] is False, rec
+# mock レポートはソース節なし → lint hard fail が記録される
+assert rec["lint"]["hard_fail"] == 2, rec
 PYEOF
   [ "$status" -eq 0 ]
 

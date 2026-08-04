@@ -12,21 +12,26 @@ cd /path/to/daily-research
 
 # 2. Make scripts executable
 chmod +x scripts/daily-research.sh
+chmod +x scripts/morning-brief.sh
 chmod +x scripts/check-auth.sh
 
 # 3. Verify auth
 ./scripts/check-auth.sh
 
-# 4. Create your plist from template
+# 4. Create your plists from templates (research 05:00 + morning brief 07:00)
 cp com.example.daily-research.plist com.daily-research.plist
-# Edit com.daily-research.plist: replace YOUR_USERNAME with your macOS username
+cp com.example.daily-research-brief.plist com.daily-research-brief.plist
+# Edit both plists: replace YOUR_USERNAME with your macOS username
 
-# 5. Create launchd symlink
+# 5. Create launchd symlinks
 ln -sf "$(pwd)/com.daily-research.plist" \
        ~/Library/LaunchAgents/com.daily-research.plist
+ln -sf "$(pwd)/com.daily-research-brief.plist" \
+       ~/Library/LaunchAgents/com.daily-research-brief.plist
 
-# 6. Load the job
+# 6. Load the jobs
 launchctl load ~/Library/LaunchAgents/com.daily-research.plist
+launchctl load ~/Library/LaunchAgents/com.daily-research-brief.plist
 
 # 7. Verify registration
 launchctl list | grep daily-research
@@ -50,24 +55,35 @@ launchctl start com.daily-research
 
 # Direct execution (must be in a separate terminal from Claude Code)
 ./scripts/daily-research.sh
+
+# Morning brief only (deterministic; safe to re-run)
+./scripts/morning-brief.sh
 ```
 
 ## Architecture
 
 ```
-daily-research.sh
+daily-research.sh (05:00)
 ├── Lock acquisition (atomic mkdir)
 ├── Auth probe (real OAuth check)
-├── graph.jsonld health check
-├── Sync repo graphs → .repo-graphs/
-├── Coverage report (uncovered concepts → injected into Pass 1)
-├── Pass 1: Opus theme selection (--max-turns 15, stream-json)
-│   ├── Success → Pass themes to Sonnet
-│   └── Failure → Sonnet fallback (handles theme selection + research)
-└── Pass 2: Sonnet research & writing (--max-turns 55)
-    ├── WebSearch + WebFetch (multi-stage research)
-    ├── Write reports → Obsidian vault
-    └── Update graph.jsonld (record reinforced concepts)
+├── Config schema check (legacy pre-ADR-0008 schema fails fast)
+├── Per-line loop — for each line in config.toml `tracks`:
+│   ├── claude -p, cwd = the line's target_repo (Sonnet, --max-turns 55,
+│   │   25-min timeout, one retry on transient failure; 401 aborts all lines)
+│   │   ├── Read repo context (CLAUDE.md auto-loaded + context_files) + state/<line>/
+│   │   ├── Diff-first pass over watched sources · research with citation gate
+│   │   ├── Premise-challenge pass (mandatory contradiction section)
+│   │   └── Write actionable-tactics note → vault · update state + past_topics.json
+│   └── ctl-015 per-line report-existence gate ({date}_{track}_*.md in vault)
+├── ctl-016 deterministic report lint (sections synced to report-template.md)
+├── Pass 3: Obsidian wiki ingest (vault-side script, non-fatal)
+└── metrics.jsonl append + /dr-review age check
+
+morning-brief.sh (07:00)
+├── Deterministically extract 今すぐ実行可能な手 sections from today's notes (no LLM)
+└── Send numbered approval request to Slack via the vault's wiki_notify helper
+    (macOS notification fallback); approval happens in the operator's next
+    Claude session, where each repo's deploy gates apply
 ```
 
 ## Monitoring
@@ -102,22 +118,24 @@ launchctl list | grep daily-research
 | Auth valid | `./scripts/check-auth.sh` | "OK: Claude authentication is valid" |
 | Today's log exists | `ls logs/$(date +%Y-%m-%d).log` | File exists |
 | Log shows success | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | Match found |
-| Reports generated | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | One file per configured track |
+| Reports generated | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | One file per configured line |
 
 ### Log Messages Reference
 
 | Message | Meaning |
 |---------|---------|
-| `SUMMARY Pass1: cost=... turns=... duration=...` | Pass 1 execution statistics (cost, turns, duration, tokens) |
-| `Pass 1 completed: themes selected by Opus` | Opus theme selection succeeded |
-| `Pass 1 themes: <track>="...", ...` | Selected themes per track logged for reference |
-| `WARN: Pass 1 failed (exit code N), falling back to Sonnet` | Opus failed, Sonnet will handle everything |
-| `WARN: Pass 1 output failed JSON validation` | Opus returned invalid JSON, Sonnet fallback |
-| `Fallback: Sonnet handles theme selection + research` | Sonnet is doing all work (normal fallback behavior) |
-| `SUMMARY Pass2: cost=... turns=... duration=...` | Pass 2 execution statistics |
-| `SUMMARY Total: cost=... duration=...` | Combined cost/duration across both passes |
-| `graph.jsonld health check passed` | Concept graph is valid, pipeline proceeds |
-| `Completed successfully` | Both passes completed |
+| `Auth probe passed` | Real OAuth probe succeeded |
+| `Config schema check passed` | `config.toml` matches the current (ADR-0008) schema |
+| `=== Line: <track> (<repo path>) ===` | Per-line run starting with that repo as cwd |
+| `SUMMARY Run(<track>): cost=... turns=... duration=...` | Per-line run statistics (cost, turns, duration, tokens) |
+| `WARN: Line <track> failed (..., exit N) — retrying once` | Transient failure; the single retry is starting |
+| `ERROR: Line <track> returned 401 — aborting all lines` | Auth expired mid-run; no further lines are attempted |
+| `Line <track> report gate passed (N report)` | ctl-015: the line's `{date}_{track}_*.md` exists in the vault |
+| `WARN: Line <track> produced no ..._*.md (ctl-015)` | The line ran but wrote no report — counted as failed |
+| `Report existence gate passed: N report(s)` | All lines passed ctl-015 |
+| `WARN: report lint hard fail (ctl-016): ...` | Deterministic lint found a missing sources section / zero citations |
+| `Completed successfully` | All lines completed and passed the report gate |
+| `Morning brief sent to Slack (...)` | 07:00 brief delivered (from `morning-brief.sh`) |
 
 ## Common Issues and Fixes
 
@@ -168,16 +186,16 @@ ps aux | grep daily-research
 rm -f .daily-research.lock
 ```
 
-### 4. Pass 1 (Opus) Consistently Failing
+### 4. A Line Consistently Failing
 
-**Symptoms**: Log always shows `WARN: Pass 1 failed`, Sonnet fallback runs every day.
+**Symptoms**: Log shows `WARN: Line <track> failed after retry` or `WARN: Line <track> produced no ..._*.md (ctl-015)` on consecutive days.
 
 **Causes**:
-- Opus rate limit hit (Claude Max plan quota)
-- Network issues during WebSearch
-- `--max-turns 15` too low for complex theme selection
+- Rate limit hit (Claude Max plan quota) or network issues during WebSearch
+- The 25-minute per-line timeout expiring on an unusually deep run
+- The line's `target_repo` path in `config.toml` missing or moved
 
-**Fix**: Check the specific exit code in the log. Pass 1 failure is non-critical (Sonnet handles it). If persistent, consider increasing `--max-turns` or checking plan quota usage.
+**Fix**: Check the specific exit class in the log (`E_TRANSIENT` / `E_FATAL`). One line failing does not stop the others — their reports still land and get ingested. Verify `target_repo` exists, then re-run the script manually. A 401 (`E_AUTH`) means the OAuth token expired: see issue 1.
 
 ### 5. `ANTHROPIC_API_KEY` Set (Per-Token Billing)
 
@@ -206,7 +224,7 @@ ls "/path/to/your/obsidian/vault/daily-research/"
 
 ### 7. Slow Execution or Hangs Due to Plugins
 
-**Symptoms**: Pass 1 takes over 30 minutes instead of the normal 3-5 minutes, or hangs indefinitely. Log shows `No result event found in stream`.
+**Symptoms**: A per-line run burns most of its 25-minute timeout on startup, or hangs indefinitely.
 
 **Cause**: Claude Code plugins (pyright, swift-lsp, hookify, mgrep, claude-mem, etc.) installed globally. Each `claude -p` invocation initializes all plugin MCP servers, adding significant startup overhead.
 
@@ -263,28 +281,25 @@ cp past_topics.json.bak past_topics.json
 
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.daily-research.plist
+launchctl unload ~/Library/LaunchAgents/com.daily-research-brief.plist
 ```
 
 ### Re-enable Automation
 
 ```bash
 launchctl load ~/Library/LaunchAgents/com.daily-research.plist
+launchctl load ~/Library/LaunchAgents/com.daily-research-brief.plist
 ```
 
 ## Schedule
 
 | Time | Action |
 |------|--------|
-| AM 5:00 | `daily-research.sh` runs via launchd |
+| AM 5:00 | `daily-research.sh` runs via launchd (per-line research) |
+| AM 7:00 | `morning-brief.sh` runs via launchd (Slack approval brief) |
 
-If Mac was asleep at 5:00, launchd runs the job on wake (behavior of `StartCalendarInterval`).
+If Mac was asleep at the scheduled time, launchd runs the job on wake (behavior of `StartCalendarInterval`).
 
 ## Cost
 
-| Component | Model | Est. Cost/Run |
-|-----------|-------|---------------|
-| Pass 1: Theme selection | Opus | ~$0.30 |
-| Pass 2: Research & writing | Sonnet | ~$1.50 |
-| **Total** | | **~$1.80** |
-
-With Claude Max plan, these costs are covered by the subscription. No per-token charges.
+One Sonnet run per line (currently 4 lines; up to 8 invocations when every line needs its single retry), each capped at 25 minutes. The morning brief is pure shell — no model call. With Claude Max plan, model usage is covered by the subscription with no per-token charges; per-line cost and duration are recorded in `metrics.jsonl` for actual measurement (ADR-0008 calls for verifying cost in the first week's metrics).

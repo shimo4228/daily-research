@@ -1,6 +1,6 @@
 # daily-research
 
-> An autonomous research feedback engine. Every morning at 05:00, macOS launchd runs Claude Code (`claude -p`) over four research lines: `agent_systems` is a repo-backed line for Agent Knowledge Cycle, Contemplative Agent, and Agent Attribution Practice; `human_ai_publics`, `tech`, and `human_adaptation` are independent free-exploration lines repelled from saturated concept clusters. The public-sphere line finds human-led AI-enabled venues and produces a participation radar. Reports go to an Obsidian vault. Two-pass pipeline (Opus theme selection → Sonnet research). Bash orchestration with prompt files; JSON/TOML parsing in stdlib python3 (no pip dependencies, no orchestration framework).
+> An autonomous research feedback engine that runs inside the operator's research repositories. Every morning at 05:00, macOS launchd runs Claude Code (`claude -p`) once per research line with the line's repo as the working directory — four lines mapped 1:1 to DOI-registered repos: `akc` (agent-knowledge-cycle), `contemplative` (contemplative-agent), `aap` (agent-attribution-practice), `authorship` (authorship-strategy). Each run reads the repo's own operational context (CLAUDE.md, task ledger, open questions) and writes an actionable-tactics note to an Obsidian vault; at 07:00 a deterministic morning brief sends the day's proposed moves to Slack for approval. Single Sonnet pass per line (the earlier central 2-pass Opus+Sonnet pipeline was retired by ADR-0008). Bash orchestration with prompt files; JSON/TOML parsing in stdlib python3 (no pip dependencies, no orchestration framework).
 
 ## Core documentation
 
@@ -11,14 +11,14 @@
 
 ## Architecture
 
-- [graph.jsonld schema](docs/graph-schema.md): node types, cluster naming, integrity rules
-- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md): why tracks map to research repositories
-- [ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md): line consolidation, frontier mode, free-exploration line with cluster repulsion
-- [ADR-0005](docs/adr/0005-agent-systems-and-human-ai-publics-line-rebalance.md): fixed four-line rebalance and human-led AI public-sphere radar
-- [Theme selection prompt](prompts/theme-selection-prompt.md): Pass 1 (Opus) mode-driven theme selection (coverage / frontier / explore)
-- [Research protocol](prompts/research-protocol.md): Pass 2 (Sonnet) research quality core
-- [Main entry point](scripts/daily-research.sh): pipeline orchestration and fallback logic
-- [Coverage report](scripts/coverage-report.sh): per-repo coverage classification and mode judgement injected into Pass 1
+- [ADR-0008](docs/adr/0008-per-repo-in-context-research.md): per-repo in-context research — the current architecture; retires the concept-graph-driven theme selection
+- [ADR-0006](docs/adr/0006-self-improvement-loop-human-consumer.md): self-improvement loop (report gate, deterministic lint, metrics, /dr-review) — preserved under ADR-0008
+- [ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md): four 1:1 repo lines (line structure inherited by ADR-0008)
+- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md): why tracks map to research repositories (historical origin)
+- [Per-repo research protocol](prompts/repo-research-protocol.md): the run's objective function, diff-first pass, citation gate, premise-challenge pass
+- [Report template](templates/report-template.md): actionable-tactics note format (lead section: 今すぐ実行可能な手 with expiry conditions)
+- [Main entry point](scripts/daily-research.sh): per-line orchestration, retry, report gate, lint, metrics
+- [Morning brief](scripts/morning-brief.sh): 07:00 deterministic extraction and Slack approval request (no LLM)
 
 ## Operations
 
@@ -27,12 +27,12 @@
 
 ## Data
 
-- [graph.jsonld](graph.jsonld): concept cluster graph — schema.org JSON-LD research-history metadata; report nodes grouped into 7 broad concept clusters, updated incrementally by Pass 2 (query the file itself for live node counts)
+- [graph.jsonld](graph.jsonld): FROZEN archive — the retired concept-cluster graph of the pre-ADR-0008 pipeline; receives no more increments, kept for reading historical data ([schema](docs/graph-schema.md))
 
 ## Related
 
-- [agent-attribution-practice](https://doi.org/10.5281/zenodo.19652013): mapped research repo (line: agent_systems)
-- [agent-knowledge-cycle](https://doi.org/10.5281/zenodo.19200726): mapped research repo (line: agent_systems)
-- [contemplative-agent](https://doi.org/10.5281/zenodo.19212118): mapped research repo (line: agent_systems)
-- [authorship-strategy](https://doi.org/10.5281/zenodo.20263316): related research line; not actively mapped after ADR-0005
+- [agent-knowledge-cycle](https://doi.org/10.5281/zenodo.19200726): mapped research repo (line: akc)
+- [contemplative-agent](https://doi.org/10.5281/zenodo.19212118): mapped research repo (line: contemplative)
+- [agent-attribution-practice](https://doi.org/10.5281/zenodo.19652013): mapped research repo (line: aap)
+- [authorship-strategy](https://doi.org/10.5281/zenodo.20263316): mapped research repo (line: authorship)
 - [llmstxt.org](https://llmstxt.org/): the llms.txt standard this file follows
