@@ -406,13 +406,13 @@ def test_metrics_backfill_aggregates_per_repo_run_lines(monkeypatch, capsys, tmp
     assert rec["total_cost"] == 3.0
 
 
-# === report-lint (ctl-016, ADR-0008 actionable-tactics sections) ===
+# === report-lint (ctl-016, ADR-0009 自由形式 + 固定 2 節) ===
 
 GOOD_REPORT = (
     "---\ndate: 2026-08-05\nactionable: 1\n---\n\n# T\n\n"
-    "## 今すぐ実行可能な手\n**手 1: x**\n\n## 差分と失効チェック\nx\n\n"
-    "## 根拠と新規シグナル\nx\n\n## 我々の立場と矛盾・複雑化する知見\nx\n\n"
-    "## 開いた問い\nなし\n\n## ソース\n"
+    "冒頭の結論と背景解説を含む自由形式の本文。\n\n"
+    "## 機会メモ\n- **何を**: x\n- **どこで**: y\n- **失効日**: 2026-08-29\n\n"
+    "## ソース\n"
     + "\n".join(f"- [s{i}](https://example.com/{i})" for i in range(5))
     + "\n"
     + "p" * 1600
@@ -455,7 +455,7 @@ def test_report_lint_soft_violations(monkeypatch, capsys, tmp_path):
     soft = json.loads(out)["results"][0]["soft"]
     assert any("出典 URL 2 件" in s for s in soft)
     assert any("必須節欠落" in s for s in soft)
-    assert any("今すぐ実行可能な手" in s for s in soft)
+    assert any("機会メモ" in s for s in soft)
     assert any("本文" in s for s in soft)
 
 

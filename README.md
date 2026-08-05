@@ -2,7 +2,7 @@ Language: English | [日本語](README.ja.md)
 
 # daily-research
 
-**A research feedback engine that runs inside your own research repositories.** Every morning, [Claude Code](https://docs.anthropic.com/en/docs/claude-code) is launched once per research line *with the line's repo as its working directory*. It reads the repo's own operational context — CLAUDE.md, task ledger, open questions, implementation log — and hunts for **immediately executable moves that advance that line now**: new venues, new mechanisms, deadline-bound opportunities, refutations. Reports land in your [Obsidian](https://obsidian.md) vault as actionable-tactics notes, and at 07:00 a deterministic morning brief sends the day's proposed moves to Slack as an approval request.
+**A research feedback engine that runs inside your own research repositories.** Every morning, [Claude Code](https://docs.anthropic.com/en/docs/claude-code) is launched once per research line *with the line's repo as its working directory*. It reads the repo's own operational context — CLAUDE.md, task ledger, open questions, implementation log — and hunts for **external developments that move the repo's premises, questions, and positions**: new venues, new mechanisms, deadline-bound opportunities, refutations. Reports land in your [Obsidian](https://obsidian.md) vault as free-form explanatory notes written for a reader with zero prior context — something to read with your morning coffee, not a to-do queue. Deadline-bound opportunities are captured in a lightweight 機会メモ (opportunity memo) section at the end of each note.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/shimo4228/daily-research) [![GitMCP](https://img.shields.io/endpoint?url=https://gitmcp.io/badge/shimo4228/daily-research)](https://gitmcp.io/shimo4228/daily-research) ![python](https://img.shields.io/badge/python-3.11%2B%20stdlib-3776ab.svg)
 
@@ -18,34 +18,31 @@ flowchart TD
     orch --> loop["per-line loop over config.toml tracks<br/>claude -p · cwd = the line's repo · Sonnet<br/>25-min timeout · 1 retry (401 aborts all lines)"]
     loop --> ctx["input: repo CLAUDE.md (auto-loaded) + context_files<br/>+ line brief · past-themes dedup · report template"]
     ctx --> run["diff-first pass over state/&lt;line&gt;/ watched sources<br/>research with citation gate · premise-challenge pass"]
-    run --> out[("Obsidian vault — actionable-tactics notes<br/>+ state/&lt;line&gt;/ + past_topics.json")]
-    out -.-> brief["launchd — 07:00 morning-brief.sh<br/>deterministic extraction (no LLM)"]
-    brief --> slack["Slack approval request<br/>(macOS notification fallback)"]
+    run --> out[("Obsidian vault — explanatory research notes<br/>+ state/&lt;line&gt;/ + past_topics.json")]
 ```
 
 The orchestrator (`scripts/daily-research.sh`) loops over the lines defined in `config.toml` `tracks`. For each **line** it runs `claude -p` once — a single pass, model Sonnet, 25-minute timeout, one retry on transient failure (a 401 aborts all lines) — with the line's `target_repo` as the working directory. The run:
 
 1. reads the repo's context and state — CLAUDE.md is auto-loaded; the config's `context_files` (task ledger, open questions, implementation log) are read explicitly;
 2. makes a **diff-first pass** over the line's watched sources in `state/<line>/` (`watched-sources.md`, `playbook.md` — the playbook is delta-update only);
-3. selects the most valuable target — executability first, deadlines second, refutation potential third;
+3. selects the most valuable target — impact on the repo's premises and questions first, deadlines second, refutation potential third;
 4. researches with a **citation gate**: every cited URL must be resolved in-run via WebFetch;
-5. runs a **premise-challenge pass** with a mandatory "我々の立場と矛盾・複雑化する知見" (findings that contradict or complicate our position) section, plus a self-contamination guard — the operator's own repos never count as external signals;
-6. writes an actionable-tactics note to the vault (`{date}_{track}_{slug}.md`), leading with 今すぐ実行可能な手 — each move carrying steps, time estimate, **expiry condition**, and gate notes;
+5. runs a **premise-challenge pass**: every note must engage counter-evidence — external findings that contradict or complicate the repo's position — plus a self-contamination guard: the operator's own repos never count as external signals;
+6. writes a free-form explanatory note to the vault (`{date}_{track}_{slug}.md`): a lead verdict, then a background explainer written for a reader with zero prior knowledge, then the specifics; deadline-bound opportunities go in a fixed 機会メモ tail section (what / where / **expiry date**);
 7. updates `state/<line>/` and `past_topics.json`.
 
-The objective function is "find immediately executable moves that advance this line NOW". Corroboration-as-theme is forbidden, "nothing actionable today" with evidence is a valid first-class output, and there is no tactic quota.
+The objective function is "find external developments that move this repo's premises, questions, and positions — and deliver them as an explainer readable with zero prior context". Corroboration-as-theme is forbidden, "no change today" with evidence is a valid first-class output, and there is no discovery quota. Notes carry no proposals or approval requests ([ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)).
 
-This started as a generic trend-research tool. Fixed topic domains caused structural saturation, so on 2026-05-27 each track was remapped to a research repository ([ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)); a concept-graph coverage/frontier machinery followed ([ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md)), then a return to four 1:1 repo lines ([ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md)). On 2026-08-04 the central 2-pass concept-graph pipeline was retired entirely — its theme selection had converged on corroboration surveys — in favor of per-repo in-context research ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)).
+This started as a generic trend-research tool. Fixed topic domains caused structural saturation, so on 2026-05-27 each track was remapped to a research repository ([ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)); a concept-graph coverage/frontier machinery followed ([ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md)), then a return to four 1:1 repo lines ([ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md)). On 2026-08-04 the central 2-pass concept-graph pipeline was retired entirely — its theme selection had converged on corroboration surveys — in favor of per-repo in-context research ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)). On 2026-08-05, after the first full run, the output was converted from actionable-tactics notes with a Slack approval brief to free-form explanatory reports — the proposal framing had turned every note into a pending to-do ([ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)).
 
 ## Core concepts
 
-- **Actionable-tactics note** — the report format: the lead section is 今すぐ実行可能な手 (1–3 moves, each with steps / time estimate / expiry condition / gate notes). A move without an expiry condition is not a move; a day with zero moves is reported honestly as "本日 actionable なし" with evidence.
+- **Explanatory report** — the report format ([ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)): free-form body governed by five writing rules — lead with the verdict, background explainer for a zero-context reader, engage counter-evidence, include watched-source diffs, date every claim — plus two fixed machine-checked tail sections: 機会メモ (deadline-bound opportunities only: what / where / expiry date) and ソース (sources). No proposals, no approval requests.
 - **Diff-first pass** — each line persists `watched-sources.md` (sources + last-seen state) and `playbook.md` (dated situation→action entries) in `state/<line>/`. Runs pick up only what changed since last-seen; re-surveying known themes is forbidden, and the playbook is updated by dated deltas only, never rewritten wholesale.
-- **Premise-challenge pass** — an anti-sycophancy countermeasure: before writing, each finding is stress-tested for refuting evidence, and the report must carry a contradiction/complication section. If nothing was found, the note states the counter-search queries that came up empty.
+- **Premise-challenge pass** — an anti-sycophancy countermeasure: before writing, each finding is stress-tested for refuting evidence, and the report must engage counter-evidence against the repo's position. If nothing was found, the note states the counter-search queries that came up empty.
 - **Citation gate** — every URL in a report must have been resolved via WebFetch during the run; unresolved references are dropped or explicitly marked.
 - **Freshness-first** — knowledge in the LLM space goes stale on a one-week scale, so every claim carries an as-of date and every recommendation carries an expiry condition.
 - **Read-only repos** — the mapped repos are never edited, enforced at three layers: doctrine (protocol wording), execution (writes go only to the vault, `state/`, and `past_topics.json`), and permissions (`--allowedTools` restricts Write/Edit to absolute paths).
-- **Morning brief** — at 07:00, `scripts/morning-brief.sh` deterministically extracts the 今すぐ実行可能な手 sections from today's notes (no LLM in the loop) and sends a numbered approval request to Slack via the vault's `wiki_notify` helper. Approval happens in the operator's next Claude session, where each repo's deploy gates apply.
 - **Frozen archive** — `graph.jsonld`, the retired concept-cluster graph, receives no more increments; it is kept for reading historical data ([schema](docs/graph-schema.md)).
 
 ## Prerequisites
@@ -78,13 +75,10 @@ chmod +x scripts/*.sh
 # 5. Test run — in a SEPARATE terminal, never inside a Claude Code session
 ./scripts/daily-research.sh
 
-# 6. Schedule with launchd (optional): 05:00 research + 07:00 morning brief
+# 6. Schedule with launchd (optional): 05:00 research
 cp com.example.daily-research.plist com.daily-research.plist             # edit YOUR_USERNAME
-cp com.example.daily-research-brief.plist com.daily-research-brief.plist # edit YOUR_USERNAME
 ln -sf "$(pwd)/com.daily-research.plist" ~/Library/LaunchAgents/
-ln -sf "$(pwd)/com.daily-research-brief.plist" ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.daily-research.plist
-launchctl load ~/Library/LaunchAgents/com.daily-research-brief.plist
 ```
 
 **Install as a Claude Code skill:** the repo ships a [`SKILL.md`](SKILL.md) manifest at root, so cloning it into `~/.claude/skills/daily-research` makes it invocable as `/daily-research`.
@@ -127,14 +121,13 @@ Reports are generated in Japanese by default; change the language constraint in 
 daily-research/
 ├── scripts/
 │   ├── daily-research.sh       # Orchestrator (per-line loop: claude -p with cwd = each line's repo)
-│   ├── morning-brief.sh        # 07:00 approval brief — deterministic extraction, Slack via vault helper
 │   ├── lib/                    # Sourced shell libraries + the Python parsing module
 │   │   ├── env.sh log.sh notify.sh lock.sh auth.sh claude.sh
 │   │   └── dr_pipeline.py      # Single stdlib-only JSON/TOML module (line-brief, past-themes, report-lint, metrics)
 │   ├── check-auth.sh           # Real OAuth probe health check (shares lib/auth.sh)
 │   └── pre-commit.sh           # Secret / syntax guard
 ├── prompts/repo-research-protocol.md  # Per-repo research protocol (--append-system-prompt-file)
-├── templates/report-template.md       # Actionable-tactics note format
+├── templates/report-template.md       # Explanatory-report writing rules + fixed tail sections
 ├── state/                      # Per-line watched-sources / playbook / last-seen (gitignored)
 ├── graph.jsonld                # FROZEN archive of the retired concept-graph pipeline (docs/graph-schema.md)
 ├── config.example.toml         # Line → repo mapping (config.toml is gitignored)
@@ -147,10 +140,9 @@ daily-research/
 | Decision | Why |
 |----------|-----|
 | Per-repo in-context research: one Sonnet pass per line, cwd = the repo | The central 2-pass concept-graph pipeline could only see repos through synced graphs, so selection degenerated into gap-filling surveys; the operational context that knows what to advance lives inside each repo ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)) |
-| Objective = immediately executable moves, not concept reinforcement | Corroboration-as-theme is a benchmarked failure mode; "nothing actionable today" with evidence beats a tactic quota ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)) |
+| Objective = explanatory reports that move the repo's premises, not concept reinforcement | Corroboration-as-theme is a benchmarked failure mode ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)); the proposal/approval framing turned every note into a pending to-do, so notes are now reading material with a deadline-only 機会メモ tail ([ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)) |
 | Diff-first + premise-challenge + citation gate baked into the run structure | Survey-per-run is a documented anti-pattern; sycophantic drift needs structural countermeasures, not prompt intent ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)) |
 | Repos are read-only at three layers (doctrine / execution / permissions) | Contributions flow through vault notes a human folds back in, avoiding cross-repo pollution |
-| Morning brief is deterministic — no LLM reads the nightly notes | Nightly notes are LLM-generated, i.e. untrusted text; piping them through another LLM to write notifications widens the injection surface ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)) |
 | Lines map to research repositories | Fixed topic domains caused structural saturation ([ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)); four 1:1 repo lines since [ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md) |
 | Local state files, not external MCP memory | The previous Mem0 MCP integration ran zero times for 32 days due to silent failure; a local file fails loudly |
 | Shell orchestration + stdlib Python parser | No pip dependencies at runtime; JSON/TOML parsing lives in one testable `dr_pipeline.py` module |

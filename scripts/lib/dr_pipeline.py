@@ -442,7 +442,8 @@ def cmd_metrics_backfill(argv):
 # exit 0 = 全 PASS または soft violation のみ / 2 = hard fail あり。
 # hard: ソース節不在・出典 URL 0 件 (レポートの体を成していない)
 # soft: 出典 < min_sources / 必須節欠落 / 本文長不足
-# 必須節は actionable-tactics template (ADR-0008) のセクション。
+# 必須節は自由形式レポート (ADR-0009) の機械検査対象 — 機会メモのみ
+# (ソース節は hard 判定として別途検査)。本文の記述規律は人間 consumer が判断する。
 def cmd_report_lint(argv):
     import os
 
@@ -466,11 +467,7 @@ def cmd_report_lint(argv):
         pass
     MIN_BODY_CHARS = 1500
     ARTICLE_SECTIONS = [
-        "今すぐ実行可能な手",
-        "差分と失効チェック",
-        "根拠と新規シグナル",
-        "我々の立場と矛盾・複雑化する知見",
-        "開いた問い",
+        "機会メモ",
     ]
 
     results = []

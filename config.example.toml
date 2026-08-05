@@ -13,12 +13,12 @@ self_signals = [
 [report]
 min_sources = 5
 
-# === Lines (tracks) — per-repo in-context research (ADR-0008) ===
+# === Lines (tracks) — per-repo in-context research (ADR-0008 / ADR-0009) ===
 # Each track is a research LINE mapped 1:1 to a research repository via a
 # [[tracks.<line>.repos]] entry. Every night the orchestrator runs `claude -p`
 # once per line with cwd = target_repo, so the run reads the repo's own
 # operational context (CLAUDE.md auto-loads; context_files are read explicitly)
-# and produces an actionable-tactics note in the vault.
+# and produces a free-form explanatory research note in the vault.
 #
 # context_files: repo-relative paths the run must Read in Step 1 (task ledger,
 # open questions, implementation log). Missing files are skipped.
@@ -27,7 +27,7 @@ min_sources = 5
 
 [tracks.example_line]
 name = "Example Line 前進"
-focus = "example-repo line を今すぐ前に進める実行可能な手の発見 — 新 venue / 新機構 / 期限付き機会 / 反証"
+focus = "example-repo line の外部環境監視と、前提・問いを動かす状況判断 — 新 venue / 新機構 / 期限付き機会 / 反証"
 aliases = []
 context_files = [".notes/TASKS.md", "docs/manifesto.md"]
 sources = [
@@ -35,7 +35,7 @@ sources = [
   "関連 venue / registry / standard の新規開設・仕様変更",
 ]
 scoring_criteria = [
-  { name = "実行可能性", weight = 45, desc = "調べた結果が、運用者が今週実行できる具体的な手になるか" },
+  { name = "影響度", weight = 45, desc = "調べた結果が、repo の前提・open question・立場の理解を実際に動かすか (裏付けの追加は影響ではない)" },
   { name = "期限性・鮮度", weight = 25, desc = "期限付き機会か。1 週間で陳腐化する前に動く価値があるか" },
   { name = "反証性・前進性", weight = 30, desc = "repo の前提・open question を動かし、次の行動を変えるか" },
 ]
@@ -48,4 +48,4 @@ target_doi = "10.5281/zenodo.XXXXXXX"  # optional
 [user_profile]
 skills = ["Python"]
 interests = ["AI/ML"]
-goal = "研究 repo を今すぐ前に進める実行可能な手を毎朝発見する (裏付けの蓄積ではなく行動の変化が成果)"
+goal = "研究 repo の外部環境を毎朝監視し、前提・問いを動かす状況判断を解説レポートとして受け取る (裏付けの蓄積は成果ではない)"

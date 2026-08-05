@@ -215,7 +215,7 @@ get_log() {
   echo "$prompt" | grep -q "過去テーマ履歴"
   echo "$prompt" | grep -q "state/akc"
   echo "$prompt" | grep -q "past_topics.json"
-  echo "$prompt" | grep -q "今すぐ実行可能な手"   # テンプレート注入
+  echo "$prompt" | grep -q "機会メモ"   # テンプレート注入
   echo "$prompt" | grep -q "github.com/example-author"  # self_signals
 
   # authorship line も独立プロンプトで走る

@@ -22,10 +22,9 @@ daily-research/
 ├── prompts/
 │   └── repo-research-protocol.md       # per-repo リサーチプロトコル（--append-system-prompt-file 用）
 ├── templates/
-│   └── report-template.md              # actionable-tactics note フォーマット（frontmatter付き）
+│   └── report-template.md              # 解説レポートの記述規律 + 固定 2 節（frontmatter付き）
 ├── scripts/
 │   ├── daily-research.sh               # メインエントリポイント（ライン単位ループ、cwd = 各 repo）; lib/ を source
-│   ├── morning-brief.sh                # 07:00 承認ブリーフ（決定論抽出 → Slack）
 │   ├── check-auth.sh                   # OAuth チェック（real_auth_probe()）+ macOS 通知
 │   ├── pre-commit.sh                   # secret / 構文ガード（git pre-commit hook）
 │   └── lib/                             # sourced shell ライブラリ + Python 解析モジュール
@@ -34,7 +33,6 @@ daily-research/
 ├── state/                               # ラインごとの watched-sources / playbook / last-seen（gitignored）
 ├── graph.jsonld                         # 凍結アーカイブ（退役した concept-graph パイプライン）
 ├── com.example.daily-research.plist    # launchd スケジュール（AM 5:00、リサーチ）
-├── com.example.daily-research-brief.plist  # launchd スケジュール（AM 7:00、朝のブリーフ）
 ├── tests/
 │   ├── test-daily-research.bats        # ユニットテスト（構文、設定、セキュリティ）
 │   ├── test-e2e-mock.bats             # E2E モックテスト（ライン単位フロー）
@@ -54,7 +52,6 @@ daily-research/
 | スクリプト | 説明 | 使い方 |
 |-----------|------|--------|
 | `scripts/daily-research.sh` | メインエントリポイント。`config.toml` の `tracks` のラインをループし、ラインごとに `claude -p` を 1 回、cwd = そのラインの `target_repo` で実行する（Sonnet、25 分タイムアウト、transient 失敗時リトライ 1 回。401 は全ライン中止）。`lib/` を source し、環境サニタイズ、認証 probe、config schema チェック、ライン単位レポートゲート (ctl-015)、レポート lint (ctl-016)、metrics 追記を含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
-| `scripts/morning-brief.sh` | 当日ノートの「今すぐ実行可能な手」節を決定論抽出し（純 shell/awk、LLM を挟まない）、vault の `wiki_notify` ヘルパ経由で Slack へ番号付き承認リクエストを送る（macOS 通知フォールバック）。launchd が AM 7:00 に呼び出す。 | `./scripts/morning-brief.sh` |
 | `scripts/check-auth.sh` | `real_auth_probe()`（共有 `lib/auth.sh`; `claude --version` ではなく実 Haiku API probe。`--version` は期限切れトークンでも成功するため）で OAuth トークンの有効性を確認。失敗時に macOS 通知を表示。 | `./scripts/check-auth.sh` |
 | `scripts/pre-commit.sh` | git pre-commit hook として走る secret / 構文ガード。 | （git が自動実行） |
 

@@ -12,26 +12,21 @@ cd /path/to/daily-research
 
 # 2. Make scripts executable
 chmod +x scripts/daily-research.sh
-chmod +x scripts/morning-brief.sh
 chmod +x scripts/check-auth.sh
 
 # 3. Verify auth
 ./scripts/check-auth.sh
 
-# 4. Create your plists from templates (research 05:00 + morning brief 07:00)
+# 4. Create your plist from the template (research 05:00)
 cp com.example.daily-research.plist com.daily-research.plist
-cp com.example.daily-research-brief.plist com.daily-research-brief.plist
-# Edit both plists: replace YOUR_USERNAME with your macOS username
+# Edit the plist: replace YOUR_USERNAME with your macOS username
 
-# 5. Create launchd symlinks
+# 5. Create the launchd symlink
 ln -sf "$(pwd)/com.daily-research.plist" \
        ~/Library/LaunchAgents/com.daily-research.plist
-ln -sf "$(pwd)/com.daily-research-brief.plist" \
-       ~/Library/LaunchAgents/com.daily-research-brief.plist
 
-# 6. Load the jobs
+# 6. Load the job
 launchctl load ~/Library/LaunchAgents/com.daily-research.plist
-launchctl load ~/Library/LaunchAgents/com.daily-research-brief.plist
 
 # 7. Verify registration
 launchctl list | grep daily-research
@@ -55,9 +50,6 @@ launchctl start com.daily-research
 
 # Direct execution (must be in a separate terminal from Claude Code)
 ./scripts/daily-research.sh
-
-# Morning brief only (deterministic; safe to re-run)
-./scripts/morning-brief.sh
 ```
 
 ## Architecture
@@ -72,19 +64,16 @@ daily-research.sh (05:00)
 │   │   25-min timeout, one retry on transient failure; 401 aborts all lines)
 │   │   ├── Read repo context (CLAUDE.md auto-loaded + context_files) + state/<line>/
 │   │   ├── Diff-first pass over watched sources · research with citation gate
-│   │   ├── Premise-challenge pass (mandatory contradiction section)
-│   │   └── Write actionable-tactics note → vault · update state + past_topics.json
+│   │   ├── Premise-challenge pass (counter-evidence is mandatory)
+│   │   └── Write free-form explanatory note → vault · update state + past_topics.json
 │   └── ctl-015 per-line report-existence gate ({date}_{track}_*.md in vault)
-├── ctl-016 deterministic report lint (sections synced to report-template.md)
+├── ctl-016 deterministic report lint (fixed sections 機会メモ / ソース, synced to report-template.md)
 ├── Pass 3: Obsidian wiki ingest (vault-side script, non-fatal)
 └── metrics.jsonl append + /dr-review age check
-
-morning-brief.sh (07:00)
-├── Deterministically extract 今すぐ実行可能な手 sections from today's notes (no LLM)
-└── Send numbered approval request to Slack via the vault's wiki_notify helper
-    (macOS notification fallback); approval happens in the operator's next
-    Claude session, where each repo's deploy gates apply
 ```
+
+(The 07:00 morning-brief.sh was retired in ADR-0009 — notes are now reading
+material that requests no approval.)
 
 ## Monitoring
 
@@ -135,7 +124,6 @@ launchctl list | grep daily-research
 | `Report existence gate passed: N report(s)` | All lines passed ctl-015 |
 | `WARN: report lint hard fail (ctl-016): ...` | Deterministic lint found a missing sources section / zero citations |
 | `Completed successfully` | All lines completed and passed the report gate |
-| `Morning brief sent to Slack (...)` | 07:00 brief delivered (from `morning-brief.sh`) |
 
 ## Common Issues and Fixes
 
@@ -281,14 +269,12 @@ cp past_topics.json.bak past_topics.json
 
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.daily-research.plist
-launchctl unload ~/Library/LaunchAgents/com.daily-research-brief.plist
 ```
 
 ### Re-enable Automation
 
 ```bash
 launchctl load ~/Library/LaunchAgents/com.daily-research.plist
-launchctl load ~/Library/LaunchAgents/com.daily-research-brief.plist
 ```
 
 ## Schedule
@@ -296,10 +282,9 @@ launchctl load ~/Library/LaunchAgents/com.daily-research-brief.plist
 | Time | Action |
 |------|--------|
 | AM 5:00 | `daily-research.sh` runs via launchd (per-line research) |
-| AM 7:00 | `morning-brief.sh` runs via launchd (Slack approval brief) |
 
 If Mac was asleep at the scheduled time, launchd runs the job on wake (behavior of `StartCalendarInterval`).
 
 ## Cost
 
-One Sonnet run per line (currently 4 lines; up to 8 invocations when every line needs its single retry), each capped at 25 minutes. The morning brief is pure shell — no model call. With Claude Max plan, model usage is covered by the subscription with no per-token charges; per-line cost and duration are recorded in `metrics.jsonl` for actual measurement (ADR-0008 calls for verifying cost in the first week's metrics).
+One Sonnet run per line (currently 5 lines; up to 10 invocations when every line needs its single retry), each capped at 25 minutes. With Claude Max plan, model usage is covered by the subscription with no per-token charges; per-line cost and duration are recorded in `metrics.jsonl` for actual measurement (ADR-0008 calls for verifying cost in the first week's metrics).

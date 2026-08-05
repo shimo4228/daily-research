@@ -5,7 +5,6 @@
 # テストファイルからの相対パスでプロジェクトルートを解決
 PROJECT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 SCRIPT="$PROJECT_DIR/scripts/daily-research.sh"
-BRIEF="$PROJECT_DIR/scripts/morning-brief.sh"
 
 # === Setup / Teardown ===
 
@@ -26,10 +25,6 @@ teardown() {
 
 @test "check-auth.sh has valid syntax" {
   bash -n "$PROJECT_DIR/scripts/check-auth.sh"
-}
-
-@test "morning-brief.sh has valid syntax" {
-  bash -n "$BRIEF"
 }
 
 @test "entrypoints share real_auth_probe (no formalized --version auth)" {
@@ -78,9 +73,11 @@ teardown() {
 
 # === 新プロトコルの contract (repo-research-protocol.md) ===
 
-@test "protocol leads with actionable objective, not corroboration" {
-  grep -q '今すぐ前に進める、実行可能な手' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+@test "protocol leads with explanatory-report objective, not corroboration" {
+  grep -q '前提知識ゼロで読める解説レポート' "$PROJECT_DIR/prompts/repo-research-protocol.md"
   grep -q '裏付け (corroboration) は成果ではない' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  # ADR-0009: 提案・承認要求はレポートに書かない
+  grep -q '提案・承認要求・作業手順は書かない' "$PROJECT_DIR/prompts/repo-research-protocol.md"
 }
 
 @test "protocol mandates diff-first, premise-challenge, citation gate, self-signal guard" {
@@ -95,10 +92,12 @@ teardown() {
   grep -q 'ノルマは存在しない' "$PROJECT_DIR/prompts/repo-research-protocol.md"
 }
 
-@test "template requires expiry conditions and contradiction section" {
-  grep -q '失効条件' "$PROJECT_DIR/templates/report-template.md"
-  grep -q '我々の立場と矛盾・複雑化する知見' "$PROJECT_DIR/templates/report-template.md"
-  grep -q '今すぐ実行可能な手' "$PROJECT_DIR/templates/report-template.md"
+@test "template requires background explanation, counter-evidence, and fixed tail sections" {
+  grep -q '背景解説' "$PROJECT_DIR/templates/report-template.md"
+  grep -q '反対材料' "$PROJECT_DIR/templates/report-template.md"
+  grep -q '## 機会メモ' "$PROJECT_DIR/templates/report-template.md"
+  grep -q '## ソース' "$PROJECT_DIR/templates/report-template.md"
+  grep -q '失効日' "$PROJECT_DIR/templates/report-template.md"
 }
 
 # === Config files exist ===
@@ -137,29 +136,10 @@ teardown() {
   [ "$hour" = "5" ]
 }
 
-@test "brief plist is valid and scheduled at 7:00" {
-  plutil -lint "$PROJECT_DIR/com.shimomoto.daily-research-brief.plist"
-  local hour
-  hour=$(plutil -extract StartCalendarInterval.Hour raw \
-    "$PROJECT_DIR/com.shimomoto.daily-research-brief.plist")
-  [ "$hour" = "7" ]
-  plutil -extract ProgramArguments json \
-    "$PROJECT_DIR/com.shimomoto.daily-research-brief.plist" \
-    -o - | grep -q "morning-brief.sh"
-}
-
-# === Morning brief (7:00 Slack 承認リクエスト) ===
-
-@test "morning-brief extracts tactics deterministically (no LLM call)" {
-  # 抽出は awk、送信は wiki_notify (呼び出し元シェル)。claude 呼び出しを含まない
-  grep -q '今すぐ実行可能な手' "$BRIEF"
-  grep -q 'wiki_notify' "$BRIEF"
-  ! grep -q 'run_claude\|claude -p' "$BRIEF"
-}
-
-@test "morning-brief sends honest negative when no tactics" {
-  grep -q '本日 actionable なし' "$BRIEF"
-  grep -q 'ノートがありません\|ノートなし' "$BRIEF"
+@test "morning brief is retired (ADR-0009)" {
+  [ ! -f "$PROJECT_DIR/scripts/morning-brief.sh" ]
+  [ ! -f "$PROJECT_DIR/com.example.daily-research-brief.plist" ]
+  [ ! -f "$PROJECT_DIR/com.shimomoto.daily-research-brief.plist" ]
 }
 
 # === Lock mechanism ===

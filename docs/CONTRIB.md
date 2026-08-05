@@ -25,7 +25,6 @@ daily-research/
 │   └── report-template.md              # Actionable-tactics note format with frontmatter
 ├── scripts/
 │   ├── daily-research.sh               # Main entry point (per-line loop, cwd = each repo); sources lib/
-│   ├── morning-brief.sh                # 07:00 approval brief (deterministic extraction → Slack)
 │   ├── check-auth.sh                   # OAuth check via real_auth_probe() + notification
 │   ├── pre-commit.sh                   # Secret / syntax guard (git pre-commit hook)
 │   └── lib/                             # Sourced shell libs + Python parser
@@ -34,7 +33,6 @@ daily-research/
 ├── state/                               # Per-line watched-sources / playbook / last-seen (gitignored)
 ├── graph.jsonld                         # FROZEN archive (retired concept-graph pipeline)
 ├── com.example.daily-research.plist    # launchd schedule (AM 5:00, research)
-├── com.example.daily-research-brief.plist  # launchd schedule (AM 7:00, morning brief)
 ├── tests/
 │   ├── test-daily-research.bats        # Unit tests (syntax, config, security)
 │   ├── test-e2e-mock.bats             # E2E mock tests (per-line flow)
@@ -54,7 +52,6 @@ daily-research/
 | Script | Description | Usage |
 |--------|-------------|-------|
 | `scripts/daily-research.sh` | Main entry point. Loops over the lines in `config.toml` `tracks`; for each line runs `claude -p` once with cwd = the line's `target_repo` (Sonnet, 25-min timeout, one retry on transient failure; 401 aborts all lines). Sources `lib/`; includes env sanitization, auth probe, config schema check, per-line report gate (ctl-015), report lint (ctl-016), and metrics append. Called by launchd at AM 5:00. | `./scripts/daily-research.sh` |
-| `scripts/morning-brief.sh` | Deterministically extracts the 今すぐ実行可能な手 sections from today's notes (pure shell/awk, no LLM) and sends a numbered approval request to Slack via the vault's `wiki_notify` helper (macOS notification fallback). Called by launchd at AM 7:00. | `./scripts/morning-brief.sh` |
 | `scripts/check-auth.sh` | Checks Claude OAuth token validity via `real_auth_probe()` (shared `lib/auth.sh`; a real Haiku API probe, not `claude --version`, which succeeds even with an expired token). Shows macOS notification on failure. | `./scripts/check-auth.sh` |
 | `scripts/pre-commit.sh` | Secret / syntax guard run as a git pre-commit hook. | (auto-run by git) |
 

@@ -12,26 +12,21 @@ cd /path/to/daily-research
 
 # 2. スクリプトに実行権限を付与
 chmod +x scripts/daily-research.sh
-chmod +x scripts/morning-brief.sh
 chmod +x scripts/check-auth.sh
 
 # 3. 認証を確認
 ./scripts/check-auth.sh
 
-# 4. テンプレートから plist を作成 (リサーチ 05:00 + 朝のブリーフ 07:00)
+# 4. テンプレートから plist を作成 (リサーチ 05:00)
 cp com.example.daily-research.plist com.daily-research.plist
-cp com.example.daily-research-brief.plist com.daily-research-brief.plist
-# 両方の plist を編集: YOUR_USERNAME を macOS ユーザー名に置換
+# plist を編集: YOUR_USERNAME を macOS ユーザー名に置換
 
 # 5. launchd シンボリックリンクを作成
 ln -sf "$(pwd)/com.daily-research.plist" \
        ~/Library/LaunchAgents/com.daily-research.plist
-ln -sf "$(pwd)/com.daily-research-brief.plist" \
-       ~/Library/LaunchAgents/com.daily-research-brief.plist
 
 # 6. ジョブをロード
 launchctl load ~/Library/LaunchAgents/com.daily-research.plist
-launchctl load ~/Library/LaunchAgents/com.daily-research-brief.plist
 
 # 7. 登録を確認
 launchctl list | grep daily-research
@@ -55,9 +50,6 @@ launchctl start com.daily-research
 
 # 直接実行（Claude Code セッションとは別のターミナルで実行すること）
 ./scripts/daily-research.sh
-
-# 朝のブリーフのみ（決定論的。再実行しても安全）
-./scripts/morning-brief.sh
 ```
 
 ## アーキテクチャ
@@ -72,19 +64,15 @@ daily-research.sh (05:00)
 │   │   25 分タイムアウト, transient 失敗時リトライ 1 回; 401 は全ライン中止)
 │   │   ├── repo 文脈 (CLAUDE.md 自動ロード + context_files) + state/<line>/ を Read
 │   │   ├── watched sources の diff-first 確認 · citation ゲート付きリサーチ
-│   │   ├── 前提挑戦パス（矛盾節は必須）
-│   │   └── actionable-tactics note を vault に Write · state + past_topics.json 更新
+│   │   ├── 前提挑戦パス（反対材料の記述は必須）
+│   │   └── 自由形式の解説ノートを vault に Write · state + past_topics.json 更新
 │   └── ctl-015 ライン単位レポート存在ゲート（vault の {date}_{track}_*.md）
-├── ctl-016 決定論的レポート lint（必須節は report-template.md に同期）
+├── ctl-016 決定論的レポート lint（固定節 = 機会メモ / ソース、report-template.md に同期）
 ├── Pass 3: Obsidian wiki ingest（vault 側スクリプト、non-fatal）
 └── metrics.jsonl 追記 + /dr-review 経過日数チェック
-
-morning-brief.sh (07:00)
-├── 当日ノートの「今すぐ実行可能な手」節を決定論抽出（LLM を挟まない）
-└── vault の wiki_notify ヘルパ経由で Slack へ番号付き承認リクエストを送信
-    (macOS 通知フォールバック)。承認は運用者の次の Claude セッションで行い、
-    その時点で各 repo の deploy 前 gate が適用される
 ```
+
+(07:00 の morning-brief.sh は ADR-0009 で廃止 — レポートは承認を求めない読み物になった)
 
 ## 監視
 
@@ -135,7 +123,6 @@ launchctl list | grep daily-research
 | `Report existence gate passed: N report(s)` | 全ラインが ctl-015 を通過 |
 | `WARN: report lint hard fail (ctl-016): ...` | 決定論 lint がソース節不在・出典 0 件を検出 |
 | `Completed successfully` | 全ライン完了・レポートゲート通過 |
-| `Morning brief sent to Slack (...)` | 07:00 のブリーフ送信完了（`morning-brief.sh` 由来） |
 
 ## よくある問題と対処法
 
@@ -281,14 +268,12 @@ cp past_topics.json.bak past_topics.json
 
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.daily-research.plist
-launchctl unload ~/Library/LaunchAgents/com.daily-research-brief.plist
 ```
 
 ### 自動実行の再開
 
 ```bash
 launchctl load ~/Library/LaunchAgents/com.daily-research.plist
-launchctl load ~/Library/LaunchAgents/com.daily-research-brief.plist
 ```
 
 ## スケジュール
@@ -296,10 +281,9 @@ launchctl load ~/Library/LaunchAgents/com.daily-research-brief.plist
 | 時刻 | アクション |
 |------|-----------|
 | AM 5:00 | launchd が `daily-research.sh` を実行（ライン単位リサーチ） |
-| AM 7:00 | launchd が `morning-brief.sh` を実行（Slack 承認ブリーフ） |
 
 予定時刻に Mac がスリープ中だった場合、復帰時に launchd がジョブを実行する（`StartCalendarInterval` の仕様）。
 
 ## コスト
 
-Sonnet の run がライン数だけ走る（現行 4 ライン。全ラインがリトライした場合最大 8 回）。各 run は 25 分でタイムアウトする。朝のブリーフは純 shell でモデル呼び出しなし。Claude Max プランではモデル使用はサブスクリプションでカバーされ、従量課金は発生しない。ライン別のコスト・所要時間は `metrics.jsonl` に記録され、実測はそちらで確認する（ADR-0008 は初週の metrics でのコスト実測を求めている）。
+Sonnet の run がライン数だけ走る（現行 5 ライン。全ラインがリトライした場合最大 10 回）。各 run は 25 分でタイムアウトする。Claude Max プランではモデル使用はサブスクリプションでカバーされ、従量課金は発生しない。ライン別のコスト・所要時間は `metrics.jsonl` に記録され、実測はそちらで確認する（ADR-0008 は初週の metrics でのコスト実測を求めている）。

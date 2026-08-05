@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted
+Accepted — Decision 2 (目的関数・レポート形式) と Decision 6 (承認ブリーフ) は
+[ADR-0009](./0009-explanatory-report-and-brief-retirement.md) により修正
 
 ## Date
 

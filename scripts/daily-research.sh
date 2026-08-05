@@ -111,10 +111,10 @@ TEMPLATE=$(cat "$PROJECT_DIR/templates/report-template.md")
 PAST_THEMES=$(python3 "$DR_PY" past-themes 2>> "$LOG_FILE") \
   || PAST_THEMES="(過去テーマ履歴の生成失敗。past_topics.json を Read して重複を確認すること)"
 
-# === Per-repo line 実行 (ADR-0008) ===
+# === Per-repo line 実行 (ADR-0008 / 出力形式は ADR-0009) ===
 # 各 line の research repo を cwd にして claude -p を 1 回ずつ実行する。
 # repo native な運用文脈 (CLAUDE.md / TASKS / open questions) を入力に、
-# actionable-tactics note を vault に書く。プロトコルの正本は
+# 自由形式の解説レポートを vault に書く。プロトコルの正本は
 # prompts/repo-research-protocol.md。
 RUN_JSONS=""          # metrics 用: 各 line run の result JSON (改行区切り)
 FAILED_LINES=""       # レポートゲートを通らなかった line

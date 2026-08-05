@@ -1,6 +1,6 @@
 # daily-research
 
-Claude Code 非対話モード (`claude -p`) + macOS launchd で毎朝 AM 5:00 に自律リサーチを実行するシステム。4 つの研究ライン (line) が 4 つの DOI 登録済み研究 repo に 1:1 でマッピングされる (`akc` = agent-knowledge-cycle / `contemplative` = contemplative-agent / `aap` = agent-attribution-practice / `authorship` = authorship-strategy)。**per-repo in-context research (ADR-0008)**: 各 line は `claude -p` を **cwd = 対象 repo** で 1 回ずつ実行し、repo 自身の運用文脈 (CLAUDE.md / タスク台帳 / open questions / 実施履歴) から「この line を今すぐ前に進める実行可能な手」をリサーチして actionable-tactics note を Obsidian vault に出力する。毎朝 AM 7:00 に `morning-brief.sh` が当日ノートの手を決定論抽出し Slack へ承認リクエストを送る。
+Claude Code 非対話モード (`claude -p`) + macOS launchd で毎朝 AM 5:00 に自律リサーチを実行するシステム。5 つの研究ライン (line) が 5 つの DOI 登録済み研究 repo に 1:1 でマッピングされる (`akc` = agent-knowledge-cycle / `contemplative` = contemplative-agent / `aap` = agent-attribution-practice / `authorship` = authorship-strategy / `ans` = attention-not-self)。**per-repo in-context research (ADR-0008)**: 各 line は `claude -p` を **cwd = 対象 repo** で 1 回ずつ実行し、repo 自身の運用文脈 (CLAUDE.md / タスク台帳 / open questions / 実施履歴) から「repo の前提・問い・立場を動かす外部の動き」をリサーチする。出力は**前提知識ゼロで読める自由形式の解説レポート** (ADR-0009) を Obsidian vault へ — 提案・承認要求は書かず、日付付き締切を持つ機会だけを末尾「機会メモ」に記録する。7:00 の Slack 承認ブリーフは廃止済み (ADR-0009)。
 
 ## Tech Stack
 
@@ -11,7 +11,7 @@ Claude Code 非対話モード (`claude -p`) + macOS launchd で毎朝 AM 5:00 �
   (system 3.9.6 は tomllib 不足で不可)
 - Claude Code CLI (`claude -p`) — 非対話モード
 - TOML — 設定ファイル (`config.toml`)
-- launchd — macOS スケジューラ (5:00 research / 7:00 morning brief)
+- launchd — macOS スケジューラ (5:00 research)
 - bats (shell) + pytest (python) — テスト。pytest は dev/test 専用 (`.venv`)、
   ランタイムには載らない
 
@@ -21,7 +21,6 @@ Claude Code 非対話モード (`claude -p`) + macOS launchd で毎朝 AM 5:00 �
 daily-research/
 ├── scripts/
 │   ├── daily-research.sh       # オーケストレータ（per-line ループ: cwd=repo で claude -p）
-│   ├── morning-brief.sh        # 7:00 Slack 承認ブリーフ（決定論抽出 + wiki_notify 再利用）
 │   ├── lib/                    # sourced ライブラリ + python 解析モジュール
 │   │   ├── env.sh              # 環境サニタイズ + PATH
 │   │   ├── log.sh              # log() / log_init()（作成時 chmod、30日ローテーション）
@@ -36,7 +35,7 @@ daily-research/
 ├── prompts/
 │   └── repo-research-protocol.md # per-repo リサーチ・プロトコル（品質の中核、ADR-0008）
 ├── templates/
-│   └── report-template.md      # actionable-tactics note テンプレート（YAML frontmatter 付き）
+│   └── report-template.md      # 解説レポートの記述規律 + 固定 2 節（YAML frontmatter 付き）
 ├── state/                      # line 別 diff-first 状態（watched-sources.md / playbook.md、.gitignore）
 ├── graph.jsonld                # 旧 concept cluster graph — 凍結アーカイブ（増分停止、ADR-0008）
 ├── config.toml                 # line=repo マッピング・context_files・self_signals・出力設定（.gitignore）
@@ -48,9 +47,8 @@ daily-research/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md   # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md   # 開発ガイド
 │   ├── graph-schema.md              # 凍結アーカイブ graph.jsonld のスキーマ（参照用）
-│   └── adr/                         # アーキテクチャ決定記録（0001-0008 + README）
-├── com.example.daily-research.plist        # launchd plist テンプレート (5:00 research)
-└── com.example.daily-research-brief.plist  # launchd plist テンプレート (7:00 brief)
+│   └── adr/                         # アーキテクチャ決定記録（0001-0009 + README）
+└── com.example.daily-research.plist        # launchd plist テンプレート (5:00 research)
 ```
 
 ## Build / Test / Run
@@ -58,9 +56,6 @@ daily-research/
 ```bash
 # 手動実行（別ターミナルで。Claude Code セッションと同じターミナルでは不可）
 ./scripts/daily-research.sh
-
-# 朝ブリーフの手動実行 (当日ノートから抽出して Slack 送信)
-./scripts/morning-brief.sh
 
 # 認証確認
 ./scripts/check-auth.sh
@@ -70,13 +65,10 @@ bats tests/                          # shell (orchestrator / lib / e2e mock)
 .venv/bin/python -m pytest           # python (dr_pipeline モジュール、--cov 付き)
 # .venv 初期化: uv venv && uv pip install pytest pytest-cov
 
-# launchd 登録 (research 5:00 / brief 7:00)
+# launchd 登録 (research 5:00)
 cp com.example.daily-research.plist com.daily-research.plist          # → YOUR_USERNAME を編集
-cp com.example.daily-research-brief.plist com.daily-research-brief.plist
 ln -sf "$(pwd)/com.daily-research.plist" ~/Library/LaunchAgents/
-ln -sf "$(pwd)/com.daily-research-brief.plist" ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.daily-research.plist
-launchctl load ~/Library/LaunchAgents/com.daily-research-brief.plist
 
 # ログ確認
 tail -f logs/$(date +%Y-%m-%d).log
@@ -91,30 +83,31 @@ tail -f logs/$(date +%Y-%m-%d).log
   **cwd = target_repo** で実行。プロトコル正本は `prompts/repo-research-protocol.md`
   (`--append-system-prompt-file`)。per-line 注入 = `dr_pipeline.py line-brief`
   (focus / 判断基準 / context_files / self_signals) + past-themes (dedup) + テンプレート
-- **目的関数**: 「この line を今すぐ前に進める、実行可能な手を見つける」。
-  裏付け (corroboration) を主旨とするノートは禁止。**手数ノルマなし** —
-  「本日 actionable なし」は証拠付きの正の出力 (Goodhart 回避)
+- **目的関数 (ADR-0009)**: 「repo の前提・問い・立場を動かす外部の動きを見つけ、
+  前提知識ゼロで読める解説レポートとして届ける」。裏付け (corroboration) を主旨とする
+  ノートは禁止。**発見ノルマなし** — 「変化なし」は根拠付きの正の出力 (Goodhart 回避)。
+  提案・承認要求・作業手順は書かない — レポートは読み物であって作業指示ではない
 - **run 構造**: 文脈読込 → diff パス (state/ の watched-sources を前回比差分だけ確認、
   re-survey 禁止、失効項目の再検証) → 価値選定 → リサーチ (citation ゲート =
-  全 URL を run 内 WebFetch 解決) → 前提挑戦パス (「矛盾・複雑化する知見」必須節 +
+  全 URL を run 内 WebFetch 解決) → 前提挑戦パス (反対材料の記述義務 +
   自己汚染ガード) → vault へ note → state 更新 (playbook は日付付き delta のみ)
 - **repo は read-only を三層で強制**: doctrine (プロトコル文言) + 書き込み先指定 +
   permission 層 (`--allowedTools` の Write/Edit を vault / state / past_topics の
   絶対パスに制限)
 - **鮮度が一級制約**: LLM 界隈の知識は 1 週間スケールで陳腐化する。全 claim に
-  as-of 日付、全「手」に失効条件 (valid-until / 無効化イベント) を必須化
+  as-of 日付、機会メモの全機会に失効日 (valid-until / 無効化イベント) を必須化
 - **レポート存在ゲート (ctl-015、line 単位)**: 各 line の成否は当日の
   `{date}_{track}_*.md` が vault に存在するかで決定論判定。全 line 通過で成功、
   部分失敗は失敗 line を明示して非ゼロ exit
 - **自己改善ループ (ADR-0006、preserve)**: 毎朝の run を `metrics.jsonl` (gitignore)
   に永続記録 (per-line run 群は pass2 に合算、pass1 は None、fallback_used は
   リトライ発生の意味)。決定論レポート lint (ctl-016、hard fail のみ即日 notify) は
-  新テンプレートの必須節を検査。消費は対話 skill `/dr-review` (週 1 目安)。
-  効果を意図した変更 commit には `DR-Expect:` trailer。LLM judge は復活させない
-- **7:00 morning brief**: `morning-brief.sh` が当日ノートの「今すぐ実行可能な手」節を
-  **awk で決定論抽出** (LLM を挟まない — vault notify.sh の injection-guard 設計に従い
-  送信は呼び出し元シェル) し、vault の `wiki_notify` (Slack webhook + macOS fallback) で
-  承認リクエスト送信。承認・deploy 前 gate は運用者の次セッションの行為
+  固定 2 節 (機会メモ / ソース) を検査 — 本文の記述規律の質は人間 consumer が判断。
+  消費は対話 skill `/dr-review` (週 1 目安)。効果を意図した変更 commit には
+  `DR-Expect:` trailer。LLM judge は復活させない
+- **7:00 morning brief は廃止 (ADR-0009)**: 毎朝の Slack 承認リクエストが全ノートを
+  「返答待ち todo」化していたため retire。期限付き機会はノート末尾の「機会メモ」を
+  読むときに拾う (代替通知は意図的に作らない)
 - **`--append-system-prompt-file`** を使用（`--system-prompt-file` ではない）。
   Claude Code のデフォルト能力を保持するため
 - **`--allowedTools`** で最小権限: WebSearch, WebFetch, Read, Glob, Grep +
@@ -134,20 +127,21 @@ tail -f logs/$(date +%Y-%m-%d).log
 
 - 出力先: `{vault_path}/{output_dir}/{date}_{track}_{slug}.md`（flat dir — ctl-015 /
   ctl-016 / wiki ingest が前提にする）
-- **リード節 = 「今すぐ実行可能な手」**（1〜3 件、各: 何を / どこで / 手順 / 所要 /
-  失効条件 / gate 留意。0 件の日は証拠付き「本日 actionable なし」）
-- 必須節: 差分と失効チェック / 根拠と新規シグナル / 我々の立場と矛盾・複雑化する知見 /
-  開いた問い / ソース（最低 5 件、全 URL run 内解決済み）
-- **repo は read-only 参照のみ**。deploy・台帳更新はしない — note は提案であって
-  deploy ではない。取り込みは運用者が朝ブリーフ承認 → repo セッションで gate を通して行う
+- **本文は自由形式** (ADR-0009)。ただし記述規律 5 点 (冒頭に結論 / 前提知識ゼロ向けの
+  背景解説 / 反対材料を最低 1 件 / 定点観測結果 / 全 claim に as-of 日付) を課す —
+  正本は `templates/report-template.md`
+- 固定節は末尾 2 つのみ (ctl-016 の機械検査対象): **機会メモ**（日付付き締切を持つ
+  機会だけを 何を / どこで / 失効日 の 3 行定型で。無い日は「なし」）と
+  **ソース**（最低 5 件、全 URL run 内解決済み）
+- **repo は read-only 参照のみ**。deploy・台帳更新はしない — note は読み物であって
+  deploy ではない。取り込みは運用者が repo セッションで gate を通して行う
 
 ### プロンプト編集時の注意
 
 - `prompts/repo-research-protocol.md` がリサーチの質を決める中核ファイル
   (目的関数・7 step・失効規律の正本)
-- `templates/report-template.md` は出力フォーマットの定義。**見出しを変えるときは
-  ctl-016 の必須節リスト (`dr_pipeline.py` ARTICLE_SECTIONS) と `morning-brief.sh` の
-  抽出見出しを必ず同期する**
+- `templates/report-template.md` は記述規律と固定 2 節の定義。**固定節の見出しを
+  変えるときは ctl-016 の必須節リスト (`dr_pipeline.py` ARTICLE_SECTIONS) を必ず同期する**
 - プロンプトファイルは全て日本語
 
 ### 過去に試行・棄却した機能
@@ -169,9 +163,9 @@ tail -f logs/$(date +%Y-%m-%d).log
 
 ## Status
 
-- 本番稼働中。毎朝 AM 5:00 に launchd で自動実行、AM 7:00 に Slack 承認ブリーフ
+- 本番稼働中。毎朝 AM 5:00 に launchd で自動実行 (7:00 Slack ブリーフは ADR-0009 で廃止)
 - **per-repo in-context research (2026-08-04 再設計 = ADR-0008)**: `akc` /
-  `contemplative` / `aap` / `authorship` の 4 line が各 repo を cwd に単一パス実行。
+  `contemplative` / `aap` / `authorship` / `ans` の 5 line が各 repo を cwd に単一パス実行。
   ライン数・repo マッピングは config.toml から動的取得
 - 蓄積層: Obsidian vault の LLM-wiki (ingest は Pass 3 で継続) + line 別 state
   (watched-sources / playbook)。中央 graph.jsonld は凍結アーカイブ

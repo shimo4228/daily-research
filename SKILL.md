@@ -1,6 +1,6 @@
 ---
 name: daily-research
-description: Automated daily per-repo research — cron-driven pipeline that runs claude -p inside each mapped research repo, hunts for immediately executable moves, and writes actionable-tactics notes to an Obsidian vault. Bash orchestration with prompts over claude -p; JSON/TOML parsing in stdlib python3 (no pip dependencies).
+description: Automated daily per-repo research — cron-driven pipeline that runs claude -p inside each mapped research repo, hunts for external developments that move each repo's premises and questions, and writes free-form explanatory research notes to an Obsidian vault. Bash orchestration with prompts over claude -p; JSON/TOML parsing in stdlib python3 (no pip dependencies).
 compatibility: Requires the Claude Code CLI (claude -p), a cron/launchd scheduler, and python3 >=3.11 (stdlib only). Bash + prompts + stdlib python3.
 user-invocable: true
 origin: shimo4228
@@ -8,9 +8,9 @@ origin: shimo4228
 
 # daily-research
 
-Autonomous daily research powered by `claude -p` (Claude Code's non-interactive mode) — one Sonnet run per research line, executed *inside* the line's repo (cwd = the repo) so it reads the repo's own operational context, hunting for immediately executable moves and writing actionable-tactics notes directly to an Obsidian vault. A deterministic 07:00 morning brief forwards the proposed moves to Slack for approval.
+Autonomous daily research powered by `claude -p` (Claude Code's non-interactive mode) — one Sonnet run per research line, executed *inside* the line's repo (cwd = the repo) so it reads the repo's own operational context, hunting for external developments that move the repo's premises, questions, and positions, and writing free-form explanatory notes — readable with zero prior context — directly to an Obsidian vault. Deadline-bound opportunities are captured in a fixed 機会メモ tail section; notes carry no proposals or approval requests (ADR-0009).
 
-**Skill anatomy**: `prompts/repo-research-protocol.md` is the skill's core intelligence. `scripts/daily-research.sh` is a thin wrapper that invokes `claude -p` per line with that protocol; `scripts/morning-brief.sh` is the no-LLM approval brief. Everything else (tests, launchd plists, config template) is supporting infrastructure.
+**Skill anatomy**: `prompts/repo-research-protocol.md` is the skill's core intelligence. `scripts/daily-research.sh` is a thin wrapper that invokes `claude -p` per line with that protocol. Everything else (tests, launchd plists, config template) is supporting infrastructure.
 
 ## When to use
 
@@ -19,7 +19,7 @@ Autonomous daily research powered by `claude -p` (Claude Code's non-interactive 
 
 ## Design philosophy
 
-Action-first intake. A run admits a finding only if it becomes an immediately executable move — or a refutation that changes the line's next action; corroboration is never a theme, and "nothing actionable today" with evidence is a valid output. The pipeline's capacity is defined by human attention, not by source count — so the upstream filter (diff-first over watched sources, premise-challenge pass, citation gate), not downstream storage, is where quality is enforced. Every claim carries an as-of date and every move an expiry condition: knowledge here goes stale on a one-week scale.
+Impact-first intake. A run admits a finding only if it moves the repo's premises, questions, or position — including refutations; corroboration is never a theme, and "no change today" with evidence is a valid output. The pipeline's capacity is defined by human attention, not by source count — so the upstream filter (diff-first over watched sources, premise-challenge pass, citation gate), not downstream storage, is where quality is enforced. Every claim carries an as-of date and every deadline-bound opportunity an expiry date: knowledge here goes stale on a one-week scale.
 
 ## Execution
 
