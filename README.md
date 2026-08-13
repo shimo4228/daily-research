@@ -15,7 +15,7 @@ It runs unattended via macOS `launchd`, with no API plumbing and no orchestratio
 ```mermaid
 flowchart TD
     cron["launchd — 05:00 daily"] --> orch["daily-research.sh"]
-    orch --> pick["rotation-pick — one line per day<br/>(epoch day % line count, deterministic)"]
+    orch --> pick["rotation-pick — one rotated line + every daily line<br/>(epoch day % non-daily line count, deterministic)"]
     pick --> loop["call 1 · claude -p · cwd = the line's repo · Opus<br/>25-min timeout · 1 retry (401 aborts)"]
     loop --> ctx["input: repo CLAUDE.md (auto-loaded) + context_files<br/>+ line brief · past-themes dedup · report template"]
     ctx --> run["diff-first pass over state/&lt;line&gt;/ watched sources<br/>theme selection (binary checklist → theme_rank)<br/>research with citation gate · premise-challenge pass"]
@@ -23,7 +23,7 @@ flowchart TD
     out --> clarity["call 2 · fresh-context clarity revision · Sonnet<br/>defect-detection only · fail-open"]
 ```
 
-The orchestrator (`scripts/daily-research.sh`) picks **one line per morning** by deterministic rotation over the lines defined in `config.toml` `tracks` (epoch day % line count — a 5-line config revisits each line every 5 days, [ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md)). Call 1 runs `claude -p` once — model Opus, 25-minute timeout, one retry on transient failure (a 401 aborts) — with the line's `target_repo` as the working directory. The run:
+The orchestrator (`scripts/daily-research.sh`) picks **one rotated line per morning, plus every line marked `daily = true`** ([ADR-0011](docs/adr/0011-daily-line.md)). The rotation is deterministic over the non-daily lines defined in `config.toml` `tracks` (epoch day % non-daily line count — a 5-line rotation revisits each line every 5 days, [ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md)); daily lines run every day outside the cycle. For each picked line, call 1 runs `claude -p` once — model Opus, 25-minute timeout, one retry on transient failure (a 401 aborts the remaining lines while keeping finished results) — with the line's `target_repo` as the working directory. The run:
 
 1. reads the repo's context and state — CLAUDE.md is auto-loaded; the config's `context_files` (task ledger, open questions, implementation log) are read explicitly;
 2. makes a **diff-first pass** over the line's watched sources in `state/<line>/` (`watched-sources.md`, `playbook.md` — the playbook is delta-update only);
@@ -42,7 +42,7 @@ This started as a generic trend-research tool. Fixed topic domains caused struct
 ## Core concepts
 
 - **Explanatory report** — the report format ([ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)): free-form body governed by five writing rules — lead with the verdict, background explainer for a zero-context reader, engage counter-evidence, include watched-source diffs, date every claim — plus two fixed machine-checked tail sections: 機会メモ (deadline-bound opportunities only: what / where / expiry date) and ソース (sources). No proposals, no approval requests.
-- **Rotation + two-tier in-loop eval** — one line per morning by deterministic rotation; theme candidates are screened with a binary checklist before writing (`theme_rank` ceiling), and a fresh-context second process revises the finished note for first-contact readability ([ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md)). Verdicts are consumed inside the same run — no scores are stored, keeping the human-consumer principle of [ADR-0006](docs/adr/0006-self-improvement-loop-human-consumer.md) intact.
+- **Rotation + two-tier in-loop eval** — one rotated line per morning (plus `daily = true` lines every day, [ADR-0011](docs/adr/0011-daily-line.md)); theme candidates are screened with a binary checklist before writing (`theme_rank` ceiling), and a fresh-context second process revises the finished note for first-contact readability ([ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md)). Verdicts are consumed inside the same run — no scores are stored, keeping the human-consumer principle of [ADR-0006](docs/adr/0006-self-improvement-loop-human-consumer.md) intact.
 - **Diff-first pass** — each line persists `watched-sources.md` (sources + last-seen state) and `playbook.md` (dated situation→action entries) in `state/<line>/`. Runs pick up only what changed since last-seen; re-surveying known themes is forbidden, and the playbook is updated by dated deltas only, never rewritten wholesale.
 - **Premise-challenge pass** — an anti-sycophancy countermeasure: before writing, each finding is stress-tested for refuting evidence, and the report must engage counter-evidence against the repo's position. If nothing was found, the note states the counter-search queries that came up empty.
 - **Citation gate** — every URL in a report must have been resolved via WebFetch during the run; unresolved references are dropped or explicitly marked.

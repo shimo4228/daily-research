@@ -51,7 +51,7 @@ daily-research/
 
 | Script | Description | Usage |
 |--------|-------------|-------|
-| `scripts/daily-research.sh` | Main entry point. Picks one line per day by deterministic rotation (`rotation-pick`, ADR-0010) and runs call 1 = `claude -p` with cwd = the line's `target_repo` (Opus, 25-min timeout, one retry on transient failure; 401 aborts), then call 2 = a fresh-context clarity revision (Sonnet, 15-min timeout, fail-open). Sources `lib/`; includes env sanitization, auth probe, config schema check, report gate (ctl-015), report lint (ctl-016), and metrics append (incl. `clarity_pass`). Called by launchd at AM 5:00. | `./scripts/daily-research.sh` |
+| `scripts/daily-research.sh` | Main entry point. Picks one rotated line per day plus every `daily = true` line (`rotation-pick`, ADR-0010 / ADR-0011) and, per line, runs call 1 = `claude -p` with cwd = the line's `target_repo` (Opus, 25-min timeout, one retry on transient failure; 401 aborts), then call 2 = a fresh-context clarity revision (Sonnet, 15-min timeout, fail-open). Sources `lib/`; includes env sanitization, auth probe, config schema check, report gate (ctl-015), report lint (ctl-016), and metrics append (incl. `clarity_pass`). Called by launchd at AM 5:00. | `./scripts/daily-research.sh` |
 | `scripts/check-auth.sh` | Checks Claude OAuth token validity via `real_auth_probe()` (shared `lib/auth.sh`; a real Haiku API probe, not `claude --version`, which succeeds even with an expired token). Shows macOS notification on failure. | `./scripts/check-auth.sh` |
 | `scripts/pre-commit.sh` | Secret / syntax guard run as a git pre-commit hook. | (auto-run by git) |
 
@@ -128,7 +128,7 @@ bats tests/
 
 ## Claude Code CLI Flags
 
-### Call 1 — research run (Opus, one rotation-picked line per day)
+### Call 1 — research run (Opus, per picked line: one rotated + every daily line)
 
 The run is invoked with `cd "$TARGET_REPO"` so the repo's own CLAUDE.md auto-loads as context.
 

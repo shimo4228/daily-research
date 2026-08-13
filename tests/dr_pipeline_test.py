@@ -324,6 +324,74 @@ def test_rotation_pick_is_deterministic_and_cycles(monkeypatch, capsys):
 
 
 @pytest.mark.unit
+def test_rotation_pick_daily_line_runs_every_day(monkeypatch, capsys):
+    # daily = true の line は毎日出力され (輪番行の後)、輪番の周期には入らない。
+    import datetime
+
+    config_daily = str(FIXTURES / "config-daily.toml")
+    base = datetime.date(2026, 8, 13)
+    n_rotating = 4  # fixture の非 daily line 数
+
+    rotated = []
+    for i in range(n_rotating):
+        d = (base + datetime.timedelta(days=i)).isoformat()
+        rc, out, _ = run_cmd(monkeypatch, capsys, ["rotation-pick", config_daily, d])
+        assert rc == 0
+        rows = out.strip().splitlines()
+        assert len(rows) == 2  # 輪番 1 行 + daily 1 行
+        assert rows[1].startswith("desire\t")
+        assert not rows[0].startswith("desire\t")
+        rotated.append(rows[0])
+    # 非 daily の 4 line が 4 日でちょうど 1 回ずつ選ばれ、5 日目に一巡して戻る
+    assert len(set(rotated)) == n_rotating
+    rc, out, _ = run_cmd(
+        monkeypatch,
+        capsys,
+        [
+            "rotation-pick",
+            config_daily,
+            (base + datetime.timedelta(days=n_rotating)).isoformat(),
+        ],
+    )
+    assert out.strip().splitlines()[0] == rotated[0]
+
+    # 同日は何度呼んでも同じ (冪等)
+    rc, out2, _ = run_cmd(
+        monkeypatch, capsys, ["rotation-pick", config_daily, base.isoformat()]
+    )
+    assert out2.strip().splitlines()[0] == rotated[0]
+
+
+@pytest.mark.unit
+def test_rotation_pick_all_daily_outputs_daily_rows_only(monkeypatch, capsys, tmp_path):
+    # 全 line が daily の config では輪番行なしで daily 行のみ (config 記述順)
+    cfg = tmp_path / "all-daily.toml"
+    cfg.write_text(
+        '[tracks.a]\nname = "A"\ndaily = true\n'
+        '[[tracks.a.repos]]\nkey = "a"\ntarget_repo = "/nonexistent/a"\n'
+        '[tracks.b]\nname = "B"\ndaily = true\n'
+        '[[tracks.b.repos]]\nkey = "b"\ntarget_repo = "/nonexistent/b"\n'
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["rotation-pick", str(cfg), "2026-08-13"])
+    assert rc == 0
+    rows = out.strip().splitlines()
+    assert [r.split("\t")[0] for r in rows] == ["a", "b"]
+
+
+@pytest.mark.unit
+def test_daily_flag_must_be_boolean(monkeypatch, capsys, tmp_path):
+    # daily = "false" は bool("false") is True の事故になるため schema check で落とす
+    cfg = tmp_path / "bad-daily.toml"
+    cfg.write_text(
+        '[tracks.a]\nname = "A"\ndaily = "false"\n'
+        '[[tracks.a.repos]]\nkey = "a"\ntarget_repo = "/nonexistent/a"\n'
+    )
+    rc, _, err = run_cmd(monkeypatch, capsys, ["tracks", str(cfg)])
+    assert rc == 1
+    assert "daily must be a boolean" in err
+
+
+@pytest.mark.unit
 def test_rotation_pick_invalid_date_errors(monkeypatch, capsys):
     rc, _, err = run_cmd(monkeypatch, capsys, ["rotation-pick", CONFIG, "not-a-date"])
     assert rc == 64
@@ -414,6 +482,36 @@ def test_metrics_append_records_clarity_line(monkeypatch, capsys, tmp_path):
     assert rec["clarity_pass"]["ok"] is True
     assert rec["clarity_pass"]["turns"] == 2
     assert rec["total_cost"] == pytest.approx(2.52)
+
+
+@pytest.mark.unit
+def test_metrics_append_aggregates_multiple_clarity_lines(
+    monkeypatch, capsys, tmp_path
+):
+    # daily line 追加後は 1 日複数 line が走り CLARITY 行も複数届く。
+    # 合算して 1 dict へ写像し、ok は全行 ok のときだけ true。
+    metrics = tmp_path / "metrics.jsonl"
+    c1 = (
+        '{"total_cost_usd":0.02,"num_turns":2,"duration_ms":8000,'
+        '"usage":{"input_tokens":1500,"output_tokens":300}}'
+    )
+    c2 = (
+        '{"total_cost_usd":0.03,"num_turns":3,"duration_ms":9000,'
+        '"usage":{"input_tokens":500,"output_tokens":100}}'
+    )
+    rc, _, _ = run_cmd(
+        monkeypatch,
+        capsys,
+        ["metrics-append", str(metrics), "2026-08-15", "OK", "2", "0"],
+        f"RUN\t{RUN1_JSON}\nRUN\t{RUN2_JSON}\nCLARITY\t1\t{c1}\nCLARITY\t0\t{c2}\n",
+    )
+    assert rc == 0
+    rec = json.loads(metrics.read_text())
+    assert rec["pass2"]["turns"] == 26  # RUN 2 本は従来どおり pass2 に合算
+    assert rec["clarity_pass"]["ran"] is True
+    assert rec["clarity_pass"]["ok"] is False  # 1 本でも失敗すれば false
+    assert rec["clarity_pass"]["turns"] == 5
+    assert rec["clarity_pass"]["cost"] == pytest.approx(0.05)
 
 
 @pytest.mark.unit

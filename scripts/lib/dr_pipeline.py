@@ -51,6 +51,13 @@ def _load_tracks(config_path):
                 f"config uses the legacy schema: target_repo directly under [tracks.{name}]. "
                 f"Migrate to [[tracks.{name}.repos]] entries (see config.example.toml)"
             )
+        # daily は bool 限定。TOML で daily = "false" と書くと bool("false") is True で
+        # 毎日実行が黙って有効になる事故を、起動時の schema check で fail-fast に落とす。
+        if isinstance(v, dict) and "daily" in v and not isinstance(v["daily"], bool):
+            raise ValueError(
+                f"[tracks.{name}].daily must be a boolean (true/false), "
+                f"got {v['daily']!r}"
+            )
     return cfg, tracks
 
 
@@ -61,16 +68,18 @@ def _track_repos(track_cfg):
 
 
 def _track_rows(tracks):
-    """全 line の (track, key, target_repo) 行を config 記述順で返す。
+    """全 line の (track, key, target_repo, daily) 行を config 記述順で返す。
     tracks / rotation-pick が共有する行構築の正本 — 輪番の単位・順序は
-    この関数が定義する (二重実装で周期が黙って乖離するのを防ぐ)。"""
+    この関数が定義する (二重実装で周期が黙って乖離するのを防ぐ)。
+    daily = true の line は毎日実行され、輪番の周期には入らない。"""
     rows = []
     for track, v in tracks.items():
+        daily = bool(v.get("daily"))
         for r in _track_repos(v):
             key = r.get("key")
             repo = r.get("target_repo")
             if key and repo:
-                rows.append((track, key, repo))
+                rows.append((track, key, repo, daily))
     return rows
 
 
@@ -139,16 +148,19 @@ def cmd_tracks(argv):
     except ValueError as e:
         print(str(e), file=sys.stderr)
         return 1
-    for track, key, repo in _track_rows(tracks):
+    for track, key, repo, _daily in _track_rows(tracks):
         print(f"{track}\t{key}\t{repo}")
     return 0
 
 
-# --- rotation-pick <config_path> <date>: 当日担当 line を決定論選択して 1 行出力 ---
-# 出力形式は tracks と同じ "line<TAB>repo_key<TAB>target_repo"。選択は
-# date.toordinal() % 行数 (proleptic Gregorian 序数 — Unix epoch 日で再実装すると
-# 位相がずれるので注意)。state ファイル不要で、同日の再実行は常に同じ行を返す
-# (冪等)。順序は config.toml の記述順 (tomllib は挿入順を保持する)。
+# --- rotation-pick <config_path> <date>: 当日担当 line 群を決定論選択して出力 ---
+# 出力形式は tracks と同じ "line<TAB>repo_key<TAB>target_repo"。1 行目は非 daily 行の
+# 輪番選択 (date.toordinal() % 非daily行数。proleptic Gregorian 序数 — Unix epoch 日で
+# 再実装すると位相がずれるので注意)、以降に daily = true の line の行が config 記述順で
+# 続く (daily line は毎日実行され、輪番の周期を変えない)。daily の無い config では
+# 従来どおり 1 行のみ。全行 daily の config では輪番行なしで daily 行のみ。
+# state ファイル不要で、同日の再実行は常に同じ行群を返す (冪等)。順序は config.toml の
+# 記述順 (tomllib は挿入順を保持する)。
 # 注意: 輪番の単位は line ではなく repos 行 — 現行 config は 1 line = 1 repo なので
 # 一致するが、1 line に複数 repos を書くとその line の頻度が上がる。
 def cmd_rotation_pick(argv):
@@ -172,8 +184,14 @@ def cmd_rotation_pick(argv):
     except ValueError:
         print(f"rotation-pick: invalid date {date_s!r}", file=sys.stderr)
         return 64
-    track, key, repo = rows[day % len(rows)]
-    print(f"{track}\t{key}\t{repo}")
+    rotating = [r for r in rows if not r[3]]
+    daily = [r for r in rows if r[3]]
+    picked = []
+    if rotating:
+        picked.append(rotating[day % len(rotating)])
+    picked.extend(daily)
+    for track, key, repo, _d in picked:
+        print(f"{track}\t{key}\t{repo}")
     return 0
 
 
@@ -367,7 +385,7 @@ def cmd_metrics_append(argv):
         return 64
     metrics_path, date_s, final_class, report_count, retry = argv[:5]
 
-    runs, lint, clarity = [], None, None
+    runs, lint, clarities = [], None, []
     for line in sys.stdin.read().split("\n"):
         line = line.strip()
         if not line:
@@ -376,13 +394,15 @@ def cmd_metrics_append(argv):
         if label == "CLARITY":
             ok, _, cj = payload.partition("\t")
             try:
-                clarity = {
-                    "ran": True,
-                    "ok": ok == "1",
-                    **_pass_metrics(json.loads(cj)),
-                }
+                clarities.append(
+                    {
+                        "ran": True,
+                        "ok": ok == "1",
+                        **_pass_metrics(json.loads(cj)),
+                    }
+                )
             except (json.JSONDecodeError, AttributeError, TypeError):
-                clarity = {"ran": True, "ok": ok == "1"}
+                clarities.append({"ran": True, "ok": ok == "1"})
         elif label == "LINT":
             try:
                 lint = json.loads(payload)
@@ -393,6 +413,23 @@ def cmd_metrics_append(argv):
                 runs.append(_pass_metrics(json.loads(payload)))
             except json.JSONDecodeError:
                 continue
+
+    # clarity_pass: 1 本ならそのまま (旧来互換)。複数 (daily line 追加後の 1 日複数
+    # line 実行) は合算して 1 dict に写像する — ok は全 line 成功のときだけ true。
+    if not clarities:
+        clarity = None
+    elif len(clarities) == 1:
+        clarity = clarities[0]
+    else:
+        metric_dicts = [
+            {k: v for k, v in c.items() if k not in ("ran", "ok")} for c in clarities
+        ]
+        summed = _sum_pass_metrics([m for m in metric_dicts if m])
+        clarity = {
+            "ran": True,
+            "ok": all(c.get("ok") for c in clarities),
+            **(summed or {}),
+        }
 
     record = {
         "date": date_s,

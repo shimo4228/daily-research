@@ -143,6 +143,13 @@ if [[ "$PROTOCOL" == *repo-research-protocol.md ]]; then
   COUNT=$(( $(cat "$COUNT_FILE" 2>/dev/null || echo 0) + 1 ))
   echo "$COUNT" > "$COUNT_FILE"
 
+  # track 別失敗 seam: $MOCK_HOME/.fail_tracks に track 名を 1 行 1 つ書くと
+  # その track の run だけが恒常失敗する (部分失敗テスト用)
+  if [[ -f "$MOCK_HOME_DIR/.fail_tracks" ]] && grep -qx "$TRACK" "$MOCK_HOME_DIR/.fail_tracks"; then
+    echo "ERROR: simulated failure for track $TRACK" >&2
+    exit 1
+  fi
+
   case "$SCENARIO" in
     run-401)
       echo '{"type":"result","subtype":"error","is_error":true,"api_error_status":401,"duration_ms":2700,"result":"Failed to authenticate. API Error: 401"}'
@@ -203,6 +210,22 @@ run_script() {
   HOME="$MOCK_HOME" DEBUG=1 bash "$MOCK_PROJECT/scripts/daily-research.sh" 2>&1
 }
 
+# daily = true の line を config に追記する (輪番の周期・位相は変えない)
+add_daily_line() {
+  mkdir -p "$MOCK_HOME/mock-repos/desire-frontier"
+  cat >> "$MOCK_PROJECT/config.toml" << EOF
+
+[tracks.desire]
+name = "Desire Line"
+focus = "Desire line focus"
+daily = true
+
+[[tracks.desire.repos]]
+key = "desire"
+target_repo = "$MOCK_HOME/mock-repos/desire-frontier"
+EOF
+}
+
 get_log() {
   cat "$MOCK_PROJECT/logs/$DR_DATE.log"
 }
@@ -225,6 +248,74 @@ get_log() {
   echo "$log_content" | grep -q "DEBUG: CLAUDE_CMD="
   # 担当外 line の run は発生しない
   [ ! -f "$MOCK_HOME/.prompt_$OTHER" ]
+}
+
+@test "E2E daily: a daily line runs every day in addition to the rotation pick" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  add_daily_line
+
+  run_script
+  local log_content
+  log_content=$(get_log)
+
+  # 輪番の pick は daily 追加前と同じ (daily は輪番の外)
+  echo "$log_content" | grep -q "Rotation pick: $PICKED"
+  echo "$log_content" | grep -q "Line: $PICKED"
+  echo "$log_content" | grep -q "Line: desire"
+  ! echo "$log_content" | grep -q "Line: $OTHER"
+  # 両 line がゲートを通り、レポートは 2 本
+  echo "$log_content" | grep -q "Line $PICKED report gate passed"
+  echo "$log_content" | grep -q "Line desire report gate passed"
+  echo "$log_content" | grep -q "Report existence gate passed: 2 report(s)"
+  echo "$log_content" | grep -q "SUMMARY Run($PICKED):"
+  echo "$log_content" | grep -q "SUMMARY Run(desire):"
+  echo "$log_content" | grep -q "Completed successfully"
+  # 呼2 clarity は line ごとに走る
+  [ "$(echo "$log_content" | grep -c 'Clarity pass ok')" -eq 2 ]
+  [ -f "$MOCK_HOME/mock-vault/daily-research/${DR_DATE}_${PICKED}_mock-report.md" ]
+  [ -f "$MOCK_HOME/mock-vault/daily-research/${DR_DATE}_desire_mock-report.md" ]
+}
+
+@test "E2E daily: partial failure — daily line fails but rotation line's results survive" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  printf 'desire\n' > "$MOCK_HOME/.fail_tracks"
+  add_daily_line
+
+  run run_script
+  [ "$status" -ne 0 ]
+
+  local log_content
+  log_content=$(get_log)
+
+  # 先行 line (輪番) は完走し、成果は集計に残る
+  echo "$log_content" | grep -q "Line $PICKED report gate passed"
+  echo "$log_content" | grep -q "report gate failed for line desire"
+  echo "$log_content" | grep -q "Failed (E_PARTIAL"
+  ! echo "$log_content" | grep -q "Completed successfully"
+  echo "$log_content" | grep -q "metrics: appended"
+  [ -f "$MOCK_HOME/mock-vault/daily-research/${DR_DATE}_${PICKED}_mock-report.md" ]
+  [ ! -f "$MOCK_HOME/mock-vault/daily-research/${DR_DATE}_desire_mock-report.md" ]
+  # clarity は成功 line の分だけ走る
+  [ "$(echo "$log_content" | grep -c 'Clarity pass ok')" -eq 1 ]
+}
+
+@test "E2E daily: 401 mid-loop aborts remaining lines but keeps prior results" {
+  echo "run-401" > "$MOCK_HOME/.mock_scenario"
+  add_daily_line
+
+  run run_script
+  [ "$status" -ne 0 ]
+
+  local log_content
+  log_content=$(get_log)
+
+  # 1 line 目 (輪番) が 401 → 残 line (desire) は実行されない
+  echo "$log_content" | grep -q "returned 401 — aborting remaining lines"
+  echo "$log_content" | grep -q "skipping remaining lines"
+  [ ! -f "$MOCK_HOME/.prompt_desire" ]
+  # 即 exit しない — 集計 (metrics) は走る
+  echo "$log_content" | grep -q "metrics: appended"
+  echo "$log_content" | grep -q "Failed (E_NO_REPORT"
 }
 
 @test "E2E normal: per-line prompt carries line brief, paths, and past themes" {

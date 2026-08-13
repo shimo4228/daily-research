@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted — 決定 1（当日 1 line / ctl-015 の 1 本判定）は [ADR-0011](0011-daily-line.md) により一部修正（daily line の追加実行と部分失敗セマンティクス）
 
 ## Date
 

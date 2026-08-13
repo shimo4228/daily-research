@@ -51,7 +51,7 @@ daily-research/
 
 | スクリプト | 説明 | 使い方 |
 |-----------|------|--------|
-| `scripts/daily-research.sh` | メインエントリポイント。決定論輪番 (`rotation-pick`、ADR-0010) で当日担当 1 ラインを選び、呼1 = `claude -p` を cwd = そのラインの `target_repo` で実行（Opus、25 分タイムアウト、transient 失敗時リトライ 1 回。401 は中止）、続けて呼2 = fresh-context clarity 改稿（Sonnet、15 分、fail-open）を実行する。`lib/` を source し、環境サニタイズ、認証 probe、config schema チェック、レポートゲート (ctl-015)、レポート lint (ctl-016)、metrics 追記（`clarity_pass` 含む）を含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
+| `scripts/daily-research.sh` | メインエントリポイント。決定論輪番 (`rotation-pick`、ADR-0010) の 1 ライン + `daily = true` の全ライン (ADR-0011) を当日担当に選び、ラインごとに呼1 = `claude -p` を cwd = そのラインの `target_repo` で実行（Opus、25 分タイムアウト、transient 失敗時リトライ 1 回。401 は中止）、続けて呼2 = fresh-context clarity 改稿（Sonnet、15 分、fail-open）を実行する。`lib/` を source し、環境サニタイズ、認証 probe、config schema チェック、レポートゲート (ctl-015)、レポート lint (ctl-016)、metrics 追記（`clarity_pass` 含む）を含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
 | `scripts/check-auth.sh` | `real_auth_probe()`（共有 `lib/auth.sh`; `claude --version` ではなく実 Haiku API probe。`--version` は期限切れトークンでも成功するため）で OAuth トークンの有効性を確認。失敗時に macOS 通知を表示。 | `./scripts/check-auth.sh` |
 | `scripts/pre-commit.sh` | git pre-commit hook として走る secret / 構文ガード。 | （git が自動実行） |
 
@@ -128,7 +128,7 @@ bats tests/
 
 ## Claude Code CLI フラグ
 
-### 呼1 — リサーチ run (Opus、rotation で当日 1 ライン)
+### 呼1 — リサーチ run (Opus、担当ラインごと: 輪番 1 本 + daily 全ライン)
 
 run は `cd "$TARGET_REPO"` で起動されるため、repo 自身の CLAUDE.md が context として自動ロードされる。
 

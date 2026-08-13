@@ -59,7 +59,8 @@ daily-research.sh (05:00)
 ├── ロック取得（アトミック mkdir）
 ├── 認証 probe（実 OAuth チェック）
 ├── config schema チェック（ADR-0008 以前の旧 schema は fail-fast）
-├── rotation-pick — 当日担当ラインを決定論選択（epoch 日 % ライン数、ADR-0010）
+├── rotation-pick — 当日担当ラインを決定論選択: 輪番 1 ライン（epoch 日 % 非 daily
+│   ライン数、ADR-0010）+ `daily = true` の全ライン（毎日実行、ADR-0011）
 ├── 呼1: claude -p, cwd = 担当ラインの target_repo (Opus, --max-turns 55,
 │   25 分タイムアウト, transient 失敗時リトライ 1 回; 401 は中止)
 │   ├── repo 文脈 (CLAUDE.md 自動ロード + context_files) + state/<line>/ を Read
@@ -120,13 +121,13 @@ launchctl list | grep daily-research
 | `=== Line: <track> (<repo パス>) ===` | その repo を cwd にしたライン run の開始 |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | ライン run の実行統計（コスト、ターン数、所要時間、トークン数） |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | transient 失敗。1 回きりのリトライを開始 |
-| `ERROR: Line <track> returned 401 — aborting` | run 中に認証が期限切れ。即座に中断する |
+| `ERROR: Line <track> returned 401 — aborting remaining lines` | run 中に認証が期限切れ。残ラインは中断、完走済みラインの成果は保持 |
 | `Line <track> report gate passed (N report)` | ctl-015: そのラインの `{date}_{track}_*.md` が vault に存在 |
 | `WARN: Line <track> produced no ..._*.md (ctl-015)` | run は走ったがレポートが無い — 失敗として計上 |
-| `Report existence gate passed: N report(s)` | 当日担当ラインが ctl-015 を通過 |
+| `Report existence gate passed: N report(s)` | 当日担当ラインが全て ctl-015 を通過（一部失敗時は `Failed (E_PARTIAL: ...)` になる） |
 | `WARN: report lint hard fail (ctl-016): ...` | 決定論 lint がソース節不在・出典 0 件を検出 |
 | `WARN: clarity pass failed ...` | 呼2 clarity の失敗 (fail-open — run 全体は成功のまま) |
-| `Completed successfully` | 当日担当ライン完了・レポートゲート通過 |
+| `Completed successfully` | 当日担当ラインが全て完了・レポートゲート通過 |
 
 ## よくある問題と対処法
 
@@ -290,4 +291,4 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 
 ## コスト
 
-毎朝、rotation で選ばれた 1 ラインだけが走る（ADR-0010。呼1 = Opus 研究 run が最大 2 回 = リトライ込み、呼2 = Sonnet clarity が 1 回）。呼1 は 25 分、呼2 は 15 分でタイムアウトする。Claude Max プランではモデル使用はサブスクリプションでカバーされ、従量課金は発生しない。コスト・所要時間は `metrics.jsonl` に記録され、実測はそちらで確認する。
+毎朝、rotation で選ばれた 1 ライン + `daily = true` の全ラインが走る（ADR-0010 / ADR-0011。daily 1 本構成なら毎朝 2 ライン）。ラインごとに呼1 = Opus 研究 run が最大 2 回 = リトライ込み、呼2 = Sonnet clarity が 1 回。呼1 は 25 分、呼2 は 15 分でタイムアウトする。Claude Max プランではモデル使用はサブスクリプションでカバーされ、従量課金は発生しない。コスト・所要時間は `metrics.jsonl` に記録され、実測はそちらで確認する。

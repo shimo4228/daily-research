@@ -1,0 +1,46 @@
+# Test fixture config — config-lines.toml + a daily line (daily = true).
+# The daily line runs every day and is excluded from the rotation cycle.
+[general]
+vault_path = "/nonexistent/fixture-vault"
+output_dir = "daily-research"
+self_signals = ["github.com/example-author", "Example Author"]
+
+[report]
+min_sources = 5
+
+[tracks.akc]
+name = "AKC Line"
+focus = "AKC line focus"
+
+[[tracks.akc.repos]]
+key = "akc"
+target_repo = "/nonexistent/fixture-repos/agent-knowledge-cycle"
+
+[tracks.contemplative]
+name = "Contemplative Line"
+
+[[tracks.contemplative.repos]]
+key = "contemplative"
+target_repo = "/nonexistent/fixture-repos/contemplative-agent"
+
+[tracks.aap]
+name = "AAP Line"
+
+[[tracks.aap.repos]]
+key = "aap"
+target_repo = "/nonexistent/fixture-repos/agent-attribution-practice"
+
+[tracks.authorship]
+name = "Authorship Line"
+
+[[tracks.authorship.repos]]
+key = "authorship"
+target_repo = "/nonexistent/fixture-repos/authorship-strategy"
+
+[tracks.desire]
+name = "Desire Line"
+daily = true
+
+[[tracks.desire.repos]]
+key = "desire"
+target_repo = "/nonexistent/fixture-repos/desire-frontier"

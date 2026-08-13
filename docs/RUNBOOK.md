@@ -59,7 +59,8 @@ daily-research.sh (05:00)
 ├── Lock acquisition (atomic mkdir)
 ├── Auth probe (real OAuth check)
 ├── Config schema check (legacy pre-ADR-0008 schema fails fast)
-├── rotation-pick — deterministic selection of today's line (epoch day % line count, ADR-0010)
+├── rotation-pick — deterministic selection of today's lines: one rotated line
+│   (epoch day % non-daily line count, ADR-0010) + every `daily = true` line (ADR-0011)
 ├── Call 1: claude -p, cwd = the picked line's target_repo (Opus, --max-turns 55,
 │   25-min timeout, one retry on transient failure; 401 aborts)
 │   ├── Read repo context (CLAUDE.md auto-loaded + context_files) + state/<line>/
@@ -121,13 +122,13 @@ launchctl list | grep daily-research
 | `=== Line: <track> (<repo path>) ===` | Per-line run starting with that repo as cwd |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | Per-line run statistics (cost, turns, duration, tokens) |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | Transient failure; the single retry is starting |
-| `ERROR: Line <track> returned 401 — aborting` | Auth expired mid-run; the run stops immediately |
+| `ERROR: Line <track> returned 401 — aborting remaining lines` | Auth expired mid-run; remaining lines are skipped, finished lines' results are kept |
 | `Line <track> report gate passed (N report)` | ctl-015: the line's `{date}_{track}_*.md` exists in the vault |
 | `WARN: Line <track> produced no ..._*.md (ctl-015)` | The line ran but wrote no report — counted as failed |
-| `Report existence gate passed: N report(s)` | The day's picked line passed ctl-015 |
+| `Report existence gate passed: N report(s)` | Every picked line passed ctl-015 (partial failure logs `Failed (E_PARTIAL: ...)` instead) |
 | `WARN: clarity pass failed ...` | Call 2 clarity failed (fail-open — the run still succeeds) |
 | `WARN: report lint hard fail (ctl-016): ...` | Deterministic lint found a missing sources section / zero citations |
-| `Completed successfully` | The day's picked line completed and passed the report gate |
+| `Completed successfully` | All of the day's picked lines completed and passed the report gate |
 
 ## Common Issues and Fixes
 
@@ -291,4 +292,4 @@ If Mac was asleep at the scheduled time, launchd runs the job on wake (behavior 
 
 ## Cost
 
-Each morning only the rotation-picked line runs (ADR-0010): Call 1 = one Opus research run (at most 2 invocations with its single retry, 25-min cap) plus Call 2 = one Sonnet clarity revision (15-min cap). With Claude Max plan, model usage is covered by the subscription with no per-token charges; cost and duration are recorded in `metrics.jsonl` for actual measurement.
+Each morning the rotation-picked line plus every `daily = true` line runs (ADR-0010 / ADR-0011) — with one daily line configured that is 2 lines per morning. Per line: Call 1 = one Opus research run (at most 2 invocations with its single retry, 25-min cap) plus Call 2 = one Sonnet clarity revision (15-min cap). With Claude Max plan, model usage is covered by the subscription with no per-token charges; cost and duration are recorded in `metrics.jsonl` for actual measurement.

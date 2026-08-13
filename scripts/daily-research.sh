@@ -113,14 +113,15 @@ PAST_THEMES=$(python3 "$DR_PY" past-themes 2>> "$LOG_FILE") \
   || PAST_THEMES="(過去テーマ履歴の生成失敗。past_topics.json を Read して重複を確認すること)"
 
 # === Per-repo line 実行 (ADR-0008 / 出力形式は ADR-0009 / 輪番は ADR-0010) ===
-# rotation (ADR-0010): 毎朝、config.toml の line 群から当日担当の 1 line だけを
-# 決定論選択 (epoch_day % N) して実行する。担当 line の research repo を cwd に
-# claude -p を実行し、repo native な運用文脈 (CLAUDE.md / TASKS / open questions) を
-# 入力に、自由形式の解説レポートを vault に書く。プロトコルの正本は
-# prompts/repo-research-protocol.md。
+# rotation (ADR-0010): 毎朝、config.toml の line 群から当日担当 line を決定論選択
+# (非 daily 行の epoch_day % N) して実行する。daily = true の line は輪番に加えて
+# 毎日実行される (rotation-pick が輪番 1 行 + daily 全行を出力する)。各 line の
+# research repo を cwd に claude -p を実行し、repo native な運用文脈 (CLAUDE.md /
+# TASKS / open questions) を入力に、自由形式の解説レポートを vault に書く。
+# プロトコルの正本は prompts/repo-research-protocol.md。
 RETRY_USED=0          # リトライが発生したか (metrics の fallback_used に記録)
 
-# rotation-pick 出力: line \t repo_key \t target_repo (当日担当の 1 行のみ)。
+# rotation-pick 出力: line \t repo_key \t target_repo (輪番 1 行 + daily 全行)。
 # 失敗 (line 0 件・config 破損) は set -e で無言終了せず、明示ログ + notify で止める。
 TRACKS_TSV=$(python3 "$DR_PY" rotation-pick "$PROJECT_DIR/config.toml" "$DATE" 2>> "$LOG_FILE") || TRACKS_TSV=""
 if [ -z "$TRACKS_TSV" ]; then
@@ -128,8 +129,36 @@ if [ -z "$TRACKS_TSV" ]; then
   notify "rotation-pick が失敗しました。config.toml の line 定義を確認してください" "Daily Research Error"
   exit 1
 fi
-IFS=$'\t' read -r TRACK _ TARGET_REPO <<< "$TRACKS_TSV"
-log "Rotation pick: $TRACK (ADR-0010)"
+
+# 行を配列へ。ループ内の claude -p / find が stdin や変数を触っても iteration が
+# 壊れないように、herestring の while-read で直接回さず先に固める。
+TRACK_ROWS=()
+while IFS= read -r ROW; do
+  [ -n "$ROW" ] && TRACK_ROWS+=("$ROW")
+done <<< "$TRACKS_TSV"
+
+IFS=$'\t' read -r FIRST_TRACK _ _ <<< "${TRACK_ROWS[0]}"
+log "Rotation pick: $FIRST_TRACK (ADR-0010)"
+if [ "${#TRACK_ROWS[@]}" -gt 1 ]; then
+  log "Today's lines: ${#TRACK_ROWS[@]} (rotation + daily)"
+fi
+
+# bash 3.2 + set -u では空配列参照が unbound variable で無言死するため、
+# 上流ガードと独立にここでも fail-fast する (notify 付き)。
+if [ "${#TRACK_ROWS[@]}" -eq 0 ]; then
+  log "ERROR: rotation-pick returned no rows"
+  notify "rotation-pick が 0 行を返しました。config.toml を確認してください" "Daily Research Error"
+  exit 1
+fi
+
+FAILED_LINES=""       # ctl-015 に落ちた line (空 = 全 line 成功)
+OK_LINES=""
+METRICS_STDIN=""      # metrics-append へ渡す RUN / CLARITY 行の蓄積 (1 日 1 レコード)
+AUTH_ABORT=0          # 401 検出 — 残 line は中断するが、完走済み line の集計は捨てない
+
+for ROW in "${TRACK_ROWS[@]}"; do
+
+IFS=$'\t' read -r TRACK _ TARGET_REPO <<< "$ROW"
 log "=== Line: $TRACK ($TARGET_REPO) ==="
 
 LINE_JSON=""
@@ -201,10 +230,13 @@ $TEMPLATE"
 
     LINE_CLASS=$(classify_exit "$LINE_EXIT" "$LINE_JSON")
     if [ "$LINE_CLASS" = "E_AUTH" ]; then
-      # 401 は認証自体の失敗。リトライは無意味 → 即 STOP。
-      log "ERROR: Line $TRACK returned 401 — aborting"
+      # 401 は認証自体の失敗。リトライは無意味 → この line と残 line を中断する。
+      # 即 exit にしない — 完走済み line の metrics / lint / wiki ingest / 通知を
+      # 捨てないため (ループ末尾の AUTH_ABORT 判定で break する)。
+      log "ERROR: Line $TRACK returned 401 — aborting remaining lines"
       notify "Claude認証エラー(401)。claude を起動して再認証してください。" "Daily Research Auth Error"
-      exit 1
+      AUTH_ABORT=1
+      break
     fi
     if [ "$LINE_CLASS" = "OK" ]; then
       break
@@ -217,42 +249,35 @@ $TEMPLATE"
     fi
   done
 fi
+METRICS_STDIN+="RUN"$'\t'"$LINE_JSON"$'\n'
 
-# === レポート存在ゲート (ctl-015) ===
-# 成否は「当日の {date}_{track}_*.md が vault に存在するか」の決定論条件で最終判定する。
+# === レポート存在ゲート (ctl-015) — per line ===
+# 成否は「当日の {date}_{track}_*.md が vault に存在するか」の決定論条件で判定する。
 # モデルが質問だけして end_turn する成功化けは is_error では検出できない。
 # find は 1 回だけ走らせ、最初のヒットを呼2 clarity の対象ノートとして共有する
 # (${VAR%%$'\n'*} は pipe を使わない先頭行抽出 — set -o pipefail 下で head の
 # SIGPIPE がスクリプトごと落とす事故を避ける)。
 CLARITY_NOTE=""
-REPORT_COUNT=0
 if [ -d "$REPORT_DIR" ]; then
   LINE_REPORT_FILES=$(find "$REPORT_DIR" -maxdepth 1 -name "${DATE}_${TRACK}_*.md" 2>/dev/null)
   CLARITY_NOTE=${LINE_REPORT_FILES%%$'\n'*}
-  # metrics 用の当日レポート総数 (track を跨ぐ ${DATE}_*.md — 旧来互換の集計)
-  REPORT_COUNT=$(find "$REPORT_DIR" -maxdepth 1 -name "${DATE}_*.md" 2>/dev/null | wc -l | tr -d ' ')
 fi
 
-if [ -n "$CLARITY_NOTE" ]; then
-  PASS2_CLASS="OK"
-  log "Line $TRACK report gate passed"
-  log "Report existence gate passed: $REPORT_COUNT report(s) for $DATE"
-else
-  PASS2_CLASS="E_NO_REPORT"
+if [ -z "$CLARITY_NOTE" ]; then
   log "WARN: report gate failed for line $TRACK — no ${DATE}_${TRACK}_*.md (ctl-015)"
-fi
+  FAILED_LINES="$FAILED_LINES $TRACK"
+else
+  log "Line $TRACK report gate passed"
+  OK_LINES="$OK_LINES $TRACK"
 
-# === 呼2: fresh-context clarity 改稿 (ADR-0010) ===
-# 当日レポートだけを読む別プロセスが、前提知識ゼロ読者としてのつまずき箇所を
-# span 単位で直接改稿する。「fresh」の範囲 = リサーチ過程・対象 repo の文脈を
-# 持たないこと。cwd は PROJECT_DIR のまま (daily-research の CLAUDE.md は
-# ロードされる — repo-local settings.json のプラグイン無効化を効かせるための
-# 意図的トレードオフ、ADR-0010)。
-# fail-open: 失敗しても未改稿 (timeout 時は部分改稿) の版が残り、FINAL_EXIT に
-# 影響させない。lint (ctl-016) より前に置く — 検査対象は改稿後の最終版。
-CLARITY_LINE=""       # metrics 用: "CLARITY\t<ok>\t<json>"
-if [ "$PASS2_CLASS" = "OK" ]; then
-  # PASS2_CLASS=OK は ctl-015 ゲートで CLARITY_NOTE の存在を既に保証している
+  # === 呼2: fresh-context clarity 改稿 (ADR-0010) ===
+  # 当日レポートだけを読む別プロセスが、前提知識ゼロ読者としてのつまずき箇所を
+  # span 単位で直接改稿する。「fresh」の範囲 = リサーチ過程・対象 repo の文脈を
+  # 持たないこと。cwd は PROJECT_DIR のまま (daily-research の CLAUDE.md は
+  # ロードされる — repo-local settings.json のプラグイン無効化を効かせるための
+  # 意図的トレードオフ、ADR-0010)。
+  # fail-open: 失敗しても未改稿 (timeout 時は部分改稿) の版が残り、FINAL_EXIT に
+  # 影響させない。lint (ctl-016) より前に置く — 検査対象は改稿後の最終版。
   log "=== Clarity pass: $(basename "$CLARITY_NOTE") ==="
   CLARITY_PROMPT="以下のレポートを、システムプロンプトに追記された clarity レビュー・
 プロトコルに従ってレビューし、必要な箇所だけを直接改稿してください。
@@ -280,13 +305,41 @@ $CLARITY_NOTE"
   CLARITY_CLASS=$(classify_exit "$CLARITY_EXIT" "$CLARITY_JSON")
   if [ "$CLARITY_CLASS" = "OK" ]; then
     log "Clarity pass ok"
-    CLARITY_LINE=$(printf 'CLARITY\t1\t%s' "$CLARITY_JSON")
+    METRICS_STDIN+="CLARITY"$'\t'"1"$'\t'"$CLARITY_JSON"$'\n'
   else
     # fail-open: timeout / max-turns 超過の場合は部分改稿の版が残りうる
     log "WARN: clarity pass failed ($CLARITY_CLASS, exit $CLARITY_EXIT) — keeping unrevised report (fail-open)"
     [ -z "$CLARITY_JSON" ] && CLARITY_JSON='{}'
-    CLARITY_LINE=$(printf 'CLARITY\t0\t%s' "$CLARITY_JSON")
+    METRICS_STDIN+="CLARITY"$'\t'"0"$'\t'"$CLARITY_JSON"$'\n'
   fi
+fi
+
+# 401 検出後は残 line を実行しない (認証切れ状態での実行は無意味)。
+# ここまでに完走した line の集計・lint・ingest は下流で通常どおり行う。
+if [ "$AUTH_ABORT" = "1" ]; then
+  log "WARN: auth error — skipping remaining lines"
+  break
+fi
+
+done  # for ROW in TRACK_ROWS (per-line 実行ここまで)
+
+# === 日次集約 (ctl-015 の最終判定 + metrics 用の当日レポート総数) ===
+# 全 line がゲートを通れば OK。一部だけ落ちたら E_PARTIAL、全滅なら E_NO_REPORT。
+# E_PARTIAL を分けるのは metrics のセマンティクス維持のため — E_NO_REPORT は従来
+# どおり「その日レポート 0 本」を意味し、稼働中の DR-Expect (no_report_count) を
+# 部分成功の日が汚染しない (ADR-0011)。
+REPORT_COUNT=0
+if [ -d "$REPORT_DIR" ]; then
+  # track を跨ぐ ${DATE}_*.md — 旧来互換の集計
+  REPORT_COUNT=$(find "$REPORT_DIR" -maxdepth 1 -name "${DATE}_*.md" 2>/dev/null | wc -l | tr -d ' ')
+fi
+if [ -z "$FAILED_LINES" ]; then
+  PASS2_CLASS="OK"
+  log "Report existence gate passed: $REPORT_COUNT report(s) for $DATE"
+elif [ -n "$OK_LINES" ]; then
+  PASS2_CLASS="E_PARTIAL"
+else
+  PASS2_CLASS="E_NO_REPORT"
 fi
 
 # 決定論的レポート lint (ctl-016)。品質プロキシを metrics に残し、hard fail
@@ -307,11 +360,16 @@ fi
 if [ "$PASS2_CLASS" = "OK" ]; then
   FINAL_EXIT=0
   log "=== Completed successfully ==="
-  notify "今朝のリサーチレポートが完成しました (line: $TRACK)" "Daily Research"
+  notify "今朝のリサーチレポートが完成しました (lines:$OK_LINES)" "Daily Research"
 else
   FINAL_EXIT=1
-  log "=== Failed ($PASS2_CLASS, exit code $FINAL_EXIT) ==="
-  notify "リサーチが失敗しました (line: $TRACK)。ログを確認してください。" "Daily Research Error"
+  log "=== Failed ($PASS2_CLASS:$FAILED_LINES, exit code $FINAL_EXIT) ==="
+  if [ -n "$OK_LINES" ]; then
+    # 部分成功 — 成果が存在することを通知から消さない (alarm fatigue 回避)
+    notify "リサーチが一部失敗しました (ok:$OK_LINES / failed:$FAILED_LINES)。ログを確認してください。" "Daily Research Error"
+  else
+    notify "リサーチが失敗しました (lines:$FAILED_LINES)。ログを確認してください。" "Daily Research Error"
+  fi
 fi
 
 # === Pass 3: Obsidian wiki 自動 ingest (vault 側スクリプト。non-fatal) ===
@@ -340,8 +398,9 @@ fi
 # 収集は non-fatal — 計測の失敗で生成ジョブの成否を変えない。
 # stdin framing は "LABEL\t[meta\t]payload" で統一 (RUN / LINT / CLARITY)。
 # dr_pipeline 側がラベルで判別し pass2 等に写像する (レコード形は旧来互換 —
-# expect-check / /dr-review が消費)。
-printf 'RUN\t%s\nLINT\t%s\n%s\n' "$LINE_JSON" "$LINT_JSON" "$CLARITY_LINE" \
+# expect-check / /dr-review が消費)。1 日複数 line の RUN / CLARITY は
+# METRICS_STDIN に蓄積済みで、dr_pipeline が 1 レコードへ合算する。
+printf '%sLINT\t%s\n' "$METRICS_STDIN" "$LINT_JSON" \
   | python3 "$DR_PY" metrics-append "$PROJECT_DIR/metrics.jsonl" "$DATE" \
       "$PASS2_CLASS" "${REPORT_COUNT:-0}" "$RETRY_USED" >> "$LOG_FILE" 2>&1 \
   || log "WARN: metrics-append failed (non-fatal)"
