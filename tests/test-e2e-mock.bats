@@ -24,6 +24,7 @@ setup() {
   cp "$REAL_PROJECT_DIR/scripts/daily-research.sh" "$MOCK_PROJECT/scripts/"
   cp -R "$REAL_PROJECT_DIR/scripts/lib" "$MOCK_PROJECT/scripts/"
   cp "$REAL_PROJECT_DIR/prompts/repo-research-protocol.md" "$MOCK_PROJECT/prompts/"
+  cp "$REAL_PROJECT_DIR/prompts/clarity-review-protocol.md" "$MOCK_PROJECT/prompts/"
   cp "$REAL_PROJECT_DIR/templates/report-template.md" "$MOCK_PROJECT/templates/"
 
   # 対象 repo (cwd になる) を作る。akc / authorship の 2 line 構成
@@ -62,6 +63,12 @@ EOF
   "topics": []
 }
 EOF
+
+  # rotation (ADR-0010): 当日担当 line をテスト側でも同じロジックで解決する
+  PY3="${PYTHON3:-/opt/homebrew/bin/python3}"
+  PICKED=$("$PY3" "$MOCK_PROJECT/scripts/lib/dr_pipeline.py" rotation-pick \
+    "$MOCK_PROJECT/config.toml" "$(date +%Y-%m-%d)" | cut -f1)
+  if [ "$PICKED" = "akc" ]; then OTHER="authorship"; else OTHER="akc"; fi
 
   # mock claude を配置（スクリプトが $HOME/.claude/local を PATH に追加する）
   mkdir -p "$MOCK_HOME/.claude/local"
@@ -119,8 +126,8 @@ if [[ "$MODEL" == "haiku" ]]; then
   esac
 fi
 
-# --- Sonnet (per-line research run) ---
-if [[ "$MODEL" == "sonnet" ]]; then
+# --- Opus (per-line research run。ADR-0010 で呼1 は opus) ---
+if [[ "$MODEL" == "opus" ]]; then
   # プロンプトから track を抽出 (per-line プロンプトの "- line (track): X" 行)
   TRACK=$(printf '%s\n' "$PROMPT" | sed -n 's/^- line (track): //p' | head -1)
   TRACK=${TRACK:-unknown}
@@ -145,12 +152,10 @@ if [[ "$MODEL" == "sonnet" ]]; then
         exit 1
       fi
       ;;
-    fail-one-line)
-      # authorship line だけ恒常失敗 (リトライも失敗) → 部分失敗
-      if [[ "$TRACK" == "authorship" ]]; then
-        echo "ERROR: simulated line failure" >&2
-        exit 1
-      fi
+    run-fail-always)
+      # 担当 line が恒常失敗 (リトライも失敗) → E_NO_REPORT
+      echo "ERROR: simulated line failure" >&2
+      exit 1
       ;;
     run-iserror)
       echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"error","is_error":true,"total_cost_usd":0.05,"num_turns":55,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}}]'
@@ -166,6 +171,20 @@ if [[ "$MODEL" == "sonnet" ]]; then
   fi
 
   echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.05,"num_turns":3,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}}]'
+  exit 0
+fi
+
+# --- Sonnet (呼2: clarity 改稿。ADR-0010) ---
+if [[ "$MODEL" == "sonnet" ]]; then
+  printf '%s' "$PROMPT" > "$MOCK_HOME_DIR/.prompt_clarity"
+  printf '%s' "$ALLOWED" > "$MOCK_HOME_DIR/.allowed_clarity"
+
+  if [[ "$SCENARIO" == "clarity-fail" ]]; then
+    echo "ERROR: simulated clarity failure" >&2
+    exit 1
+  fi
+
+  echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.02,"num_turns":2,"duration_ms":8000,"usage":{"input_tokens":1500,"output_tokens":300}}]'
   exit 0
 fi
 
@@ -185,22 +204,24 @@ get_log() {
   cat "$MOCK_PROJECT/logs/$(date +%Y-%m-%d).log"
 }
 
-# === Test: Normal path (per-line runs) ===
+# === Test: Normal path (rotation: 当日担当 1 line のみ、ADR-0010) ===
 
-@test "E2E normal: both lines run with repo cwd and reports pass the gate" {
+@test "E2E normal: only the rotation-picked line runs and its report passes the gate" {
   echo "normal" > "$MOCK_HOME/.mock_scenario"
 
   run_script
   local log_content
   log_content=$(get_log)
 
-  echo "$log_content" | grep -q "Line: akc"
-  echo "$log_content" | grep -q "Line: authorship"
-  echo "$log_content" | grep -q "Line akc report gate passed"
-  echo "$log_content" | grep -q "Line authorship report gate passed"
-  echo "$log_content" | grep -q "Report existence gate passed: 2 report(s)"
+  echo "$log_content" | grep -q "Rotation pick: $PICKED"
+  echo "$log_content" | grep -q "Line: $PICKED"
+  ! echo "$log_content" | grep -q "Line: $OTHER"
+  echo "$log_content" | grep -q "Line $PICKED report gate passed"
+  echo "$log_content" | grep -q "Report existence gate passed: 1 report(s)"
   echo "$log_content" | grep -q "Completed successfully"
   echo "$log_content" | grep -q "DEBUG: CLAUDE_CMD="
+  # 担当外 line の run は発生しない
+  [ ! -f "$MOCK_HOME/.prompt_$OTHER" ]
 }
 
 @test "E2E normal: per-line prompt carries line brief, paths, and past themes" {
@@ -209,20 +230,15 @@ get_log() {
   run_script
 
   local prompt
-  prompt=$(cat "$MOCK_HOME/.prompt_akc")
-  echo "$prompt" | grep -q -- "- line (track): akc"
-  echo "$prompt" | grep -q "AKC line focus"
+  prompt=$(cat "$MOCK_HOME/.prompt_$PICKED")
+  echo "$prompt" | grep -q -- "- line (track): $PICKED"
+  echo "$prompt" | grep -q "line focus"
   echo "$prompt" | grep -q "過去テーマ履歴"
-  echo "$prompt" | grep -q "state/akc"
+  echo "$prompt" | grep -q "state/$PICKED"
   echo "$prompt" | grep -q "past_topics.json"
   echo "$prompt" | grep -q "機会メモ"   # テンプレート注入
+  echo "$prompt" | grep -q "theme_rank"  # テーマ選別層 (ADR-0010) のテンプレート注入
   echo "$prompt" | grep -q "github.com/example-author"  # self_signals
-
-  # authorship line も独立プロンプトで走る
-  local prompt2
-  prompt2=$(cat "$MOCK_HOME/.prompt_authorship")
-  echo "$prompt2" | grep -q -- "- line (track): authorship"
-  echo "$prompt2" | grep -q "Authorship line focus"
 }
 
 @test "E2E normal: file writes are path-restricted (repo read-only at permission layer)" {
@@ -231,11 +247,11 @@ get_log() {
   run_script
 
   local allowed
-  allowed=$(cat "$MOCK_HOME/.allowed_akc")
+  allowed=$(cat "$MOCK_HOME/.allowed_$PICKED")
   # path 規則は Edit(path) だけが consult される仕様 — Write(path) 規則は書かない
   echo "$allowed" | grep -q "Edit(//"
   echo "$allowed" | grep -q "mock-vault/daily-research"
-  echo "$allowed" | grep -q "state/akc"
+  echo "$allowed" | grep -q "state/$PICKED"
   echo "$allowed" | grep -q "past_topics.json)"
   ! echo "$allowed" | grep -q "Write("
   # 無条件 Write/Edit は含まれない
@@ -243,12 +259,52 @@ get_log() {
   ! printf '%s' "$allowed" | grep -qE '(^|,)Edit(,|$)'
 }
 
-@test "E2E normal: state directories are created per line" {
+@test "E2E normal: state directory is created for the picked line only" {
   echo "normal" > "$MOCK_HOME/.mock_scenario"
 
   run_script
-  [ -d "$MOCK_PROJECT/state/akc" ]
-  [ -d "$MOCK_PROJECT/state/authorship" ]
+  [ -d "$MOCK_PROJECT/state/$PICKED" ]
+  [ ! -d "$MOCK_PROJECT/state/$OTHER" ]
+}
+
+# === Test: Clarity 呼2 (ADR-0010) ===
+
+@test "E2E clarity: second pass reviews the picked report with restricted tools" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+
+  run_script
+  local log_content
+  log_content=$(get_log)
+
+  echo "$log_content" | grep -q "Clarity pass:"
+  echo "$log_content" | grep -q "SUMMARY Clarity:"
+  echo "$log_content" | grep -q "Clarity pass ok"
+
+  # 呼2 は対象ノートだけを Edit でき、リサーチツール・Bash・glob 権限を持たない
+  local allowed prompt
+  allowed=$(cat "$MOCK_HOME/.allowed_clarity")
+  echo "$allowed" | grep -q "Edit(//"
+  echo "$allowed" | grep -q "mock-vault/daily-research/$(date +%Y-%m-%d)_${PICKED}_"
+  ! echo "$allowed" | grep -q "WebSearch"
+  ! echo "$allowed" | grep -q "WebFetch"
+  ! echo "$allowed" | grep -q "Bash"
+  ! echo "$allowed" | grep -q '\*\*'          # 単一ファイル限定 — glob を含まない
+  ! echo "$allowed" | grep -q "past_topics"
+  ! echo "$allowed" | grep -q "state/"
+  prompt=$(cat "$MOCK_HOME/.prompt_clarity")
+  echo "$prompt" | grep -q "対象ファイル"
+}
+
+@test "E2E clarity: clarity failure is fail-open (report survives, run still succeeds)" {
+  echo "clarity-fail" > "$MOCK_HOME/.mock_scenario"
+
+  run_script
+  local log_content
+  log_content=$(get_log)
+
+  echo "$log_content" | grep -q "WARN: clarity pass failed"
+  echo "$log_content" | grep -q "Completed successfully"
+  ls "$MOCK_HOME/mock-vault/daily-research/$(date +%Y-%m-%d)_${PICKED}_"*.md
 }
 
 # === Test: Retry (per-line, once) ===
@@ -264,8 +320,8 @@ get_log() {
   echo "$log_content" | grep -q "Completed successfully"
 }
 
-@test "E2E partial: one failing line yields overall Failed but other line's report survives" {
-  echo "fail-one-line" > "$MOCK_HOME/.mock_scenario"
+@test "E2E fail: picked line failing after retry yields overall Failed (E_NO_REPORT)" {
+  echo "run-fail-always" > "$MOCK_HOME/.mock_scenario"
 
   run run_script
   [ "$status" -ne 0 ]
@@ -273,12 +329,12 @@ get_log() {
   local log_content
   log_content=$(get_log)
 
-  echo "$log_content" | grep -q "Line akc report gate passed"
-  echo "$log_content" | grep -q "report gate failed for line(s): authorship"
+  echo "$log_content" | grep -q "failed after retry"
+  echo "$log_content" | grep -q "report gate failed for line(s): $PICKED"
   ! echo "$log_content" | grep -q "Completed successfully"
   echo "$log_content" | grep -q "Failed (E_NO_REPORT"
-  # akc のレポートは存在する
-  ls "$MOCK_HOME/mock-vault/daily-research/$(date +%Y-%m-%d)_akc_"*.md
+  # レポートが無いので clarity 呼2 は走らない
+  [ ! -f "$MOCK_HOME/.prompt_clarity" ]
 }
 
 # === Test: Auth probe / 401 ===
@@ -293,11 +349,11 @@ get_log() {
   log_content=$(get_log)
 
   echo "$log_content" | grep -q "Auth probe failed"
-  ! echo "$log_content" | grep -q "Line: akc"
-  [ ! -f "$MOCK_HOME/.prompt_akc" ]
+  ! echo "$log_content" | grep -q "Line: $PICKED"
+  [ ! -f "$MOCK_HOME/.prompt_$PICKED" ]
 }
 
-@test "E2E auth: 401 during a line run aborts all lines (no retry, no later lines)" {
+@test "E2E auth: 401 during the line run aborts immediately (no retry, no clarity)" {
   echo "run-401" > "$MOCK_HOME/.mock_scenario"
 
   run run_script
@@ -307,8 +363,8 @@ get_log() {
   log_content=$(get_log)
 
   echo "$log_content" | grep -q "aborting all lines"
-  # 最初の line で停止 → 2 本目のプロンプトは記録されない
-  [ ! -f "$MOCK_HOME/.prompt_authorship" ]
+  ! echo "$log_content" | grep -q "retrying once"
+  [ ! -f "$MOCK_HOME/.prompt_clarity" ]
 }
 
 # === Test: 成功化け防止 (is_error / ctl-015) ===
@@ -343,7 +399,11 @@ get_log() {
 # === Test: 不在 repo は skip され部分失敗になる ===
 
 @test "E2E: missing target_repo is skipped with WARN and counted as failed line" {
-  cat >> "$MOCK_PROJECT/config.toml" << EOF
+  # rotation で必ず ghost が選ばれるよう、ghost 1 line だけの config に置き換える
+  cat > "$MOCK_PROJECT/config.toml" << EOF
+[general]
+vault_path = "$MOCK_HOME/mock-vault"
+output_dir = "daily-research"
 
 [tracks.ghost]
 name = "Ghost Line"
@@ -407,7 +467,7 @@ EOF
 
 # === Test: 自己改善ループの計測 (ADR-0006 / ctl-016) ===
 
-@test "E2E: metrics.jsonl aggregates per-line runs into pass2 with lint result" {
+@test "E2E: metrics.jsonl records the picked run, clarity pass, and lint result" {
   echo "normal" > "$MOCK_HOME/.mock_scenario"
 
   run_script
@@ -415,22 +475,29 @@ EOF
   log_content=$(get_log)
 
   echo "$log_content" | grep -q "Completed successfully"
-  # per-line SUMMARY 行 (backfill regex の対象)
-  echo "$log_content" | grep -q "SUMMARY Run(akc):"
-  echo "$log_content" | grep -q "SUMMARY Run(authorship):"
+  # SUMMARY 行 (backfill regex の対象): 呼1 = Run(<track>)、呼2 = Clarity
+  echo "$log_content" | grep -q "SUMMARY Run($PICKED):"
+  echo "$log_content" | grep -q "SUMMARY Clarity:"
+  ! echo "$log_content" | grep -q "SUMMARY Run($OTHER):"
 
   [ -f "$MOCK_PROJECT/metrics.jsonl" ]
   run python3 - "$MOCK_PROJECT/metrics.jsonl" << 'PYEOF'
 import json, sys
 rec = json.loads(open(sys.argv[1]).read().splitlines()[0])
 assert rec["final_class"] == "OK", rec
-assert rec["report_count"] == 2, rec
+assert rec["report_count"] == 1, rec
 assert rec["source"] == "live", rec
 assert rec["pass1"] is None, rec
-assert rec["pass2"]["turns"] == 6, rec  # 3 turns x 2 line
+assert rec["pass2"]["turns"] == 3, rec  # 呼1 単独 (rotation で 1 line)
 assert rec["fallback_used"] is False, rec
+# 呼2 clarity の発動記録 (ADR-0010) — verdict は保存しない
+assert rec["clarity_pass"]["ran"] is True, rec
+assert rec["clarity_pass"]["ok"] is True, rec
+assert rec["clarity_pass"]["turns"] == 2, rec
+# total_cost は呼1 + 呼2 の合算
+assert abs(rec["total_cost"] - 0.07) < 1e-9, rec
 # mock レポートはソース節なし → lint hard fail が記録される
-assert rec["lint"]["hard_fail"] == 2, rec
+assert rec["lint"]["hard_fail"] == 1, rec
 PYEOF
   [ "$status" -eq 0 ]
 
@@ -439,4 +506,20 @@ PYEOF
 
   # review リマインダー: state 不在 → never をログ
   echo "$log_content" | grep -q "dr-review age: never"
+}
+
+@test "E2E: clarity failure is recorded in metrics as ok=false" {
+  echo "clarity-fail" > "$MOCK_HOME/.mock_scenario"
+
+  run_script
+
+  [ -f "$MOCK_PROJECT/metrics.jsonl" ]
+  run python3 - "$MOCK_PROJECT/metrics.jsonl" << 'PYEOF'
+import json, sys
+rec = json.loads(open(sys.argv[1]).read().splitlines()[0])
+assert rec["final_class"] == "OK", rec  # fail-open — run 全体は成功のまま
+assert rec["clarity_pass"]["ran"] is True, rec
+assert rec["clarity_pass"]["ok"] is False, rec
+PYEOF
+  [ "$status" -eq 0 ]
 }

@@ -29,7 +29,9 @@ python3 scripts/lib/dr_pipeline.py metrics-backfill metrics.jsonl logs   # ロ�
   (daily-research.sh の `--max-turns` 値と比較。p90 が上限に接近していたら警告)
 - total_cost の推移 (mean / max、異常スパイク)
 - fallback 発動率と、`final_class != "OK"` の失敗一覧
-- report_count = 0 の日 (silent fail の残骸)
+- report_count = 0 の日 (silent fail の残骸。rotation 後は呼1 失敗 = その日 0 本)
+- **clarity_pass (呼2、ADR-0010)**: ran/ok 率と cost/turns。ok=false が続くなら
+  呼2 の timeout / max-turns / プロトコルの見直し候補
 
 ### 2. 品質 signal
 
@@ -41,6 +43,10 @@ python3 scripts/lib/dr_pipeline.py wiki-quality-scan "<vault>" 30 config.toml
 - lint: metrics.jsonl 内の蓄積分から hard / soft violation のトレンドを出す
 - wiki-quality-scan: line 別 FLAGGED 率 (一次未照合・推定扱い注記) を提示。
   特定 line に偏っていたら research-protocol.md の出典照合指示の弱点候補
+- **theme_rank 分布 (ADR-0010)**: vault の当月ノート frontmatter から集計する —
+  `grep -h '^theme_rank:' "<vault>/daily-research/"$(date +%Y-%m)*.md | sort | uniq -c`。
+  成功基準は「A 見込みが週 1 本以上」。A が直近 10 本中 2 本を超えて出ていたら
+  基準ドリフト (甘さ) を疑う
 
 ### 3. DR-Expect 突合 (改善変更の効果検証)
 

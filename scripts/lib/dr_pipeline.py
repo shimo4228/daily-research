@@ -134,6 +134,45 @@ def cmd_tracks(argv):
     return 0
 
 
+# --- rotation-pick <config_path> <date>: 当日担当 line を決定論選択して 1 行出力 ---
+# 出力形式は tracks と同じ "line<TAB>repo_key<TAB>target_repo"。選択は
+# date.toordinal() % 行数 (proleptic Gregorian 序数 — Unix epoch 日で再実装すると
+# 位相がずれるので注意)。state ファイル不要で、同日の再実行は常に同じ行を返す
+# (冪等)。順序は config.toml の記述順 (tomllib は挿入順を保持する)。
+# 注意: 輪番の単位は line ではなく repos 行 — 現行 config は 1 line = 1 repo なので
+# 一致するが、1 line に複数 repos を書くとその line の頻度が上がる。
+def cmd_rotation_pick(argv):
+    from datetime import date as _date
+
+    if len(argv) < 2:
+        print("usage: rotation-pick <config_path> <date>", file=sys.stderr)
+        return 64
+    config_path, date_s = argv[:2]
+    try:
+        _, tracks = _load_tracks(config_path)
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    rows = []
+    for track, v in tracks.items():
+        for r in _track_repos(v):
+            key = r.get("key")
+            repo = r.get("target_repo")
+            if key and repo:
+                rows.append((track, key, repo))
+    if not rows:
+        print("rotation-pick: no lines in config", file=sys.stderr)
+        return 1
+    try:
+        day = _date.fromisoformat(date_s).toordinal()
+    except ValueError:
+        print(f"rotation-pick: invalid date {date_s!r}", file=sys.stderr)
+        return 64
+    track, key, repo = rows[day % len(rows)]
+    print(f"{track}\t{key}\t{repo}")
+    return 0
+
+
 # --- past-themes [past_topics_path] [config_path]: line 別直近 10 件の履歴を出力 ---
 def cmd_past_themes(argv):
     from collections import defaultdict
@@ -291,10 +330,13 @@ def _sum_pass_metrics(dicts):
 
 # --- metrics-append <metrics_path> <date> <final_class> <report_count> <retry:0|1> ---
 # stdin: 行区切りの JSON 群。lint JSON ("hard_fail" キーを持つ) は lint に、
-# それ以外の claude -p result JSON は run として pass2 に集約する (ADR-0008 per-repo
-# 実行の N run を、旧来のレコード形 — expect-check / /dr-review の契約 — に写像する)。
+# "CLARITY\t<ok:0|1>\t{json}" 形式の行は clarity_pass に、それ以外の claude -p
+# result JSON は run として pass2 に集約する (ADR-0008 per-repo 実行の N run を、
+# 旧来のレコード形 — expect-check / /dr-review の契約 — に写像する)。
 # pass1 は per-repo 化で廃止 (None 固定)。第 5 引数はリトライ発生の有無で、
 # レコード互換のため旧フィールド名 fallback_used に記録する。
+# clarity_pass (ADR-0010): 呼2 = fresh-context clarity 改稿の発動記録。verdict や
+# スコアは保存しない (in-loop 型 — 消費は run 内で完結し、ここは発動事実のみ)。
 def cmd_metrics_append(argv):
     from datetime import datetime
 
@@ -307,10 +349,22 @@ def cmd_metrics_append(argv):
         return 64
     metrics_path, date_s, final_class, report_count, retry = argv[:5]
 
-    runs, lint = [], None
+    runs, lint, clarity = [], None, None
     for line in sys.stdin.read().split("\n"):
         line = line.strip()
         if not line:
+            continue
+        if line.startswith("CLARITY\t"):
+            parts = line.split("\t", 2)
+            if len(parts) == 3:
+                try:
+                    clarity = {
+                        "ran": True,
+                        "ok": parts[1] == "1",
+                        **_pass_metrics(json.loads(parts[2])),
+                    }
+                except (json.JSONDecodeError, AttributeError, TypeError):
+                    clarity = {"ran": True, "ok": parts[1] == "1"}
             continue
         try:
             d = json.loads(line)
@@ -330,10 +384,16 @@ def cmd_metrics_append(argv):
         "fallback_used": retry == "1",
         "pass1": None,
         "pass2": _sum_pass_metrics(runs),
+        "clarity_pass": clarity,
         "lint": lint,
     }
     record["total_cost"] = round(
-        sum(p["cost"] for p in (record["pass1"], record["pass2"]) if p), 4
+        sum(
+            p["cost"]
+            for p in (record["pass1"], record["pass2"], record["clarity_pass"])
+            if p and "cost" in p
+        ),
+        4,
     )
     with open(metrics_path, "a") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -343,10 +403,11 @@ def cmd_metrics_append(argv):
     return 0
 
 
-# Pass[12] = 旧 2-pass 形式 (〜2026-08)、Run(<track>) = per-repo 形式 (ADR-0008)。
-# per-repo の Run 行は pass2 に合算して旧レコード形へ写像する。
+# Pass[12] = 旧 2-pass 形式 (〜2026-08)、Run(<track>) = per-repo 形式 (ADR-0008)、
+# Clarity = 呼2 clarity 改稿 (ADR-0010)。per-repo の Run 行は pass2 に合算して
+# 旧レコード形へ写像する。
 _SUMMARY_RE = re.compile(
-    r"\[([\d: -]+)\] SUMMARY (Pass[12]|Run\([\w-]+\)): cost=\$([\d.]+) turns=(\d+) "
+    r"\[([\d: -]+)\] SUMMARY (Pass[12]|Run\([\w-]+\)|Clarity): cost=\$([\d.]+) turns=(\d+) "
     r"duration=(\d+)s tokens_in=(\d+) tokens_out=(\d+)(?: searches=(\d+))?"
 )
 
@@ -385,6 +446,7 @@ def cmd_metrics_backfill(argv):
                             "fallback_used": False,
                             "pass1": None,
                             "pass2": None,
+                            "clarity_pass": None,
                             "lint": None,
                         }
                         runs.append(run)
@@ -408,10 +470,21 @@ def cmd_metrics_backfill(argv):
                             run["pass2"] = _sum_pass_metrics(
                                 [run["pass2"], metrics] if run["pass2"] else [metrics]
                             )
+                        elif label == "Clarity":
+                            # ok はログの WARN 行から後追いで False にする (下記)
+                            run["clarity_pass"] = {"ran": True, "ok": True, **metrics}
                         else:
                             run[label.lower()] = metrics
                         continue
-                    if "=== Fallback:" in line:
+                    if "WARN: clarity pass failed" in line:
+                        # SUMMARY 行なし (出力ゼロの失敗 = 典型) でも発動事実は残す
+                        if run.get("clarity_pass"):
+                            run["clarity_pass"]["ok"] = False
+                        else:
+                            run["clarity_pass"] = {"ran": True, "ok": False}
+                    elif "=== Fallback:" in line or "retrying once" in line:
+                        # 旧 2-pass 形式は "=== Fallback:"、per-repo 形式 (ADR-0008〜) は
+                        # "WARN: Line X failed ... — retrying once" がリトライの痕跡
                         run["fallback_used"] = True
                     elif "Report existence gate passed:" in line:
                         cm = re.search(r"gate passed: (\d+) report", line)
@@ -427,7 +500,12 @@ def cmd_metrics_backfill(argv):
                 if run["pass1"] is None and run["pass2"] is None:
                     continue  # SUMMARY 行のない中断 run はデータなし
                 run["total_cost"] = round(
-                    sum(p["cost"] for p in (run["pass1"], run["pass2"]) if p), 4
+                    sum(
+                        p["cost"]
+                        for p in (run["pass1"], run["pass2"], run["clarity_pass"])
+                        if p and "cost" in p
+                    ),
+                    4,
                 )
                 if (run["date"], run["ts"]) in existing:
                     continue
@@ -728,6 +806,7 @@ COMMANDS = {
     "vault-path": cmd_vault_path,
     "report-dir": cmd_report_dir,
     "tracks": cmd_tracks,
+    "rotation-pick": cmd_rotation_pick,
     "past-themes": cmd_past_themes,
     "line-brief": cmd_line_brief,
     "metrics-append": cmd_metrics_append,

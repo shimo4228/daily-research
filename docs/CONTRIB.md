@@ -22,9 +22,9 @@ daily-research/
 ├── prompts/
 │   └── repo-research-protocol.md       # Per-repo research protocol (--append-system-prompt-file)
 ├── templates/
-│   └── report-template.md              # Actionable-tactics note format with frontmatter
+│   └── report-template.md              # Explanatory-report writing rules + fixed tail sections (frontmatter incl. theme_rank)
 ├── scripts/
-│   ├── daily-research.sh               # Main entry point (per-line loop, cwd = each repo); sources lib/
+│   ├── daily-research.sh               # Main entry point (rotation: one line/day; call 1 research + call 2 clarity); sources lib/
 │   ├── check-auth.sh                   # OAuth check via real_auth_probe() + notification
 │   ├── pre-commit.sh                   # Secret / syntax guard (git pre-commit hook)
 │   └── lib/                             # Sourced shell libs + Python parser
@@ -51,7 +51,7 @@ daily-research/
 
 | Script | Description | Usage |
 |--------|-------------|-------|
-| `scripts/daily-research.sh` | Main entry point. Loops over the lines in `config.toml` `tracks`; for each line runs `claude -p` once with cwd = the line's `target_repo` (Sonnet, 25-min timeout, one retry on transient failure; 401 aborts all lines). Sources `lib/`; includes env sanitization, auth probe, config schema check, per-line report gate (ctl-015), report lint (ctl-016), and metrics append. Called by launchd at AM 5:00. | `./scripts/daily-research.sh` |
+| `scripts/daily-research.sh` | Main entry point. Picks one line per day by deterministic rotation (`rotation-pick`, ADR-0010) and runs call 1 = `claude -p` with cwd = the line's `target_repo` (Opus, 25-min timeout, one retry on transient failure; 401 aborts), then call 2 = a fresh-context clarity revision (Sonnet, 15-min timeout, fail-open). Sources `lib/`; includes env sanitization, auth probe, config schema check, report gate (ctl-015), report lint (ctl-016), and metrics append (incl. `clarity_pass`). Called by launchd at AM 5:00. | `./scripts/daily-research.sh` |
 | `scripts/check-auth.sh` | Checks Claude OAuth token validity via `real_auth_probe()` (shared `lib/auth.sh`; a real Haiku API probe, not `claude --version`, which succeeds even with an expired token). Shows macOS notification on failure. | `./scripts/check-auth.sh` |
 | `scripts/pre-commit.sh` | Secret / syntax guard run as a git pre-commit hook. | (auto-run by git) |
 
@@ -62,7 +62,7 @@ daily-research/
 | `PATH` | plist + script | Must include `$HOME/.local/bin` (current Claude installer), `$HOME/.claude/local` (legacy), `/opt/homebrew/bin`, and `/usr/local/bin` |
 | `HOME` | plist | Required for Claude CLI to find auth tokens |
 | `ANTHROPIC_API_KEY` | **Must be unset** | If set, Claude uses per-token billing instead of Max plan |
-| `CLAUDE_TIMEOUT` | Script (internal) | Timeout in seconds for `claude -p` calls via `run_claude()`. 0 = no timeout (default); each per-line run sets 1500s (25 min) |
+| `CLAUDE_TIMEOUT` | Script (internal) | Timeout in seconds for `claude -p` calls via `run_claude()`. 0 = no timeout (default); the research run (call 1) sets 1500s (25 min), the clarity run (call 2) sets 900s (15 min) |
 | `DEBUG` | User-set | Set to `1` to enable debug logging (PATH, CLAUDE_CMD) |
 
 ## Configuration (`config.toml`)
@@ -128,7 +128,7 @@ bats tests/
 
 ## Claude Code CLI Flags
 
-### Per-line research run (Sonnet, one per line)
+### Call 1 — research run (Opus, one rotation-picked line per day)
 
 The run is invoked with `cd "$TARGET_REPO"` so the repo's own CLAUDE.md auto-loads as context.
 
@@ -139,7 +139,7 @@ The run is invoked with `cd "$TARGET_REPO"` so the repo's own CLAUDE.md auto-loa
 | `--append-system-prompt-file` | `prompts/repo-research-protocol.md` | Inject the research protocol while preserving defaults |
 | `--allowedTools` | `WebSearch,WebFetch,Read,Glob,Grep` + `Write`/`Edit` scoped to absolute paths (vault report dir, `state/<line>/`, `past_topics.json`) | Repo stays read-only at the permission layer; writes go only to the three declared targets |
 | `--max-turns` | `55` | Guideline limit for research depth |
-| `--model` | `sonnet` | Speed + cost efficiency (no Opus pass anymore) |
+| `--model` | `opus` | Rotation frees the daily budget for a single high-quality report (ADR-0010) |
 | `--output-format` | `json` | Structured output with metadata (fed to metrics) |
 | `--no-session-persistence` | - | Fresh context each run |
 
@@ -149,9 +149,11 @@ The run is invoked with `cd "$TARGET_REPO"` so the repo's own CLAUDE.md auto-loa
 
 The per-repo single-pass design replaced the earlier central 2-pass (Opus theme selection → Sonnet research) pipeline on 2026-08-04: theme selection through synced concept graphs converged on corroboration surveys, while the operational context that knows what to advance lives inside each repo (ADR-0008).
 
-Each per-line run is bounded two ways: `--max-turns 55` and a 25-minute external timeout (`CLAUDE_TIMEOUT=1500` via `run_claude()`, requires coreutils `timeout`). A transiently failed line is retried once; a 401 aborts all lines since the same auth would fail everywhere.
+The research run is bounded two ways: `--max-turns 55` and a 25-minute external timeout (`CLAUDE_TIMEOUT=1500` via `run_claude()`, requires coreutils `timeout`). A transient failure is retried once; a 401 aborts immediately since the same auth would fail everywhere.
 
-`metrics.jsonl` keeps the pre-ADR-0008 record shape for compatibility with `expect-check` / `/dr-review`: the per-line run JSONs are aggregated into the `pass2` field, `pass1` is always `None`, and `fallback_used` now means "a retry occurred".
+Call 2 (clarity revision, ADR-0010) runs after the report-existence gate: a fresh-context Sonnet process (`--max-turns 15`, `CLAUDE_TIMEOUT=900`, `--allowedTools` = Read + Edit of the day's note only) reads the finished note as a first-contact reader and fixes comprehension stumbles. Its failure is fail-open: the log records `WARN: clarity pass failed`, the unrevised (or, on timeout, partially revised) note survives, and `FINAL_EXIT` is unaffected.
+
+`metrics.jsonl` keeps the pre-ADR-0008 record shape for compatibility with `expect-check` / `/dr-review`: the research run JSON is aggregated into the `pass2` field, `pass1` is always `None`, `fallback_used` means "a retry occurred", and `clarity_pass` records call 2's `{ran, ok, cost, turns, ...}` (verdicts themselves are never stored — the eval is in-loop, ADR-0010).
 
 ## Persistent Memory Layer
 

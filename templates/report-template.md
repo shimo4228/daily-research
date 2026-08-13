@@ -3,6 +3,7 @@ date: {date}
 category: {track}  # track name from config.toml
 tags: [{tag1}, {tag2}, ...]
 topic: "{topic_title}"
+theme_rank: {A見込み|B見込み|Deepen後}  # Step 3 テーマ選別の verdict (ADR-0010)
 sources: {source_count}
 actionable: {opportunity_count}  # 「機会メモ」の件数 (0 の日も正直に 0)
 ---

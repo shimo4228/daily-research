@@ -13,12 +13,14 @@ self_signals = [
 [report]
 min_sources = 5
 
-# === Lines (tracks) — per-repo in-context research (ADR-0008 / ADR-0009) ===
+# === Lines (tracks) — per-repo in-context research (ADR-0008 / ADR-0009 / ADR-0010) ===
 # Each track is a research LINE mapped 1:1 to a research repository via a
-# [[tracks.<line>.repos]] entry. Every night the orchestrator runs `claude -p`
-# once per line with cwd = target_repo, so the run reads the repo's own
-# operational context (CLAUDE.md auto-loads; context_files are read explicitly)
-# and produces a free-form explanatory research note in the vault.
+# [[tracks.<line>.repos]] entry. Each morning the orchestrator picks ONE line by
+# rotation (epoch day % line count — the cycle follows the order lines are
+# written in this file, ADR-0010) and runs `claude -p` with cwd = target_repo,
+# so the run reads the repo's own operational context (CLAUDE.md auto-loads;
+# context_files are read explicitly) and produces a free-form explanatory
+# research note in the vault.
 #
 # context_files: repo-relative paths the run must Read in Step 1 (task ledger,
 # open questions, implementation log). Missing files are skipped.

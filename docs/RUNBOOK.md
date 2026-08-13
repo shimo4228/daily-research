@@ -59,17 +59,20 @@ daily-research.sh (05:00)
 ├── Lock acquisition (atomic mkdir)
 ├── Auth probe (real OAuth check)
 ├── Config schema check (legacy pre-ADR-0008 schema fails fast)
-├── Per-line loop — for each line in config.toml `tracks`:
-│   ├── claude -p, cwd = the line's target_repo (Sonnet, --max-turns 55,
-│   │   25-min timeout, one retry on transient failure; 401 aborts all lines)
-│   │   ├── Read repo context (CLAUDE.md auto-loaded + context_files) + state/<line>/
-│   │   ├── Diff-first pass over watched sources · research with citation gate
-│   │   ├── Premise-challenge pass (counter-evidence is mandatory)
-│   │   └── Write free-form explanatory note → vault · update state + past_topics.json
-│   └── ctl-015 per-line report-existence gate ({date}_{track}_*.md in vault)
+├── rotation-pick — deterministic selection of today's line (epoch day % line count, ADR-0010)
+├── Call 1: claude -p, cwd = the picked line's target_repo (Opus, --max-turns 55,
+│   25-min timeout, one retry on transient failure; 401 aborts)
+│   ├── Read repo context (CLAUDE.md auto-loaded + context_files) + state/<line>/
+│   ├── Diff-first pass over watched sources · theme selection (2–3 candidates →
+│   │   binary checklist → theme_rank verdict, ADR-0010) · research with citation gate
+│   ├── Premise-challenge pass (counter-evidence is mandatory)
+│   └── Write free-form explanatory note → vault · update state + past_topics.json
+├── ctl-015 report-existence gate ({date}_{track}_*.md in vault)
+├── Call 2: fresh-context clarity revision (Sonnet, no research context, Edit limited
+│   to the day's note; failure is fail-open — unrevised note survives, ADR-0010)
 ├── ctl-016 deterministic report lint (fixed sections 機会メモ / ソース, synced to report-template.md)
 ├── Pass 3: Obsidian wiki ingest (vault-side script, non-fatal)
-└── metrics.jsonl append + /dr-review age check
+└── metrics.jsonl append (incl. clarity_pass record) + /dr-review age check
 ```
 
 (The 07:00 morning-brief.sh was retired in ADR-0009 — notes are now reading
@@ -121,9 +124,10 @@ launchctl list | grep daily-research
 | `ERROR: Line <track> returned 401 — aborting all lines` | Auth expired mid-run; no further lines are attempted |
 | `Line <track> report gate passed (N report)` | ctl-015: the line's `{date}_{track}_*.md` exists in the vault |
 | `WARN: Line <track> produced no ..._*.md (ctl-015)` | The line ran but wrote no report — counted as failed |
-| `Report existence gate passed: N report(s)` | All lines passed ctl-015 |
+| `Report existence gate passed: N report(s)` | The day's picked line passed ctl-015 |
+| `WARN: clarity pass failed ...` | Call 2 clarity failed (fail-open — the run still succeeds) |
 | `WARN: report lint hard fail (ctl-016): ...` | Deterministic lint found a missing sources section / zero citations |
-| `Completed successfully` | All lines completed and passed the report gate |
+| `Completed successfully` | The day's picked line completed and passed the report gate |
 
 ## Common Issues and Fixes
 
@@ -287,4 +291,4 @@ If Mac was asleep at the scheduled time, launchd runs the job on wake (behavior 
 
 ## Cost
 
-One Sonnet run per line (currently 5 lines; up to 10 invocations when every line needs its single retry), each capped at 25 minutes. With Claude Max plan, model usage is covered by the subscription with no per-token charges; per-line cost and duration are recorded in `metrics.jsonl` for actual measurement (ADR-0008 calls for verifying cost in the first week's metrics).
+Each morning only the rotation-picked line runs (ADR-0010): Call 1 = one Opus research run (at most 2 invocations with its single retry, 25-min cap) plus Call 2 = one Sonnet clarity revision (15-min cap). With Claude Max plan, model usage is covered by the subscription with no per-token charges; cost and duration are recorded in `metrics.jsonl` for actual measurement.

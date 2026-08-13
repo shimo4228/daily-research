@@ -282,6 +282,63 @@ def test_line_brief_unknown_track_errors(monkeypatch, capsys):
     assert "unknown track" in err
 
 
+# === rotation-pick (ADR-0010) ===
+
+
+@pytest.mark.unit
+def test_rotation_pick_is_deterministic_and_cycles(monkeypatch, capsys):
+    import datetime
+
+    # 全 line を取得して周期長を決める
+    rc, tracks_out, _ = run_cmd(monkeypatch, capsys, ["tracks", CONFIG])
+    assert rc == 0
+    all_rows = tracks_out.strip().splitlines()
+    n = len(all_rows)
+    assert n >= 2
+
+    base = datetime.date(2026, 8, 13)
+    # 同日は何度呼んでも同じ (冪等)
+    rc, out_a, _ = run_cmd(
+        monkeypatch, capsys, ["rotation-pick", CONFIG, base.isoformat()]
+    )
+    rc2, out_b, _ = run_cmd(
+        monkeypatch, capsys, ["rotation-pick", CONFIG, base.isoformat()]
+    )
+    assert rc == 0 and rc2 == 0
+    assert out_a == out_b
+    assert out_a.strip() in all_rows
+
+    # 連続 n 日で全 line がちょうど 1 回ずつ選ばれ、n 日後に一巡して戻る
+    picked = []
+    for i in range(n):
+        d = (base + datetime.timedelta(days=i)).isoformat()
+        _, o, _ = run_cmd(monkeypatch, capsys, ["rotation-pick", CONFIG, d])
+        picked.append(o.strip())
+    assert sorted(picked) == sorted(all_rows)
+    _, o, _ = run_cmd(
+        monkeypatch,
+        capsys,
+        ["rotation-pick", CONFIG, (base + datetime.timedelta(days=n)).isoformat()],
+    )
+    assert o.strip() == picked[0]
+
+
+@pytest.mark.unit
+def test_rotation_pick_invalid_date_errors(monkeypatch, capsys):
+    rc, _, err = run_cmd(monkeypatch, capsys, ["rotation-pick", CONFIG, "not-a-date"])
+    assert rc == 64
+    assert "invalid date" in err
+
+
+@pytest.mark.unit
+def test_rotation_pick_no_lines_errors(monkeypatch, capsys):
+    rc, _, err = run_cmd(
+        monkeypatch, capsys, ["rotation-pick", CONFIG_NO_TRACKS, "2026-08-13"]
+    )
+    assert rc == 1
+    assert "no lines" in err
+
+
 # === metrics-append / metrics-backfill (ADR-0006, per-repo 集約は ADR-0008) ===
 
 RUN1_JSON = '{"total_cost_usd":2.5,"num_turns":16,"duration_ms":255000,"usage":{"input_tokens":1480,"output_tokens":11101},"tool_counts":{"WebSearch":15,"WebFetch":2}}'
@@ -327,8 +384,49 @@ def test_metrics_append_tolerates_empty_stdin_lines(monkeypatch, capsys, tmp_pat
     assert rc == 0
     rec = json.loads(metrics.read_text())
     assert rec["pass1"] is None and rec["pass2"] is None and rec["lint"] is None
+    assert rec["clarity_pass"] is None
     assert rec["total_cost"] == 0
     assert rec["fallback_used"] is False
+
+
+@pytest.mark.unit
+def test_metrics_append_records_clarity_line(monkeypatch, capsys, tmp_path):
+    # 呼2 clarity (ADR-0010) は "CLARITY\t<ok>\t<json>" 行で届き、
+    # clarity_pass に記録され total_cost に合算される。
+    metrics = tmp_path / "metrics.jsonl"
+    clarity_json = (
+        '{"total_cost_usd":0.02,"num_turns":2,"duration_ms":8000,'
+        '"usage":{"input_tokens":1500,"output_tokens":300}}'
+    )
+    rc, _, _ = run_cmd(
+        monkeypatch,
+        capsys,
+        ["metrics-append", str(metrics), "2026-08-14", "OK", "1", "0"],
+        f"{RUN1_JSON}\nCLARITY\t1\t{clarity_json}\n",
+    )
+    assert rc == 0
+    rec = json.loads(metrics.read_text())
+    assert rec["pass2"]["turns"] == 16  # clarity は pass2 に混ざらない
+    assert rec["clarity_pass"]["ran"] is True
+    assert rec["clarity_pass"]["ok"] is True
+    assert rec["clarity_pass"]["turns"] == 2
+    assert rec["total_cost"] == pytest.approx(2.52)
+
+
+@pytest.mark.unit
+def test_metrics_append_clarity_fail_with_broken_json(monkeypatch, capsys, tmp_path):
+    # fail-open 側: JSON が壊れていても発動事実 (ran/ok) は残す。
+    metrics = tmp_path / "metrics.jsonl"
+    rc, _, _ = run_cmd(
+        monkeypatch,
+        capsys,
+        ["metrics-append", str(metrics), "2026-08-14", "OK", "1", "0"],
+        f"{RUN1_JSON}\nCLARITY\t0\tnot-json\n",
+    )
+    assert rc == 0
+    rec = json.loads(metrics.read_text())
+    assert rec["clarity_pass"] == {"ran": True, "ok": False}
+    assert rec["total_cost"] == 2.5  # cost 不明分は合算しない
 
 
 BACKFILL_LOG = """\
@@ -404,6 +502,65 @@ def test_metrics_backfill_aggregates_per_repo_run_lines(monkeypatch, capsys, tmp
     assert rec["report_count"] == 4
     assert rec["final_class"] == "OK"
     assert rec["total_cost"] == 3.0
+
+
+BACKFILL_LOG_ROTATION = """\
+[2026-08-14 05:00:00] === Starting daily research ===
+[2026-08-14 05:10:00] SUMMARY Run(akc): cost=$8.0000 turns=40 duration=1000s tokens_in=100 tokens_out=200 searches=5
+[2026-08-14 05:12:00] SUMMARY Clarity: cost=$0.5000 turns=2 duration=60s tokens_in=1500 tokens_out=300
+[2026-08-14 05:12:00] WARN: clarity pass failed (E_TRANSIENT, exit 1) — keeping unrevised report (fail-open)
+[2026-08-14 05:12:00] Report existence gate passed: 1 report(s) for 2026-08-14
+[2026-08-14 05:12:00] === Completed successfully ===
+"""
+
+
+@pytest.mark.unit
+def test_metrics_backfill_parses_clarity_summary(monkeypatch, capsys, tmp_path):
+    # rotation 形式 (ADR-0010): SUMMARY Clarity 行は clarity_pass へ、
+    # WARN 行で ok=False に倒す。total_cost は呼1 + 呼2 の合算。
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "2026-08-14.log").write_text(BACKFILL_LOG_ROTATION)
+    metrics = tmp_path / "metrics.jsonl"
+
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)]
+    )
+    assert rc == 0
+    assert "backfilled 1 run(s)" in out
+    rec = json.loads(metrics.read_text())
+    assert rec["pass2"]["turns"] == 40
+    assert rec["clarity_pass"]["ran"] is True
+    assert rec["clarity_pass"]["ok"] is False
+    assert rec["clarity_pass"]["turns"] == 2
+    assert rec["report_count"] == 1
+    assert rec["total_cost"] == pytest.approx(8.5)
+
+
+BACKFILL_LOG_CLARITY_NO_OUTPUT = """\
+[2026-08-15 05:00:00] === Starting daily research ===
+[2026-08-15 05:10:00] SUMMARY Run(aap): cost=$8.0000 turns=40 duration=1000s tokens_in=100 tokens_out=200 searches=5
+[2026-08-15 05:25:00] WARN: clarity pass failed (E_TRANSIENT, exit 124) — keeping unrevised report (fail-open)
+[2026-08-15 05:25:00] === Completed successfully ===
+"""
+
+
+@pytest.mark.unit
+def test_metrics_backfill_clarity_warn_without_summary(monkeypatch, capsys, tmp_path):
+    # 出力ゼロの呼2 失敗 (timeout 等) は SUMMARY Clarity 行が出ない — それでも
+    # WARN 行から発動事実 {ran, ok=False} を復元する (live 経路との表現一致)。
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "2026-08-15.log").write_text(BACKFILL_LOG_CLARITY_NO_OUTPUT)
+    metrics = tmp_path / "metrics.jsonl"
+
+    rc, _, _ = run_cmd(
+        monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)]
+    )
+    assert rc == 0
+    rec = json.loads(metrics.read_text())
+    assert rec["clarity_pass"] == {"ran": True, "ok": False}
+    assert rec["total_cost"] == pytest.approx(8.0)  # cost 不明分は合算しない
 
 
 # === report-lint (ctl-016, ADR-0009 自由形式 + 固定 2 節) ===

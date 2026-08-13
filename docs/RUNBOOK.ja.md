@@ -59,17 +59,20 @@ daily-research.sh (05:00)
 ├── ロック取得（アトミック mkdir）
 ├── 認証 probe（実 OAuth チェック）
 ├── config schema チェック（ADR-0008 以前の旧 schema は fail-fast）
-├── ライン単位ループ — config.toml `tracks` の各ラインについて:
-│   ├── claude -p, cwd = ラインの target_repo (Sonnet, --max-turns 55,
-│   │   25 分タイムアウト, transient 失敗時リトライ 1 回; 401 は全ライン中止)
-│   │   ├── repo 文脈 (CLAUDE.md 自動ロード + context_files) + state/<line>/ を Read
-│   │   ├── watched sources の diff-first 確認 · citation ゲート付きリサーチ
-│   │   ├── 前提挑戦パス（反対材料の記述は必須）
-│   │   └── 自由形式の解説ノートを vault に Write · state + past_topics.json 更新
-│   └── ctl-015 ライン単位レポート存在ゲート（vault の {date}_{track}_*.md）
+├── rotation-pick — 当日担当ラインを決定論選択（epoch 日 % ライン数、ADR-0010）
+├── 呼1: claude -p, cwd = 担当ラインの target_repo (Opus, --max-turns 55,
+│   25 分タイムアウト, transient 失敗時リトライ 1 回; 401 は中止)
+│   ├── repo 文脈 (CLAUDE.md 自動ロード + context_files) + state/<line>/ を Read
+│   ├── watched sources の diff-first 確認 · テーマ選別（候補 2〜3 → 二値チェックリスト
+│   │   → theme_rank verdict、ADR-0010）· citation ゲート付きリサーチ
+│   ├── 前提挑戦パス（反対材料の記述は必須）
+│   └── 自由形式の解説ノートを vault に Write · state + past_topics.json 更新
+├── ctl-015 レポート存在ゲート（vault の {date}_{track}_*.md）
+├── 呼2: fresh-context clarity 改稿 (Sonnet, 研究文脈なし, 対象ノートのみ Edit 可,
+│   失敗は fail-open — 改稿なし版が残り run は成功のまま, ADR-0010)
 ├── ctl-016 決定論的レポート lint（固定節 = 機会メモ / ソース、report-template.md に同期）
 ├── Pass 3: Obsidian wiki ingest（vault 側スクリプト、non-fatal）
-└── metrics.jsonl 追記 + /dr-review 経過日数チェック
+└── metrics.jsonl 追記 (clarity_pass 発動記録含む) + /dr-review 経過日数チェック
 ```
 
 (07:00 の morning-brief.sh は ADR-0009 で廃止 — レポートは承認を求めない読み物になった)
@@ -120,9 +123,10 @@ launchctl list | grep daily-research
 | `ERROR: Line <track> returned 401 — aborting all lines` | run 中に認証が期限切れ。後続ラインは実行しない |
 | `Line <track> report gate passed (N report)` | ctl-015: そのラインの `{date}_{track}_*.md` が vault に存在 |
 | `WARN: Line <track> produced no ..._*.md (ctl-015)` | run は走ったがレポートが無い — 失敗として計上 |
-| `Report existence gate passed: N report(s)` | 全ラインが ctl-015 を通過 |
+| `Report existence gate passed: N report(s)` | 当日担当ラインが ctl-015 を通過 |
 | `WARN: report lint hard fail (ctl-016): ...` | 決定論 lint がソース節不在・出典 0 件を検出 |
-| `Completed successfully` | 全ライン完了・レポートゲート通過 |
+| `WARN: clarity pass failed ...` | 呼2 clarity の失敗 (fail-open — run 全体は成功のまま) |
+| `Completed successfully` | 当日担当ライン完了・レポートゲート通過 |
 
 ## よくある問題と対処法
 
@@ -286,4 +290,4 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 
 ## コスト
 
-Sonnet の run がライン数だけ走る（現行 5 ライン。全ラインがリトライした場合最大 10 回）。各 run は 25 分でタイムアウトする。Claude Max プランではモデル使用はサブスクリプションでカバーされ、従量課金は発生しない。ライン別のコスト・所要時間は `metrics.jsonl` に記録され、実測はそちらで確認する（ADR-0008 は初週の metrics でのコスト実測を求めている）。
+毎朝、rotation で選ばれた 1 ラインだけが走る（ADR-0010。呼1 = Opus 研究 run が最大 2 回 = リトライ込み、呼2 = Sonnet clarity が 1 回）。呼1 は 25 分、呼2 は 15 分でタイムアウトする。Claude Max プランではモデル使用はサブスクリプションでカバーされ、従量課金は発生しない。コスト・所要時間は `metrics.jsonl` に記録され、実測はそちらで確認する。
