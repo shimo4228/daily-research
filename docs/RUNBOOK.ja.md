@@ -120,7 +120,7 @@ launchctl list | grep daily-research
 | `=== Line: <track> (<repo パス>) ===` | その repo を cwd にしたライン run の開始 |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | ライン run の実行統計（コスト、ターン数、所要時間、トークン数） |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | transient 失敗。1 回きりのリトライを開始 |
-| `ERROR: Line <track> returned 401 — aborting all lines` | run 中に認証が期限切れ。後続ラインは実行しない |
+| `ERROR: Line <track> returned 401 — aborting` | run 中に認証が期限切れ。即座に中断する |
 | `Line <track> report gate passed (N report)` | ctl-015: そのラインの `{date}_{track}_*.md` が vault に存在 |
 | `WARN: Line <track> produced no ..._*.md (ctl-015)` | run は走ったがレポートが無い — 失敗として計上 |
 | `Report existence gate passed: N report(s)` | 当日担当ラインが ctl-015 を通過 |

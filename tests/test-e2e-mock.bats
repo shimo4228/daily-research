@@ -64,11 +64,12 @@ EOF
 }
 EOF
 
-  # rotation (ADR-0010): 当日担当 line をテスト側でも同じロジックで解決する
-  PY3="${PYTHON3:-/opt/homebrew/bin/python3}"
-  PICKED=$("$PY3" "$MOCK_PROJECT/scripts/lib/dr_pipeline.py" rotation-pick \
-    "$MOCK_PROJECT/config.toml" "$(date +%Y-%m-%d)" | cut -f1)
-  if [ "$PICKED" = "akc" ]; then OTHER="authorship"; else OTHER="akc"; fi
+  # rotation (ADR-0010): DR_DATE seam で日付を固定し、pick を決定論にする。
+  # 2026-08-13 の ordinal は奇数 → 2 行 config (akc, authorship) では index 1 =
+  # authorship が選ばれる (rotation-pick の周期性は pytest 側が検証済み)。
+  export DR_DATE="2026-08-13"
+  PICKED="authorship"
+  OTHER="akc"
 
   # mock claude を配置（スクリプトが $HOME/.claude/local を PATH に追加する）
   mkdir -p "$MOCK_HOME/.claude/local"
@@ -98,22 +99,24 @@ if [[ "$1" == "--version" ]]; then
   exit 0
 fi
 
-# Parse flags (-p prompt / --model / --allowedTools)
-MODEL=""
+# Parse flags (-p prompt / --append-system-prompt-file / --allowedTools)
+# 呼び分けは protocol ファイルで判定する — model は budget 都合で変わりうる
+# tunable であり、役割の識別子は protocol の方 (ADR-0010)。
+PROTOCOL=""
 PROMPT=""
 ALLOWED=""
 PREV=""
 for arg in "$@"; do
   case "$PREV" in
-    --model) MODEL="$arg" ;;
+    --append-system-prompt-file) PROTOCOL="$arg" ;;
     -p) PROMPT="$arg" ;;
     --allowedTools) ALLOWED="$arg" ;;
   esac
   PREV="$arg"
 done
 
-# --- Haiku (auth probe) ---
-if [[ "$MODEL" == "haiku" ]]; then
+# --- Auth probe (protocol ファイルなしの軽量呼び出し) ---
+if [[ -z "$PROTOCOL" ]]; then
   case "$SCENARIO" in
     auth-fail|auth-401)
       echo '{"type":"result","subtype":"error","is_error":true,"api_error_status":401,"total_cost_usd":0,"result":"Failed to authenticate. API Error: 401 Invalid authentication credentials"}'
@@ -126,8 +129,8 @@ if [[ "$MODEL" == "haiku" ]]; then
   esac
 fi
 
-# --- Opus (per-line research run。ADR-0010 で呼1 は opus) ---
-if [[ "$MODEL" == "opus" ]]; then
+# --- 呼1: per-line research run (repo-research-protocol.md) ---
+if [[ "$PROTOCOL" == *repo-research-protocol.md ]]; then
   # プロンプトから track を抽出 (per-line プロンプトの "- line (track): X" 行)
   TRACK=$(printf '%s\n' "$PROMPT" | sed -n 's/^- line (track): //p' | head -1)
   TRACK=${TRACK:-unknown}
@@ -167,15 +170,15 @@ if [[ "$MODEL" == "opus" ]]; then
   if [[ "$SCENARIO" != "noreport" ]]; then
     REPORT_DIR="$MOCK_HOME_DIR/mock-vault/daily-research"
     mkdir -p "$REPORT_DIR"
-    echo "# mock report for $TRACK" > "$REPORT_DIR/$(date +%Y-%m-%d)_${TRACK}_mock-report.md"
+    echo "# mock report for $TRACK" > "$REPORT_DIR/${DR_DATE:-$(date +%Y-%m-%d)}_${TRACK}_mock-report.md"
   fi
 
   echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.05,"num_turns":3,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}}]'
   exit 0
 fi
 
-# --- Sonnet (呼2: clarity 改稿。ADR-0010) ---
-if [[ "$MODEL" == "sonnet" ]]; then
+# --- 呼2: clarity 改稿 (clarity-review-protocol.md、ADR-0010) ---
+if [[ "$PROTOCOL" == *clarity-review-protocol.md ]]; then
   printf '%s' "$PROMPT" > "$MOCK_HOME_DIR/.prompt_clarity"
   printf '%s' "$ALLOWED" > "$MOCK_HOME_DIR/.allowed_clarity"
 
@@ -188,7 +191,7 @@ if [[ "$MODEL" == "sonnet" ]]; then
   exit 0
 fi
 
-echo "Unknown model: $MODEL" >&2
+echo "Unknown protocol: $PROTOCOL" >&2
 exit 1
 MOCK_SCRIPT
   chmod +x "$MOCK_HOME/.claude/local/claude"
@@ -201,7 +204,7 @@ run_script() {
 }
 
 get_log() {
-  cat "$MOCK_PROJECT/logs/$(date +%Y-%m-%d).log"
+  cat "$MOCK_PROJECT/logs/$DR_DATE.log"
 }
 
 # === Test: Normal path (rotation: 当日担当 1 line のみ、ADR-0010) ===
@@ -284,7 +287,7 @@ get_log() {
   local allowed prompt
   allowed=$(cat "$MOCK_HOME/.allowed_clarity")
   echo "$allowed" | grep -q "Edit(//"
-  echo "$allowed" | grep -q "mock-vault/daily-research/$(date +%Y-%m-%d)_${PICKED}_"
+  echo "$allowed" | grep -q "mock-vault/daily-research/${DR_DATE}_${PICKED}_"
   ! echo "$allowed" | grep -q "WebSearch"
   ! echo "$allowed" | grep -q "WebFetch"
   ! echo "$allowed" | grep -q "Bash"
@@ -304,7 +307,7 @@ get_log() {
 
   echo "$log_content" | grep -q "WARN: clarity pass failed"
   echo "$log_content" | grep -q "Completed successfully"
-  ls "$MOCK_HOME/mock-vault/daily-research/$(date +%Y-%m-%d)_${PICKED}_"*.md
+  ls "$MOCK_HOME/mock-vault/daily-research/${DR_DATE}_${PICKED}_"*.md
 }
 
 # === Test: Retry (per-line, once) ===
@@ -330,7 +333,7 @@ get_log() {
   log_content=$(get_log)
 
   echo "$log_content" | grep -q "failed after retry"
-  echo "$log_content" | grep -q "report gate failed for line(s): $PICKED"
+  echo "$log_content" | grep -q "report gate failed for line $PICKED"
   ! echo "$log_content" | grep -q "Completed successfully"
   echo "$log_content" | grep -q "Failed (E_NO_REPORT"
   # レポートが無いので clarity 呼2 は走らない
@@ -362,7 +365,7 @@ get_log() {
   local log_content
   log_content=$(get_log)
 
-  echo "$log_content" | grep -q "aborting all lines"
+  echo "$log_content" | grep -q "returned 401 — aborting"
   ! echo "$log_content" | grep -q "retrying once"
   [ ! -f "$MOCK_HOME/.prompt_clarity" ]
 }
@@ -422,7 +425,7 @@ EOF
   log_content=$(get_log)
 
   echo "$log_content" | grep -q "target_repo が存在しない"
-  echo "$log_content" | grep -q "report gate failed for line(s):.*ghost"
+  echo "$log_content" | grep -q "report gate failed for line ghost"
 }
 
 # === Test: Legacy config schema fail-fast (ADR-0004) ===

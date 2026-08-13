@@ -60,6 +60,20 @@ def _track_repos(track_cfg):
     return repos if isinstance(repos, list) else []
 
 
+def _track_rows(tracks):
+    """全 line の (track, key, target_repo) 行を config 記述順で返す。
+    tracks / rotation-pick が共有する行構築の正本 — 輪番の単位・順序は
+    この関数が定義する (二重実装で周期が黙って乖離するのを防ぐ)。"""
+    rows = []
+    for track, v in tracks.items():
+        for r in _track_repos(v):
+            key = r.get("key")
+            repo = r.get("target_repo")
+            if key and repo:
+                rows.append((track, key, repo))
+    return rows
+
+
 # --- error-fields: stdin JSON から "api_error_status<TAB>is_error" を出力 (auth/401 判定用) ---
 def cmd_error_fields(argv):
     try:
@@ -125,12 +139,8 @@ def cmd_tracks(argv):
     except ValueError as e:
         print(str(e), file=sys.stderr)
         return 1
-    for track, v in tracks.items():
-        for r in _track_repos(v):
-            key = r.get("key")
-            repo = r.get("target_repo")
-            if key and repo:
-                print(f"{track}\t{key}\t{repo}")
+    for track, key, repo in _track_rows(tracks):
+        print(f"{track}\t{key}\t{repo}")
     return 0
 
 
@@ -153,13 +163,7 @@ def cmd_rotation_pick(argv):
     except ValueError as e:
         print(str(e), file=sys.stderr)
         return 1
-    rows = []
-    for track, v in tracks.items():
-        for r in _track_repos(v):
-            key = r.get("key")
-            repo = r.get("target_repo")
-            if key and repo:
-                rows.append((track, key, repo))
+    rows = _track_rows(tracks)
     if not rows:
         print("rotation-pick: no lines in config", file=sys.stderr)
         return 1
@@ -328,15 +332,29 @@ def _sum_pass_metrics(dicts):
     return total
 
 
+def _total_cost(record):
+    """record の pass1 / pass2 / clarity_pass から total_cost を合算する
+    (live = metrics-append と rescue = metrics-backfill の共通定義)。"""
+    return round(
+        sum(
+            p["cost"]
+            for p in (record["pass1"], record["pass2"], record["clarity_pass"])
+            if p and "cost" in p
+        ),
+        4,
+    )
+
+
 # --- metrics-append <metrics_path> <date> <final_class> <report_count> <retry:0|1> ---
-# stdin: 行区切りの JSON 群。lint JSON ("hard_fail" キーを持つ) は lint に、
-# "CLARITY\t<ok:0|1>\t{json}" 形式の行は clarity_pass に、それ以外の claude -p
-# result JSON は run として pass2 に集約する (ADR-0008 per-repo 実行の N run を、
-# 旧来のレコード形 — expect-check / /dr-review の契約 — に写像する)。
+# stdin: 1 行 1 レコード、統一 framing "LABEL\t[meta\t]payload"。
+#   RUN\t{json}          — claude -p result JSON。pass2 に合算 (ADR-0008 の写像)
+#   LINT\t{json}         — report-lint (ctl-016) の JSON
+#   CLARITY\t<ok:0|1>\t{json} — 呼2 clarity 改稿の発動記録 (ADR-0010)
+# ラベル不明・payload 破損の行は skip (収集は non-fatal)。
 # pass1 は per-repo 化で廃止 (None 固定)。第 5 引数はリトライ発生の有無で、
 # レコード互換のため旧フィールド名 fallback_used に記録する。
-# clarity_pass (ADR-0010): 呼2 = fresh-context clarity 改稿の発動記録。verdict や
-# スコアは保存しない (in-loop 型 — 消費は run 内で完結し、ここは発動事実のみ)。
+# clarity_pass (ADR-0010): verdict やスコアは保存しない (in-loop 型 — 消費は
+# run 内で完結し、ここは発動事実のみ)。
 def cmd_metrics_append(argv):
     from datetime import datetime
 
@@ -354,26 +372,27 @@ def cmd_metrics_append(argv):
         line = line.strip()
         if not line:
             continue
-        if line.startswith("CLARITY\t"):
-            parts = line.split("\t", 2)
-            if len(parts) == 3:
-                try:
-                    clarity = {
-                        "ran": True,
-                        "ok": parts[1] == "1",
-                        **_pass_metrics(json.loads(parts[2])),
-                    }
-                except (json.JSONDecodeError, AttributeError, TypeError):
-                    clarity = {"ran": True, "ok": parts[1] == "1"}
-            continue
-        try:
-            d = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(d, dict) and "hard_fail" in d:
-            lint = d
-        else:
-            runs.append(_pass_metrics(d))
+        label, _, payload = line.partition("\t")
+        if label == "CLARITY":
+            ok, _, cj = payload.partition("\t")
+            try:
+                clarity = {
+                    "ran": True,
+                    "ok": ok == "1",
+                    **_pass_metrics(json.loads(cj)),
+                }
+            except (json.JSONDecodeError, AttributeError, TypeError):
+                clarity = {"ran": True, "ok": ok == "1"}
+        elif label == "LINT":
+            try:
+                lint = json.loads(payload)
+            except json.JSONDecodeError:
+                continue
+        elif label == "RUN":
+            try:
+                runs.append(_pass_metrics(json.loads(payload)))
+            except json.JSONDecodeError:
+                continue
 
     record = {
         "date": date_s,
@@ -387,14 +406,7 @@ def cmd_metrics_append(argv):
         "clarity_pass": clarity,
         "lint": lint,
     }
-    record["total_cost"] = round(
-        sum(
-            p["cost"]
-            for p in (record["pass1"], record["pass2"], record["clarity_pass"])
-            if p and "cost" in p
-        ),
-        4,
-    )
+    record["total_cost"] = _total_cost(record)
     with open(metrics_path, "a") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
     print(
@@ -499,14 +511,7 @@ def cmd_metrics_backfill(argv):
             for run in runs:
                 if run["pass1"] is None and run["pass2"] is None:
                     continue  # SUMMARY 行のない中断 run はデータなし
-                run["total_cost"] = round(
-                    sum(
-                        p["cost"]
-                        for p in (run["pass1"], run["pass2"], run["clarity_pass"])
-                        if p and "cost" in p
-                    ),
-                    4,
-                )
+                run["total_cost"] = _total_cost(run)
                 if (run["date"], run["ts"]) in existing:
                     continue
                 out.write(json.dumps(run, ensure_ascii=False) + "\n")

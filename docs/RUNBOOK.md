@@ -121,7 +121,7 @@ launchctl list | grep daily-research
 | `=== Line: <track> (<repo path>) ===` | Per-line run starting with that repo as cwd |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | Per-line run statistics (cost, turns, duration, tokens) |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | Transient failure; the single retry is starting |
-| `ERROR: Line <track> returned 401 — aborting all lines` | Auth expired mid-run; no further lines are attempted |
+| `ERROR: Line <track> returned 401 — aborting` | Auth expired mid-run; the run stops immediately |
 | `Line <track> report gate passed (N report)` | ctl-015: the line's `{date}_{track}_*.md` exists in the vault |
 | `WARN: Line <track> produced no ..._*.md (ctl-015)` | The line ran but wrote no report — counted as failed |
 | `Report existence gate passed: N report(s)` | The day's picked line passed ctl-015 |

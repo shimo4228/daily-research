@@ -34,10 +34,10 @@ teardown() {
   ! grep -qi 'version.*authentication\|authentication.*version' "$PROJECT_DIR/scripts/check-auth.sh"
 }
 
-# === Per-repo 実行の配線 (ADR-0008) ===
+# === Per-repo 実行の配線 (ADR-0008 / 輪番は ADR-0010) ===
 
-@test "orchestrator loops lines via tracks and runs claude with cwd=target_repo" {
-  grep -q 'dr_pipeline.py" tracks\|DR_PY" tracks' "$SCRIPT" || grep -q '"\$DR_PY" tracks' "$SCRIPT"
+@test "orchestrator picks the day's line via rotation-pick and runs claude with cwd=target_repo" {
+  grep -q 'rotation-pick' "$SCRIPT"
   grep -q 'cd "\$TARGET_REPO"' "$SCRIPT"
 }
 

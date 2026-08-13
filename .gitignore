@@ -13,6 +13,7 @@ config.toml.bak
 past_topics.json
 past_topics.json.bak
 metrics.jsonl
+metrics.jsonl.bak*
 
 # MCP config (project-scoped MCP servers, if any)
 .mcp.json

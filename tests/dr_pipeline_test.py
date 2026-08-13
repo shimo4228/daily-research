@@ -347,7 +347,7 @@ RUN2_JSON = '{"total_cost_usd":7.5,"num_turns":10,"duration_ms":99000,"usage":{"
 
 @pytest.mark.unit
 def test_metrics_append_aggregates_runs_into_pass2(monkeypatch, capsys, tmp_path):
-    # per-repo 実行 (ADR-0008): N run JSON + lint JSON を stdin で受け、
+    # 統一 framing "LABEL\t..." (RUN / LINT / CLARITY) で受け、
     # run 群を pass2 に合算・pass1 は None (旧レコード形との互換写像)。
     metrics = tmp_path / "metrics.jsonl"
     lint = '{"date":"2026-08-05","files":4,"hard_fail":0,"soft_fail":1,"results":[]}'
@@ -355,7 +355,7 @@ def test_metrics_append_aggregates_runs_into_pass2(monkeypatch, capsys, tmp_path
         monkeypatch,
         capsys,
         ["metrics-append", str(metrics), "2026-08-05", "OK", "4", "1"],
-        f"{RUN1_JSON}\n{RUN2_JSON}\n{lint}",
+        f"RUN\t{RUN1_JSON}\nRUN\t{RUN2_JSON}\nLINT\t{lint}",
     )
     assert rc == 0
     assert "2 runs" in out
@@ -373,13 +373,16 @@ def test_metrics_append_aggregates_runs_into_pass2(monkeypatch, capsys, tmp_path
 
 
 @pytest.mark.unit
-def test_metrics_append_tolerates_empty_stdin_lines(monkeypatch, capsys, tmp_path):
+def test_metrics_append_tolerates_empty_and_unknown_lines(
+    monkeypatch, capsys, tmp_path
+):
+    # 空行・ラベル無し行・payload 空の行は skip (収集は non-fatal)
     metrics = tmp_path / "metrics.jsonl"
     rc, _, _ = run_cmd(
         monkeypatch,
         capsys,
         ["metrics-append", str(metrics), "2026-08-05", "E_NO_REPORT", "0", "0"],
-        "\n\n\n",
+        "\n\nunlabeled-garbage\nRUN\t\nLINT\t\n",
     )
     assert rc == 0
     rec = json.loads(metrics.read_text())
@@ -402,7 +405,7 @@ def test_metrics_append_records_clarity_line(monkeypatch, capsys, tmp_path):
         monkeypatch,
         capsys,
         ["metrics-append", str(metrics), "2026-08-14", "OK", "1", "0"],
-        f"{RUN1_JSON}\nCLARITY\t1\t{clarity_json}\n",
+        f"RUN\t{RUN1_JSON}\nCLARITY\t1\t{clarity_json}\n",
     )
     assert rc == 0
     rec = json.loads(metrics.read_text())
@@ -421,7 +424,7 @@ def test_metrics_append_clarity_fail_with_broken_json(monkeypatch, capsys, tmp_p
         monkeypatch,
         capsys,
         ["metrics-append", str(metrics), "2026-08-14", "OK", "1", "0"],
-        f"{RUN1_JSON}\nCLARITY\t0\tnot-json\n",
+        f"RUN\t{RUN1_JSON}\nCLARITY\t0\tnot-json\n",
     )
     assert rc == 0
     rec = json.loads(metrics.read_text())
