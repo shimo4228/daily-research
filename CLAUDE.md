@@ -1,6 +1,6 @@
 # daily-research
 
-Claude Code 非対話モード (`claude -p`) + macOS launchd で毎朝 AM 5:00 に自律リサーチを実行するシステム。6 つの研究ライン (line) が 6 つの研究 repo に 1:1 でマッピングされる (`akc` = agent-knowledge-cycle / `contemplative` = contemplative-agent / `aap` = agent-attribution-practice / `authorship` = authorship-strategy / `ans` = attention-not-self / `desire` = desire-frontier。desire 以外は DOI 登録済み)。**rotation + 二層 eval (ADR-0010) + daily line 機構 (ADR-0011、2026-08-18 以降は使用 line なし = ADR-0012)**: 毎朝、輪番で選ばれた 1 line (と `daily = true` の line があればそれも) が `claude -p` を **cwd = 対象 repo** で実行し (per-repo in-context research, ADR-0008)、repo 自身の運用文脈 (CLAUDE.md / タスク台帳 / open questions / 実施履歴) から「repo の前提・問い・立場を動かす外部の動き」をリサーチする。run 内でテーマ候補を複数生成して二値チェックリストで選別し (`theme_rank`)、執筆後に fresh-context の clarity 改稿 (呼2) が可読性を仕上げる。出力は**前提知識ゼロで読める自由形式の解説レポート** (ADR-0009) を Obsidian vault へ — 提案・承認要求は書かず、日付付き締切を持つ機会だけを末尾「機会メモ」に記録する。7:00 の Slack 承認ブリーフは廃止済み (ADR-0009)。
+Claude Code 非対話モード (`claude -p`) + macOS launchd で毎朝 AM 5:00 に自律リサーチを実行するシステム。7 つの研究ライン (line) が 7 つの研究 repo に 1:1 でマッピングされる (`akc` = agent-knowledge-cycle / `contemplative` = contemplative-agent / `aap` = agent-attribution-practice / `authorship` = authorship-strategy / `ans` = attention-not-self / `desire` = desire-frontier / `edge` = edge-frontier。desire / edge 以外は DOI 登録済み)。**rotation + 二層 eval (ADR-0010) + daily line 機構 (ADR-0011、2026-08-20 以降は `edge` が daily = ADR-0013)**: 毎朝、輪番で選ばれた 1 line (と `daily = true` の line があればそれも) が `claude -p` を **cwd = 対象 repo** で実行し (per-repo in-context research, ADR-0008)、repo 自身の運用文脈 (CLAUDE.md / タスク台帳 / open questions / 実施履歴) から「repo の前提・問い・立場を動かす外部の動き」をリサーチする。run 内でテーマ候補を複数生成して二値チェックリストで選別し (`theme_rank`)、執筆後に fresh-context の clarity 改稿 (呼2) が可読性を仕上げる。出力は**前提知識ゼロで読める自由形式の解説レポート** (ADR-0009) を Obsidian vault へ — 提案・承認要求は書かず、日付付き締切を持つ機会だけを末尾「機会メモ」に記録する。7:00 の Slack 承認ブリーフは廃止済み (ADR-0009)。
 
 ## Tech Stack
 
@@ -182,9 +182,11 @@ tail -f logs/$(date +%Y-%m-%d).log
 
 - 本番稼働中。毎朝 AM 5:00 に launchd で自動実行 (7:00 Slack ブリーフは ADR-0009 で廃止)
 - **rotation + 二層 eval (2026-08-13 再設計 = ADR-0010) + daily line (2026-08-14)**:
-  毎朝 1 line — `akc` / `contemplative` / `aap` / `authorship` / `ans` / `desire` の 6 line を
-  1 line ずつ輪番実行 (6 日周期)。`desire` は 2026-08-14〜18 のみ `daily = true` で毎日実行
-  (ADR-0011)、2026-08-18 に輪番へ戻した (ADR-0012)。daily 機構は残るが現行使用 line なし。
+  毎朝、`akc` / `contemplative` / `aap` / `authorship` / `ans` / `desire` の 6 line の
+  輪番 1 line (6 日周期) + daily line `edge` の計 2 line を実行。`desire` は 2026-08-14〜18
+  のみ `daily = true` で毎日実行 (ADR-0011)、2026-08-18 に輪番へ戻した (ADR-0012)。
+  2026-08-20 に `edge` (AI 活用の限界突破事例、接地 repo = edge-frontier) を daily で
+  新設 (ADR-0013)。
   呼1 = Opus 研究 (テーマ選別込み)、呼2 = Sonnet clarity 改稿。ライン数・repo
   マッピング・輪番順は config.toml から動的取得。成功基準は 4 週後の /dr-review で
   判定 (repo 還元件数 / theme_rank 分布 / 主観)
