@@ -617,3 +617,36 @@ assert rec["clarity_pass"]["ok"] is False, rec
 PYEOF
   [ "$status" -eq 0 ]
 }
+
+# === Test: DR_ONLY_TRACK seam (当日担当のうち 1 line だけ実行するテスト seam) ===
+
+@test "E2E only-track: DR_ONLY_TRACK runs only the named line among today's lines" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  add_daily_line
+
+  HOME="$MOCK_HOME" DR_ONLY_TRACK=desire bash "$MOCK_PROJECT/scripts/daily-research.sh" 2>&1
+  local log_content
+  log_content=$(get_log)
+
+  echo "$log_content" | grep -q "DR_ONLY_TRACK seam: line desire のみ実行"
+  echo "$log_content" | grep -q "Line: desire"
+  ! echo "$log_content" | grep -q "Line: $PICKED"
+  ! echo "$log_content" | grep -q "Rotation pick:"
+  echo "$log_content" | grep -q "Line desire report gate passed"
+  echo "$log_content" | grep -q "Completed successfully"
+  # 輪番担当 line の run は発生しない
+  [ ! -f "$MOCK_HOME/.prompt_$PICKED" ]
+}
+
+@test "E2E only-track: DR_ONLY_TRACK not in today's lines fails fast without running anything" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+
+  run env HOME="$MOCK_HOME" DR_ONLY_TRACK=nonexistent bash "$MOCK_PROJECT/scripts/daily-research.sh"
+  [ "$status" -ne 0 ]
+  local log_content
+  log_content=$(get_log)
+
+  echo "$log_content" | grep -q "DR_ONLY_TRACK=nonexistent は当日の担当 line に含まれない"
+  ! echo "$log_content" | grep -q "=== Line:"
+  [ ! -f "$MOCK_HOME/.prompt_$PICKED" ]
+}

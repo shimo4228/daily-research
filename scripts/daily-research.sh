@@ -137,10 +137,30 @@ while IFS= read -r ROW; do
   [ -n "$ROW" ] && TRACK_ROWS+=("$ROW")
 done <<< "$TRACKS_TSV"
 
-IFS=$'\t' read -r FIRST_TRACK _ _ <<< "${TRACK_ROWS[0]}"
-log "Rotation pick: $FIRST_TRACK (ADR-0010)"
-if [ "${#TRACK_ROWS[@]}" -gt 1 ]; then
-  log "Today's lines: ${#TRACK_ROWS[@]} (rotation + daily)"
+# DR_ONLY_TRACK はテスト用 seam (DR_DATE と同種): 当日担当 line のうち指定した
+# 1 line だけを実行する。新 line の初回試験などで、他 line の重複実行 (重複レポート・
+# 二重 ingest) を避ける用途。当日担当に無い track の指定は fail-fast — 輪番外 line の
+# 任意起動には使えない (rotation の決定論を seam が迂回しないため)。
+if [ -n "${DR_ONLY_TRACK:-}" ]; then
+  ONLY_ROWS=()
+  for ROW in "${TRACK_ROWS[@]}"; do
+    case "$ROW" in
+      "${DR_ONLY_TRACK}"$'\t'*) ONLY_ROWS+=("$ROW") ;;
+    esac
+  done
+  if [ "${#ONLY_ROWS[@]}" -eq 0 ]; then
+    log "ERROR: DR_ONLY_TRACK=$DR_ONLY_TRACK は当日の担当 line に含まれない"
+    notify "DR_ONLY_TRACK=$DR_ONLY_TRACK が当日の担当 line にありません" "Daily Research Error"
+    exit 1
+  fi
+  TRACK_ROWS=("${ONLY_ROWS[@]}")
+  log "DR_ONLY_TRACK seam: line $DR_ONLY_TRACK のみ実行 (test run)"
+else
+  IFS=$'\t' read -r FIRST_TRACK _ _ <<< "${TRACK_ROWS[0]}"
+  log "Rotation pick: $FIRST_TRACK (ADR-0010)"
+  if [ "${#TRACK_ROWS[@]}" -gt 1 ]; then
+    log "Today's lines: ${#TRACK_ROWS[@]} (rotation + daily)"
+  fi
 fi
 
 # bash 3.2 + set -u では空配列参照が unbound variable で無言死するため、
