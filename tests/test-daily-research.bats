@@ -194,8 +194,9 @@ teardown() {
 
 # === Defensive programming ===
 
-@test "set -euo pipefail is configured" {
-  head -3 "$SCRIPT" | grep -q "set -euo pipefail"
+@test "set -Eeuo pipefail is configured (-E: ERR trap reaches function bodies)" {
+  head -3 "$SCRIPT" | grep -q "set -Eeuo pipefail"
+  grep -q "' ERR$" "$SCRIPT"
 }
 
 @test "trap release_lock is registered on EXIT" {

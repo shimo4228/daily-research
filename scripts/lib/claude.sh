@@ -8,7 +8,9 @@
 # CLAUDE_TIMEOUT: 0 以外を設定すると timeout コマンドで制限（秒）
 run_claude() {
   if [ "${CLAUDE_TIMEOUT:-0}" -gt 0 ] 2>/dev/null; then
-    timeout "$CLAUDE_TIMEOUT" "$CLAUDE_CMD" "$@" < /dev/null
+    # -k 60: SIGTERM を無視する node / MCP 子プロセスが lock を握ったまま永久待機し、
+    # 翌朝以降の run を全部 "Another instance is running" で潰す事故を防ぐ (2026-08-22 review)
+    timeout -k 60 "$CLAUDE_TIMEOUT" "$CLAUDE_CMD" "$@" < /dev/null
   else
     "$CLAUDE_CMD" "$@" < /dev/null
   fi

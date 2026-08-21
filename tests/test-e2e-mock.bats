@@ -174,6 +174,17 @@ if [[ "$PROTOCOL" == *repo-research-protocol.md ]]; then
       echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"error","is_error":true,"total_cost_usd":0.05,"num_turns":55,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}}]'
       exit 0
       ;;
+    run-iserror-once)
+      # attempt 1 は is_error (コスト $0.05 を消費して失敗)、attempt 2 で成功 →
+      # metrics の pass2 は両 attempt の合算であるべき
+      COUNT_FILE="$MOCK_HOME_DIR/.count_iserror_$TRACK"
+      COUNT=$(cat "$COUNT_FILE" 2>/dev/null || echo 0)
+      COUNT=$((COUNT + 1)); echo "$COUNT" > "$COUNT_FILE"
+      if [[ "$COUNT" -eq 1 ]]; then
+        echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"error","is_error":true,"total_cost_usd":0.05,"num_turns":55,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}}]'
+        exit 0
+      fi
+      ;;
   esac
 
   # noreport: success を返すがレポートを書かない (成功化け → ctl-015 が捕捉すべき)
@@ -566,6 +577,47 @@ get_log() {
   get_log | grep -q "report filename rejected"
   get_log | grep -q "ctl-015"
   [ ! -f "$MOCK_HOME/.allowed_clarity" ]
+}
+
+# === Test: retry 日の metrics は全 attempt のコストを合算する ===
+@test "E2E metrics: a retried line records both attempts' cost in pass2 (fallback_used=true)" {
+  echo "run-iserror-once" > "$MOCK_HOME/.mock_scenario"
+
+  run_script
+  get_log | grep -q "retrying once"
+  run python3 - "$MOCK_PROJECT/metrics.jsonl" << 'PYEOF'
+import json, sys
+rec = json.loads(open(sys.argv[1]).read().splitlines()[0])
+assert rec["fallback_used"] is True, rec
+assert abs(rec["pass2"]["cost"] - 0.10) < 1e-9, rec   # 0.05 (失敗) + 0.05 (成功)
+assert rec["pass2"]["turns"] == 58, rec                # 55 + 3
+PYEOF
+  [ "$status" -eq 0 ]
+}
+
+# === Test: 試験 seam の run は metrics に source=test で記録され集計から除かれる ===
+@test "E2E metrics: DR_FORCE_TRACK run is tagged source=test and excluded from expect-check" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+
+  HOME="$MOCK_HOME" DR_FORCE_TRACK="$OTHER" bash "$MOCK_PROJECT/scripts/daily-research.sh" 2>&1
+  run python3 - "$MOCK_PROJECT/metrics.jsonl" << 'PYEOF'
+import json, sys
+rec = json.loads(open(sys.argv[1]).read().splitlines()[0])
+assert rec["source"] == "test", rec
+PYEOF
+  [ "$status" -eq 0 ]
+  # 本番集計 (expect-check) は test レコードを見ない → データ不足
+  run bash -c "printf '2026-01-01\treport_count_min >= 1\n' | python3 '$MOCK_PROJECT/scripts/lib/dr_pipeline.py' expect-check '$MOCK_PROJECT/metrics.jsonl'"
+  echo "$output" | grep -q "INSUFFICIENT_DATA"
+}
+
+# === Test: notify は配送の成否を log に残す (無人 run の唯一の push 経路) ===
+@test "E2E notify: every notify call leaves a sent/failed/skipped line in the log" {
+  echo "noreport" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  # E_NO_REPORT で notify が呼ばれる → 成否いずれかが log に残る
+  get_log | grep -qE "notify (sent|failed|skipped)"
 }
 
 # === Test: 不在 repo は skip され部分失敗になる ===

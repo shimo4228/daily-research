@@ -156,7 +156,7 @@ per-repo 単一パス設計は、2026-08-04 に旧中央 2 パス（Opus テー�
 
 呼2（clarity 改稿、ADR-0010）はレポート存在ゲートの後に走る: fresh-context の Sonnet プロセス（`--max-turns 15`、`CLAUDE_TIMEOUT=900`、`--allowedTools` = Read + 当日ノートのみの Edit）が完成ノートを初見読者として読み、つまずき箇所を直す。失敗は fail-open — ログに `WARN: clarity pass failed` を記録し、未改稿（timeout 時は部分改稿）の版が残り、`FINAL_EXIT` には影響しない。
 
-`metrics.jsonl` は `expect-check` / `/dr-review` との互換のため ADR-0008 以前のレコード形を維持する: リサーチ run の JSON は `pass2` フィールドに合算され、`pass1` は常に `None`、`fallback_used` は「リトライが発生した」の意味、`clarity_pass` は呼2 の `{ran, ok, cost, turns, ...}` を記録する（verdict 自体は保存しない — eval は in-loop 型、ADR-0010）。
+`metrics.jsonl` は `expect-check` / `/dr-review` との互換のため ADR-0008 以前のレコード形を維持する: リサーチ run の JSON は `pass2` フィールドに合算され、`pass1` は常に `None`、`fallback_used` は「リトライが発生した」の意味（`pass2` は全 attempt の合算）、`source` は `live` / `test`（`DR_FORCE_TRACK` / `DR_ONLY_TRACK` の run は `test` で記録され `expect-check` / `/dr-review` の集計から除かれる）、`clarity_pass` は呼2 の `{ran, ok, cost, turns, ...}` を記録する（verdict 自体は保存しない — eval は in-loop 型、ADR-0010）。
 
 ## 永続メモリ層
 

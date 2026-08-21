@@ -49,9 +49,23 @@ teardown() {
 
 # === notify.sh ===
 
-@test "notify is a no-op (returns 0) when osascript is absent" {
+@test "notify is a no-op (returns 0) when osascript is absent — but says so" {
   run env PATH="/nonexistent-dir" /bin/bash -c "source '$LIB_DIR/notify.sh'; notify 'body' 'title'"
   [ "$status" -eq 0 ]
+  echo "$output" | grep -q "notify skipped"
+}
+
+@test "notify logs delivery failure instead of swallowing it" {
+  local fake; fake=$(mktemp -d)
+  printf '#!/bin/sh\necho "execution error: Not authorized" >&2\nexit 1\n' > "$fake/osascript"
+  chmod +x "$fake/osascript"
+  run env PATH="$fake:/usr/bin:/bin" /bin/bash -c "source '$LIB_DIR/notify.sh'; notify 'body' 'title'"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "notify failed (execution error: Not authorized): title"
+}
+
+@test "run_claude passes timeout -k so a SIGTERM-ignoring child is killed" {
+  grep -q 'timeout -k 60 "\$CLAUDE_TIMEOUT"' "$LIB_DIR/claude.sh"
 }
 
 @test "notify does not crash with quotes/backslashes in body (injection guard)" {

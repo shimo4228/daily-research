@@ -156,7 +156,7 @@ The research run is bounded two ways: `--max-turns 55` and a 25-minute external 
 
 Call 2 (clarity revision, ADR-0010) runs after the report-existence gate: a fresh-context Sonnet process (`--max-turns 15`, `CLAUDE_TIMEOUT=900`, `--allowedTools` = Read + Edit of the day's note only) reads the finished note as a first-contact reader and fixes comprehension stumbles. Its failure is fail-open: the log records `WARN: clarity pass failed`, the unrevised (or, on timeout, partially revised) note survives, and `FINAL_EXIT` is unaffected.
 
-`metrics.jsonl` keeps the pre-ADR-0008 record shape for compatibility with `expect-check` / `/dr-review`: the research run JSON is aggregated into the `pass2` field, `pass1` is always `None`, `fallback_used` means "a retry occurred", and `clarity_pass` records call 2's `{ran, ok, cost, turns, ...}` (verdicts themselves are never stored — the eval is in-loop, ADR-0010).
+`metrics.jsonl` keeps the pre-ADR-0008 record shape for compatibility with `expect-check` / `/dr-review`: the research run JSON is aggregated into the `pass2` field, `pass1` is always `None`, `fallback_used` means "a retry occurred" (`pass2` sums every attempt), `source` is `live` or `test` (runs under `DR_FORCE_TRACK` / `DR_ONLY_TRACK` are recorded as `test` and excluded from `expect-check` / `/dr-review` aggregation), and `clarity_pass` records call 2's `{ran, ok, cost, turns, ...}` (verdicts themselves are never stored — the eval is in-loop, ADR-0010).
 
 ## Persistent Memory Layer
 

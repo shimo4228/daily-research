@@ -819,3 +819,26 @@ def test_unknown_subcommand_usage(monkeypatch, capsys):
 def test_no_subcommand_usage(monkeypatch, capsys):
     rc, _, err = run_cmd(monkeypatch, capsys, [])
     assert rc == 64
+
+
+# === metrics source=test の除外 (2026-08-22: 試験 seam が本番集計を汚染していた) ===
+
+
+def test_metrics_append_source_arg_and_load_filter(monkeypatch, capsys, tmp_path):
+    metrics = tmp_path / "metrics.jsonl"
+    run = json.dumps({"total_cost_usd": 1.0, "num_turns": 3, "duration_ms": 1000,
+                      "usage": {"input_tokens": 1, "output_tokens": 1}})
+    for src in ("live", "test"):
+        monkeypatch.setattr("sys.stdin", io.StringIO(f"RUN\t{run}\n"))
+        assert dr_pipeline.main(["metrics-append", str(metrics), "2026-08-22", "OK", "2", "0", src]) == 0
+    recs = [json.loads(line) for line in metrics.read_text().splitlines()]
+    assert [r["source"] for r in recs] == ["live", "test"]
+    assert [r["source"] for r in dr_pipeline._load_metrics(str(metrics))] == ["live"]
+    assert len(dr_pipeline._load_metrics(str(metrics), include_test=True)) == 2
+
+
+def test_metrics_append_source_defaults_to_live(monkeypatch, tmp_path):
+    metrics = tmp_path / "metrics.jsonl"
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    assert dr_pipeline.main(["metrics-append", str(metrics), "2026-08-22", "OK", "1", "0"]) == 0
+    assert json.loads(metrics.read_text())["source"] == "live"

@@ -31,13 +31,19 @@ secret_patterns=(
 # Files excluded from secret scanning (this hook defines patterns, not secrets)
 scan_exclude="scripts/pre-commit.sh"
 
-staged_files=$(git diff --cached --name-only --diff-filter=ACM)
+# NUL 区切り + read -d '' で空白・非 ASCII のパスも 1 要素として扱う。unquoted 展開で
+# 語分割すると `my notes.md` は 2 片に、日本語名は core.quotePath の "\350\250..." に
+# なり、どちらも `git diff -- "$f"` が空を返して走査されない (2026-08-22 review、PoC 済み)
+staged_files=()
+while IFS= read -r -d '' f; do
+  staged_files+=("$f")
+done < <(git diff --cached --name-only --diff-filter=ACM -z)
 
-if [ -n "$staged_files" ]; then
+if [ ${#staged_files[@]} -gt 0 ]; then
   for pattern in "${secret_patterns[@]}"; do
     # Search staged content per-file, skipping excluded files
-    for f in $staged_files; do
-      case "$f" in $scan_exclude) continue ;; esac
+    for f in "${staged_files[@]}"; do
+      case "$f" in "$scan_exclude") continue ;; esac
       matches=$(git diff --cached -U0 -- "$f" | grep -E "^\+" | grep -E "$pattern" || true)
       if [ -n "$matches" ]; then
         echo -e "${RED}[BLOCKED] Secret pattern in ${f}: ${pattern}${NC}"
@@ -65,19 +71,19 @@ for f in "${protected_files[@]}"; do
 done
 
 # --- 3. Shell script syntax check ---
-staged_sh=$(echo "$staged_files" | grep '\.sh$' || true)
+syntax_err=$(mktemp "${TMPDIR:-/tmp}/pre-commit-syntax.XXXXXX")
+trap 'rm -f "$syntax_err"' EXIT
 
-if [ -n "$staged_sh" ]; then
-  for f in $staged_sh; do
-    if [ -f "$f" ]; then
-      if ! bash -n "$f" 2>/tmp/pre-commit-syntax-err; then
-        echo -e "${RED}[BLOCKED] Syntax error in ${f}:${NC}"
-        cat /tmp/pre-commit-syntax-err
-        errors=$((errors + 1))
-      fi
+for f in "${staged_files[@]}"; do
+  case "$f" in *.sh) ;; *) continue ;; esac
+  if [ -f "$f" ]; then
+    if ! bash -n "$f" 2>"$syntax_err"; then
+      echo -e "${RED}[BLOCKED] Syntax error in ${f}:${NC}"
+      cat "$syntax_err"
+      errors=$((errors + 1))
     fi
-  done
-fi
+  fi
+done
 
 # --- Result ---
 if [ "$errors" -gt 0 ]; then

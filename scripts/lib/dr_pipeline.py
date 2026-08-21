@@ -310,8 +310,12 @@ def _pass_metrics(d):
     }
 
 
-def _load_metrics(metrics_path):
-    """metrics.jsonl を list[dict] で返す。壊れた行は skip (収集は non-fatal)。"""
+def _load_metrics(metrics_path, include_test=False):
+    """metrics.jsonl を list[dict] で返す。壊れた行は skip (収集は non-fatal)。
+
+    source == "test" (DR_FORCE_TRACK / DR_ONLY_TRACK の試験 run) は既定で除く —
+    expect-check / dr-review は本番 run だけを見る。backfill の重複判定は全件を見る。
+    """
     records = []
     try:
         with open(metrics_path) as f:
@@ -320,9 +324,12 @@ def _load_metrics(metrics_path):
                 if not line:
                     continue
                 try:
-                    records.append(json.loads(line))
+                    rec = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if not include_test and rec.get("source") == "test":
+                    continue
+                records.append(rec)
     except FileNotFoundError:
         pass
     return records
@@ -372,11 +379,13 @@ def cmd_metrics_append(argv):
     if len(argv) < 5:
         print(
             "usage: metrics-append <metrics_path> <date> <final_class> "
-            "<report_count> <retry:0|1>",
+            "<report_count> <retry:0|1> [source=live|test]",
             file=sys.stderr,
         )
         return 64
     metrics_path, date_s, final_class, report_count, retry = argv[:5]
+    # source="test" は試験 seam の run。_load_metrics の既定で集計から除かれる
+    source = argv[5] if len(argv) > 5 and argv[5] else "live"
 
     runs, lint, clarities = [], None, []
     for line in sys.stdin.read().split("\n"):
@@ -427,7 +436,7 @@ def cmd_metrics_append(argv):
     record = {
         "date": date_s,
         "ts": datetime.now().isoformat(timespec="seconds"),
-        "source": "live",
+        "source": source,
         "final_class": final_class,
         "report_count": int(report_count or 0),
         "fallback_used": retry == "1",
@@ -465,7 +474,10 @@ def cmd_metrics_backfill(argv):
         return 64
     metrics_path, logs_dir = argv[:2]
 
-    existing = {(r.get("date"), r.get("ts")) for r in _load_metrics(metrics_path)}
+    existing = {
+        (r.get("date"), r.get("ts"))
+        for r in _load_metrics(metrics_path, include_test=True)
+    }
     appended = 0
 
     log_files = sorted(

@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -Eeuo pipefail  # -E: ERR trap を関数内の失敗にも継承する
 
 # === パス解決 (PROJECT_DIR は script の位置から導出。$HOME ハードコード廃止) ===
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,6 +39,10 @@ log_summary() {
 
 # === 同時実行ガード (mkdir アトミックロック。lib/lock.sh) ===
 trap release_lock EXIT
+# set -e による予期せぬ死亡を無言にしない (2026-08-22 review): 失敗した行と command を
+# log + notify してから EXIT trap (lock 解放) に渡す。通常の非ゼロ exit は `exit N` で
+# 明示しているので ERR trap は通らない (ERR は失敗した単純コマンドでだけ発火する)。
+trap 'rc=$?; log "ERROR: unexpected exit $rc at line $LINENO: $BASH_COMMAND"; notify "リサーチが予期せず中断しました (line $LINENO)" "Daily Research Error"' ERR
 if ! acquire_lock; then
   log "ERROR: Another instance is running. Skipping."
   notify "前回のリサーチがまだ実行中です" "Daily Research Skipped"
@@ -132,6 +136,13 @@ PAST_THEMES=$(python3 "$DR_PY" past-themes 2>> "$LOG_FILE") \
 # TASKS / open questions) を入力に、自由形式の解説レポートを vault に書く。
 # プロトコルの正本は prompts/repo-research-protocol.md。
 RETRY_USED=0          # リトライが発生したか (metrics の fallback_used に記録)
+# metrics レコードの source: 試験 seam (DR_FORCE_TRACK / DR_ONLY_TRACK) の run は "test" で
+# 記録し、expect-check / dr-review の集計から除く — 本番 05:00 の記録に混ざると
+# report_count / cost / fallback_rate が汚染される (2026-08-20〜22 に実害)
+METRICS_SOURCE="live"
+if [ -n "${DR_FORCE_TRACK:-}" ] || [ -n "${DR_ONLY_TRACK:-}" ]; then
+  METRICS_SOURCE="test"
+fi
 
 # rotation-pick 出力: line \t repo_key \t target_repo (輪番 1 行 + daily 全行)。
 # 失敗 (line 0 件・config 破損) は set -e で無言終了せず、明示ログ + notify で止める。
@@ -286,6 +297,9 @@ $TEMPLATE"
       echo "$LINE_JSON" >> "$LOG_FILE"
       log_summary "$LINE_JSON" "Run($TRACK)"
     fi
+    # attempt ごとに蓄積する — ループ後に 1 回だと retry 日の 1 回目のコストが metrics から
+    # 消える (2026-08-14 に $1.51 欠落)。pass2 は全 attempt の合算になる
+    METRICS_STDIN+="RUN"$'\t'"$LINE_JSON"$'\n'
 
     LINE_CLASS=$(classify_exit "$LINE_EXIT" "$LINE_JSON")
     if [ "$LINE_CLASS" = "E_AUTH" ]; then
@@ -308,7 +322,6 @@ $TEMPLATE"
     fi
   done
 fi
-METRICS_STDIN+="RUN"$'\t'"$LINE_JSON"$'\n'
 
 # === レポート存在ゲート (ctl-015) — per line ===
 # 成否は「当日の {date}_{track}_*.md が vault に存在するか」の決定論条件で判定する。
@@ -476,7 +489,7 @@ fi
 # METRICS_STDIN に蓄積済みで、dr_pipeline が 1 レコードへ合算する。
 printf '%sLINT\t%s\n' "$METRICS_STDIN" "$LINT_JSON" \
   | python3 "$DR_PY" metrics-append "$PROJECT_DIR/metrics.jsonl" "$DATE" \
-      "$PASS2_CLASS" "${REPORT_COUNT:-0}" "$RETRY_USED" >> "$LOG_FILE" 2>&1 \
+      "$PASS2_CLASS" "${REPORT_COUNT:-0}" "$RETRY_USED" "$METRICS_SOURCE" >> "$LOG_FILE" 2>&1 \
   || log "WARN: metrics-append failed (non-fatal)"
 
 # 前回 /dr-review からの経過日数。10 日を超えたら 1 行 notify (判断材料の腐敗防止)。

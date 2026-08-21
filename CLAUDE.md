@@ -130,7 +130,8 @@ tail -f logs/$(date +%Y-%m-%d).log
   明示して非ゼロ exit。呼2 clarity の失敗はゲートに影響しない (fail-open)
 - **自己改善ループ (ADR-0006、preserve)**: 毎朝の run を `metrics.jsonl` (gitignore)
   に永続記録 (呼1 は pass2、呼2 は clarity_pass = ran/ok + 実測、pass1 は None、
-  fallback_used はリトライ発生の意味)。決定論レポート lint (ctl-016、hard fail のみ
+  fallback_used はリトライ発生の意味、pass2 は全 attempt の合算、試験 seam の run は
+  `source: "test"` で記録され expect-check / dr-review の集計から除外)。決定論レポート lint (ctl-016、hard fail のみ
   即日 notify) は固定 2 節 (機会メモ / ソース) を検査し `body_chars` を残す — 本文の
   記述規律の質は人間 consumer が判断。消費は対話 skill `/dr-review` (週 1 目安)。効果を意図した変更
   commit には `DR-Expect:` trailer。**事後採点の LLM judge は復活させない** —
