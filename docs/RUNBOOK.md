@@ -48,8 +48,10 @@ Config/prompt changes (`config.toml`, `prompts/*`, `templates/*`) take effect on
 # Via launchd
 launchctl start com.daily-research
 
-# Direct execution (must be in a separate terminal from Claude Code)
+# Direct execution — also works from inside a Claude Code session (lib/env.sh unsets CLAUDECODE)
 ./scripts/daily-research.sh
+# Test seams: DR_FORCE_TRACK=<line> (run one line outside the rotation, today's date),
+# DR_ONLY_TRACK=<line> (only that line among today's picks), DR_DATE=YYYY-MM-DD (fix the rotation date)
 ```
 
 ## Architecture
@@ -60,7 +62,7 @@ daily-research.sh (05:00)
 ├── Auth probe (real OAuth check)
 ├── Config schema check (legacy pre-ADR-0008 schema fails fast)
 ├── rotation-pick — deterministic selection of today's lines: one rotated line
-│   (epoch day % non-daily line count, ADR-0010) + every `daily = true` line (ADR-0011)
+│   (date.toordinal() % non-daily line count — proleptic Gregorian ordinal, ADR-0010) + every `daily = true` line (ADR-0011)
 ├── Call 1: claude -p, cwd = the picked line's target_repo (Opus, --max-turns 55,
 │   25-min timeout, one retry on transient failure; 401 aborts)
 │   ├── Read repo context (CLAUDE.md auto-loaded + context_files) + state/<line>/
@@ -111,20 +113,22 @@ launchctl list | grep daily-research
 | Auth valid | `./scripts/check-auth.sh` | "OK: Claude authentication is valid" |
 | Today's log exists | `ls logs/$(date +%Y-%m-%d).log` | File exists |
 | Log shows success | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | Match found |
-| Reports generated | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | One file per configured line |
+| Reports generated | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | One file per *picked* line (typically 2/day: the rotated line + the daily line) |
 
 ### Log Messages Reference
 
 | Message | Meaning |
 |---------|---------|
 | `Auth probe passed` | Real OAuth probe succeeded |
+| `ERROR: Auth probe failed — OAuth likely expired` | Real OAuth probe failed; the run stops before any line (exit 1) |
+| `ERROR: Another instance is running. Skipping.` | Lock directory `.daily-research.lock/` is held by a live PID |
 | `Config schema check passed` | `config.toml` matches the current (ADR-0008) schema |
 | `=== Line: <track> (<repo path>) ===` | Per-line run starting with that repo as cwd |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | Per-line run statistics (cost, turns, duration, tokens) |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | Transient failure; the single retry is starting |
 | `ERROR: Line <track> returned 401 — aborting remaining lines` | Auth expired mid-run; remaining lines are skipped, finished lines' results are kept |
-| `Line <track> report gate passed (N report)` | ctl-015: the line's `{date}_{track}_*.md` exists in the vault |
-| `WARN: Line <track> produced no ..._*.md (ctl-015)` | The line ran but wrote no report — counted as failed |
+| `Line <track> report gate passed` | ctl-015: the line's `{date}_{track}_*.md` exists in the vault |
+| `WARN: report gate failed for line <track> — no <date>_<track>_*.md (ctl-015)` | The line ran but wrote no report — counted as failed |
 | `Report existence gate passed: N report(s)` | Every picked line passed ctl-015 (partial failure logs `Failed (E_PARTIAL: ...)` instead) |
 | `WARN: clarity pass failed ...` | Call 2 clarity failed (fail-open — the run still succeeds) |
 | `WARN: report lint hard fail (ctl-016): ...` | Deterministic lint found a missing sources section / zero citations |
@@ -134,7 +138,7 @@ launchctl list | grep daily-research
 
 ### 1. OAuth Token Expired
 
-**Symptoms**: Log shows `ERROR: Claude authentication may have expired`. macOS notification appears.
+**Symptoms**: Log shows `ERROR: Auth probe failed — OAuth likely expired`. macOS notification appears.
 
 **Cause**: Claude OAuth token expires approximately every 4 days.
 
@@ -166,29 +170,31 @@ which claude
 
 ### 3. Lock File Prevents Execution
 
-**Symptoms**: Log shows `ERROR: Another instance is running (PID: ...)`.
+**Symptoms**: Log shows `ERROR: Another instance is running. Skipping.`
 
 **Cause**: Previous run is still active, or crashed without cleanup.
 
 **Fix**:
 ```bash
-# Check if the PID is actually running
+# The lock is a DIRECTORY holding a pid file
+cat .daily-research.lock/pid
 ps aux | grep daily-research
 
-# If no process is running, remove stale lock
-rm -f .daily-research.lock
+# If no process is running, remove the stale lock directory
+# (the script also steals a lock whose PID is dead on its next start)
+rm -rf .daily-research.lock
 ```
 
 ### 4. A Line Consistently Failing
 
-**Symptoms**: Log shows `WARN: Line <track> failed after retry` or `WARN: Line <track> produced no ..._*.md (ctl-015)` on consecutive days.
+**Symptoms**: Log shows `WARN: Line <track> failed after retry` or `WARN: report gate failed for line <track> — ... (ctl-015)` on consecutive days.
 
 **Causes**:
 - Rate limit hit (Claude Max plan quota) or network issues during WebSearch
 - The 25-minute per-line timeout expiring on an unusually deep run
 - The line's `target_repo` path in `config.toml` missing or moved
 
-**Fix**: Check the specific exit class in the log (`E_TRANSIENT` / `E_FATAL`). One line failing does not stop the others — their reports still land and get ingested. Verify `target_repo` exists, then re-run the script manually. A 401 (`E_AUTH`) means the OAuth token expired: see issue 1.
+**Fix**: Check the specific exit class in the log (`E_TRANSIENT` / `E_FATAL`). One line failing does not stop the others — their reports still land and get ingested; the day's final class is then `E_PARTIAL` (exit 1, `=== Failed (E_PARTIAL:<lines>, exit code 1) ===`), while `E_NO_REPORT` is reserved for a day with zero reports (ADR-0011). Verify `target_repo` exists, then re-run the script manually. A 401 (`E_AUTH`) means the OAuth token expired: see issue 1.
 
 ### 5. `ANTHROPIC_API_KEY` Set (Per-Token Billing)
 
@@ -244,7 +250,7 @@ ps aux | grep -E "pyright|sourcekit|claude-mem|sequential|japanese|ableton"
 
 **Symptoms**: Reports cover the same theme as recent days.
 
-**Cause**: `past_topics.json` not updated properly, or scoring criteria need tuning.
+**Cause**: `past_topics.json` not updated properly (the run's theme-selection questions depend on the past-themes dedup list it feeds).
 
 **Fix**:
 ```bash

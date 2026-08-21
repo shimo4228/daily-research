@@ -25,11 +25,14 @@ python3 scripts/lib/dr_pipeline.py metrics-backfill metrics.jsonl logs   # ロ�
 
 `metrics.jsonl` を読み、直近 30 日について以下を集計・提示する:
 
-- Pass1 / Pass2 の turns 分布 (p50 / p90 / max) と **設定中の `--max-turns` との余白**
-  (daily-research.sh の `--max-turns` 値と比較。p90 が上限に接近していたら警告)
+- Pass2 (呼1 研究 run の per-line 合算) の turns 分布 (p50 / p90 / max) と **設定中の
+  `--max-turns` との余白** (daily-research.sh の `--max-turns 55` と比較。p90 が上限に
+  接近していたら警告)。**pass1 は ADR-0008 以降つねに `None`** (旧 Opus 選定パスの
+  名残) — `pass1_*` の expect は恒久的に INSUFFICIENT_DATA になるので書かない
 - total_cost の推移 (mean / max、異常スパイク)
 - fallback 発動率と、`final_class != "OK"` の失敗一覧
-- report_count = 0 の日 (silent fail の残骸。rotation 後は呼1 失敗 = その日 0 本)
+- `final_class` の内訳: 全 line 成功 = `OK`、一部 line 失敗 = `E_PARTIAL` (report_count >= 1、
+  ADR-0011)、全滅 = `E_NO_REPORT` (report_count = 0、silent fail の残骸)
 - **clarity_pass (呼2、ADR-0010)**: ran/ok 率と cost/turns。ok=false が続くなら
   呼2 の timeout / max-turns / プロトコルの見直し候補
 
@@ -87,9 +90,9 @@ python3 -c "import json,datetime,os; os.makedirs('.notes',exist_ok=True); json.d
 prompt / config / script の**効果を意図した変更**の commit には、期待を機械可読 1 行で残す:
 
 ```
-feat: Pass 1 の max-turns を 15 → 25 に引き上げ
+feat: 呼1 の max-turns を 45 → 55 に引き上げ
 
-DR-Expect: pass1_turns_p90 <= 20
+DR-Expect: pass2_turns_p90 <= 50
 DR-Expect: fallback_rate <= 0.05
 ```
 

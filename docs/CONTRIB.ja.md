@@ -1,6 +1,6 @@
 # 開発ガイド
 
-> 正式な情報源: `config.example.toml`, `scripts/*.sh`, `com.example.daily-research.plist`
+> 正式な情報源: `config.example.toml`, `scripts/*.sh`, `scripts/lib/dr_pipeline.py`, `prompts/*.md`, `com.example.daily-research.plist`
 
 ## 前提条件
 
@@ -17,10 +17,11 @@
 
 ```
 daily-research/
-├── config.example.toml                  # line → repo マッピング、context_files、スコアリング（テンプレート）
+├── config.example.toml                  # line → repo マッピング、context_files、daily フラグ（テンプレート）
 ├── past_topics.json                     # テーマ履歴（重複防止用、gitignored）
 ├── prompts/
-│   └── repo-research-protocol.md       # per-repo リサーチプロトコル（--append-system-prompt-file 用）
+│   ├── repo-research-protocol.md       # per-repo リサーチプロトコル、呼1（--append-system-prompt-file 用）
+│   └── clarity-review-protocol.md      # fresh-context clarity 改稿プロトコル、呼2（ADR-0010）
 ├── templates/
 │   └── report-template.md              # 解説レポートの記述規律 + 固定 2 節（frontmatter付き）
 ├── scripts/
@@ -64,21 +65,24 @@ daily-research/
 | `ANTHROPIC_API_KEY` | **未設定であること** | 設定されていると Max プランではなく従量課金になる |
 | `CLAUDE_TIMEOUT` | スクリプト（内部） | `run_claude()` 経由の `claude -p` 呼び出しのタイムアウト（秒）。0 = 無制限（デフォルト）。呼1 (研究 run) は 1500秒 (25 分)、呼2 (clarity) は 900秒 (15 分) を設定 |
 | `DEBUG` | ユーザー設定 | `1` に設定するとデバッグログ（PATH、CLAUDE_CMD）を出力 |
+| `DR_DATE` | ユーザー設定（テスト seam） | `YYYY-MM-DD` — rotation-pick とレポート名に使う日付を固定する（e2e テストが輪番を固定するために使う）。既定は当日 |
+| `DR_ONLY_TRACK` | ユーザー設定（テスト seam） | 当日担当ラインのうち指定ラインだけを実行する。当日担当でないラインを指定するとエラー |
+| `DR_FORCE_TRACK` | ユーザー設定（テスト seam） | 輪番に関係なく指定 1 ラインを今日の日付で実行する（プロンプト変更の試験用）。launchd 経路では使わない |
 
 ## 設定ファイル (`config.toml`)
 
 | セクション | 用途 |
 |-----------|------|
-| `[general]` | Obsidian vault パス、出力ディレクトリ、言語、日付フォーマット、`self_signals`（自己汚染ガード: 運用者自身の成果物を外部シグナルとして数えない） |
+| `[general]` | Obsidian vault パス（`vault_path`）、出力ディレクトリ（`output_dir`）、`self_signals`（自己汚染ガード: 運用者自身の成果物を外部シグナルとして数えない）。`language` / `date_format` は参考情報 — スクリプトは読まない |
 | `[report]` | 最低出典数 |
-| `[tracks.<name>]` | ライン 1 つにつき 1 ブロック: `focus`, `aliases`, `context_files`（各 run の冒頭で Read する repo 相対パス — タスク台帳・open questions・実施履歴）, `sources`, `scoring_criteria` + `[[tracks.<name>.repos]]` エントリ 1 つ（`key`, `target_repo` — run の cwd になる, `target_doi` は任意） |
-| `[user_profile]` | 任意のスキル / 関心領域 / 目標ヒント |
+| `[tracks.<name>]` | ライン 1 つにつき 1 ブロック: `name`, `focus`, `aliases`, `context_files`（各 run の冒頭で Read する repo 相対パス — タスク台帳・open questions・実施履歴）, `sources`, `daily`（bool。`true` で輪番の外で毎朝実行、ADR-0011）+ `[[tracks.<name>.repos]]` エントリ 1 つ（`key`, `target_repo` — run の cwd になる。`target_doi` は参考情報でスクリプトは読まない） |
+| `[user_profile]` | 参考情報のみ — スクリプトは読まない |
 
 ## 開発ワークフロー
 
 ### リサーチ内容を変更する場合
 
-1. **スコアリング重み** -- `config.toml` の scoring_criteria を編集
+1. **ラインの focus / daily フラグ** -- `config.toml` の `focus` / `daily` を編集（テーマ選別はプロトコルの 3 問チェック、ADR-0014 — スコアリング重みは存在しない）
 2. **情報源** -- `config.toml` の line sources を編集
 3. **各 run が読む repo 文脈** -- `config.toml` の `context_files` を編集
 4. **レポートフォーマット** -- `templates/report-template.md` を編集（ctl-016 lint の必須節と同期を保つ）
@@ -100,12 +104,11 @@ daily-research/
 
 ```bash
 cd ~/MyAI_Lab/daily-research
-# 別のターミナルで実行すること（Claude Code セッション内からは実行不可）
 claude
 # prompts/repo-research-protocol.md の手順に沿って手動で確認
 ```
 
-**重要**: `claude -p` は他の Claude Code セッション内から実行できない（ネストセッションチェック）。
+**補足**: `./scripts/daily-research.sh` は Claude Code セッション内からも実行できます — `lib/env.sh` が `CLAUDECODE` を unset するためネストセッションチェックを通ります（2026-08-22 実証）。1 ラインだけ走らせるには上記の `DR_FORCE_TRACK` / `DR_ONLY_TRACK` / `DR_DATE` seam を使います。
 
 ## テスト
 

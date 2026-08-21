@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Accepted → Superseded by [ADR-0007](./0007-return-to-four-repo-concept-reinforcement.md) /
+[ADR-0008](./0008-per-repo-in-context-research.md) (2026-08-22 注記: この line 構成は
+0007 で 1:1 repo line へ戻され、0008 で per-repo 実行へ移行した)
 
 ## Date
 

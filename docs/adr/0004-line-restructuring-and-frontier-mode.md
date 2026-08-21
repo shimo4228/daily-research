@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Accepted → Superseded by [ADR-0007](./0007-return-to-four-repo-concept-reinforcement.md) /
+[ADR-0008](./0008-per-repo-in-context-research.md) (2026-08-22 注記: 自由探索 line と
+frontier モード・concept-graph 機構はいずれも retire 済み)
 
 ## Date
 

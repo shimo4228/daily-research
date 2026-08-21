@@ -5,6 +5,12 @@
 Accepted — Decision 2 (目的関数・レポート形式) と Decision 6 (承認ブリーフ) は
 [ADR-0009](./0009-explanatory-report-and-brief-retirement.md) により修正
 
+注記 (2026-08-22): Decision 1 の実行形 (全 line 毎日・Sonnet 単一パス) は
+[ADR-0010](./0010-rotation-and-two-tier-eval.md) により輪番 1 line + Opus 呼1 +
+Sonnet 呼2 (clarity 改稿) へ置換。Decision 3 の前提挑戦パスと「矛盾・複雑化する知見」
+必須節は [ADR-0014](./0014-trend-explanation-report.md) により撤去 (残るのは diff-first /
+citation ゲート / 自己汚染ガード / playbook delta 更新と「事実と解釈の分離」)。
+
 ## Date
 
 2026-08-04

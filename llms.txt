@@ -1,6 +1,6 @@
 # daily-research
 
-> An autonomous research feedback engine that runs inside the operator's research repositories. Every morning at 05:00, macOS launchd runs Claude Code (`claude -p`) once per research line with the line's repo as the working directory — four lines mapped 1:1 to DOI-registered repos: `akc` (agent-knowledge-cycle), `contemplative` (contemplative-agent), `aap` (agent-attribution-practice), `authorship` (authorship-strategy). Each run reads the repo's own operational context (CLAUDE.md, task ledger, open questions) and writes an actionable-tactics note to an Obsidian vault; at 07:00 a deterministic morning brief sends the day's proposed moves to Slack for approval. Single Sonnet pass per line (the earlier central 2-pass Opus+Sonnet pipeline was retired by ADR-0008). Bash orchestration with prompt files; JSON/TOML parsing in stdlib python3 (no pip dependencies, no orchestration framework).
+> An autonomous research feedback engine that runs inside the operator's research repositories. Every morning at 05:00, macOS launchd runs Claude Code (`claude -p`) for one rotation-picked research line plus every `daily = true` line, each with the line's repo as the working directory. Seven lines map 1:1 to research repos: `akc` (agent-knowledge-cycle), `contemplative` (contemplative-agent), `aap` (agent-attribution-practice), `authorship` (authorship-strategy), `ans` (attention-not-self), `desire` (desire-frontier), `edge` (edge-frontier; the daily line since ADR-0013). Per line, call 1 (Opus, 25-min cap) reads the repo's own operational context, picks one external development relevant to the repo, and writes an explanatory note — what happened, why it matters, what it means for this repo — to an Obsidian vault; call 2 (Sonnet, fresh context, 15-min cap, fail-open) revises it for first-contact readability. Notes carry no proposals or approval requests; the only fixed sections are a deadline-only 機会メモ tail and ソース. Bash orchestration with prompt files; JSON/TOML parsing in stdlib python3 (no pip dependencies, no orchestration framework).
 
 ## Core documentation
 
@@ -11,23 +11,29 @@
 
 ## Architecture
 
-- [ADR-0008](docs/adr/0008-per-repo-in-context-research.md): per-repo in-context research — the current architecture; retires the concept-graph-driven theme selection
-- [ADR-0006](docs/adr/0006-self-improvement-loop-human-consumer.md): self-improvement loop (report gate, deterministic lint, metrics, /dr-review) — preserved under ADR-0008
-- [ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md): four 1:1 repo lines (line structure inherited by ADR-0008)
-- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md): why tracks map to research repositories (historical origin)
-- [Per-repo research protocol](prompts/repo-research-protocol.md): the run's objective function, diff-first pass, citation gate, premise-challenge pass
-- [Report template](templates/report-template.md): actionable-tactics note format (lead section: 今すぐ実行可能な手 with expiry conditions)
-- [Main entry point](scripts/daily-research.sh): per-line orchestration, retry, report gate, lint, metrics
-- [Morning brief](scripts/morning-brief.sh): 07:00 deterministic extraction and Slack approval request (no LLM)
+- [ADR-0014](docs/adr/0014-trend-explanation-report.md): report = one external development explained + implications for the repo; adversarial framing (corroboration ban, mandatory refutation, premise-challenge pass, scoring_criteria) retired — the current objective function
+- [ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md): one rotated line per morning + two-tier in-loop eval (theme screen in call 1, fresh-context clarity revision in call 2) — the current execution shape
+- [ADR-0011](docs/adr/0011-daily-line.md) / [ADR-0013](docs/adr/0013-edge-daily-line.md): `daily = true` lines run every day outside the rotation; partial-failure semantics (OK / E_PARTIAL / E_NO_REPORT); `edge` is the daily line
+- [ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md): explanatory reports instead of actionable-tactics notes; the 07:00 Slack approval brief retired
+- [ADR-0008](docs/adr/0008-per-repo-in-context-research.md): per-repo in-context research (cwd = the repo); retires the concept-graph-driven theme selection
+- [ADR-0006](docs/adr/0006-self-improvement-loop-human-consumer.md): self-improvement loop (report gate ctl-015, deterministic lint ctl-016, metrics.jsonl, /dr-review) — no LLM judge
+- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md): why lines map to research repositories (historical origin); full index in [docs/adr/README.md](docs/adr/README.md) (0001–0014)
+- [Per-repo research protocol](prompts/repo-research-protocol.md): call 1 — objective function, diff-first pass, 3-question theme selection, citation gate
+- [Clarity review protocol](prompts/clarity-review-protocol.md): call 2 — defect detection only, no new facts, sources / 機会メモ / frontmatter untouched
+- [Report template](templates/report-template.md): three writing rules + recommended four-part shape + the two fixed tail sections (機会メモ / ソース)
+- [Main entry point](scripts/daily-research.sh): rotation-pick, per-line call 1 + call 2, retry, report gate, lint, metrics; `--allowedTools` path-scoped writes plus a `--disallowedTools Bash,Task,NotebookEdit` deny layer
+- [Parsing module](scripts/lib/dr_pipeline.py): stdlib-only JSON/TOML — rotation-pick, line-brief, past-themes, report-lint, metrics-append, expect-check
 
 ## Operations
 
-- [RUNBOOK](docs/RUNBOOK.md): monitoring, troubleshooting, common issues
-- [Contributor guide](docs/CONTRIB.md): testing, CLI flags, environment variables
+- [RUNBOOK](docs/RUNBOOK.md): monitoring, log messages, troubleshooting, common issues
+- [Contributor guide](docs/CONTRIB.md): testing, CLI flags, environment variables and test seams (`DR_DATE` / `DR_ONLY_TRACK` / `DR_FORCE_TRACK`)
+- [Skill manifest](SKILL.md): install the repo as a Claude Code skill (`/daily-research`)
 
 ## Data
 
-- [graph.jsonld](graph.jsonld): FROZEN archive — the retired concept-cluster graph of the pre-ADR-0008 pipeline; receives no more increments, kept for reading historical data ([schema](docs/graph-schema.md))
+- [graph.jsonld](graph.jsonld): FROZEN archive — the retired concept-cluster graph of the pre-ADR-0008 pipeline; receives no more increments ([schema](docs/graph-schema.md))
+- [metrics.example.jsonl](metrics.example.jsonl): shape of one `metrics.jsonl` record (pass1 null, pass2 = summed call-1 runs, clarity_pass, lint)
 
 ## Related
 
@@ -35,4 +41,5 @@
 - [contemplative-agent](https://doi.org/10.5281/zenodo.19212118): mapped research repo (line: contemplative)
 - [agent-attribution-practice](https://doi.org/10.5281/zenodo.19652013): mapped research repo (line: aap)
 - [authorship-strategy](https://doi.org/10.5281/zenodo.20263316): mapped research repo (line: authorship)
+- [attention-not-self](https://doi.org/10.5281/zenodo.20262112): mapped research repo (line: ans)
 - [llmstxt.org](https://llmstxt.org/): the llms.txt standard this file follows

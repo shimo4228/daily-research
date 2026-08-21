@@ -21,7 +21,7 @@ source "$LIB_DIR/env.sh"      # 環境サニタイズ + PATH (homebrew python3 �
 source "$LIB_DIR/log.sh"      # log() / log_init()
 source "$LIB_DIR/notify.sh"   # notify() (osascript ガード付き)
 source "$LIB_DIR/lock.sh"     # acquire_lock() / release_lock() (mkdir アトミック)
-source "$LIB_DIR/auth.sh"     # real_auth_probe() (実 OAuth probe、3 entrypoint 共有)
+source "$LIB_DIR/auth.sh"     # real_auth_probe() (実 OAuth probe、2 entrypoint 共有)
 source "$LIB_DIR/claude.sh"   # run_claude() / classify_exit() (E_AUTH/E_TRANSIENT/E_FATAL)
 
 log_init  # logs/ 作成 + 権限 600/700 (作成時) + 30日ローテーション

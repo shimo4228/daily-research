@@ -1,8 +1,8 @@
 [general]
 vault_path = "/path/to/your/obsidian/vault"
 output_dir = "daily-research"
-language = "ja"
-date_format = "%Y-%m-%d"
+language = "ja"            # informational — not read by scripts (output language lives in prompts/)
+date_format = "%Y-%m-%d"   # informational — not read by scripts
 # Self-contamination guard (ADR-0008): artifacts matching these strings are never
 # counted as "external signals" (third-party mentions/adoptions of them are fine).
 self_signals = [
@@ -16,9 +16,10 @@ min_sources = 5
 # === Lines (tracks) — per-repo in-context research (ADR-0008 / ADR-0009 / ADR-0010) ===
 # Each track is a research LINE mapped 1:1 to a research repository via a
 # [[tracks.<line>.repos]] entry. Each morning the orchestrator picks ONE line by
-# rotation (epoch day % line count — the cycle follows the order lines are
-# written in this file, ADR-0010) and runs `claude -p` with cwd = target_repo,
-# so the run reads the repo's own operational context (CLAUDE.md auto-loads;
+# rotation (date.toordinal() % non-daily line count — proleptic Gregorian ordinal,
+# not Unix epoch day; the cycle follows the order lines are written in this file,
+# ADR-0010; `daily = true` lines are excluded from the modulus, ADR-0011) and runs
+# `claude -p` with cwd = target_repo, so the run reads the repo's own operational context (CLAUDE.md auto-loads;
 # context_files are read explicitly) and produces a free-form explanatory
 # research note in the vault.
 #
@@ -44,8 +45,9 @@ sources = [
 [[tracks.example_line.repos]]
 key = "example"
 target_repo = "/Users/YOUR_USERNAME/path/to/example-repo"
-target_doi = "10.5281/zenodo.XXXXXXX"  # optional
+target_doi = "10.5281/zenodo.XXXXXXX"  # optional; informational — not read by scripts
 
+# [user_profile] is informational — not read by scripts.
 [user_profile]
 skills = ["Python"]
 interests = ["AI/ML"]

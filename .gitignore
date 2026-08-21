@@ -21,9 +21,6 @@ metrics.jsonl.bak*
 # Concept cluster graph backup (graph.jsonld itself is tracked)
 graph.jsonld.bak
 
-# Synced research repo graphs (read-only copies, regenerated each run)
-.repo-graphs/
-
 # Personal launchd plist (use com.example.daily-research.plist as template)
 com.daily-research*.plist
 com.*.daily-research.plist
@@ -51,5 +48,6 @@ __pycache__/
 
 # Per-line research state (watched-sources / playbook / last-seen; operational, private)
 state/
-com.*.daily-research-brief.plist
-!com.example.daily-research-brief.plist
+
+# 旧 concept-graph 同期 dir (ADR-0008 で廃止)。ローカルに残骸が残りうるので ignore は維持
+.repo-graphs/

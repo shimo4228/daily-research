@@ -49,15 +49,26 @@ daily-research/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md   # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md   # 開発ガイド
 │   ├── graph-schema.md              # 凍結アーカイブ graph.jsonld のスキーマ（参照用）
-│   └── adr/                         # アーキテクチャ決定記録（0001-0011 + README）
+│   └── adr/                         # アーキテクチャ決定記録（0001-0014 + README）
+├── llms.txt / llms-full.txt    # AI 向けナビゲータ / 自己完結リファレンス
+├── SKILL.md                    # Claude Code skill マニフェスト（~/.claude/skills/daily-research として clone 可）
+├── metrics.example.jsonl       # metrics.jsonl のレコード形の例（Git 管理）
+├── past_topics.example.json    # past_topics.json のテンプレート（Git 管理）
+├── pyproject.toml              # pytest / ruff 設定（dev 専用）
 └── com.example.daily-research.plist        # launchd plist テンプレート (5:00 research)
 ```
 
 ## Build / Test / Run
 
 ```bash
-# 手動実行（別ターミナルで。Claude Code セッションと同じターミナルでは不可）
+# 手動実行（Claude Code セッション内の Bash からも可 — lib/env.sh が CLAUDECODE を unset する。
+# 呼1 は最長 25 分なので background + 長め timeout で）
 ./scripts/daily-research.sh
+
+# テスト用 seam
+DR_FORCE_TRACK=edge ./scripts/daily-research.sh   # 輪番外でも指定 1 line を今日の日付で実行
+DR_ONLY_TRACK=akc ./scripts/daily-research.sh     # 当日担当 line のうち指定 line のみ
+DR_DATE=2026-08-20 ./scripts/daily-research.sh    # 輪番とレポート名の日付を固定
 
 # 認証確認
 ./scripts/check-auth.sh
@@ -148,12 +159,14 @@ tail -f logs/$(date +%Y-%m-%d).log
 
 - 出力先: `{vault_path}/{output_dir}/{date}_{track}_{slug}.md`（flat dir — ctl-015 /
   ctl-016 / wiki ingest が前提にする）
-- **本文は自由形式** (ADR-0009)。ただし記述規律 5 点 (冒頭に結論 / 前提知識ゼロ向けの
-  背景解説 / 反対材料を最低 1 件 / 定点観測結果 / 全 claim に as-of 日付) を課す —
+- **本文は自由形式** (ADR-0009)。ただし記述規律 3 点 (冒頭に結論 / 初見の読者向けの
+  背景 / 全 claim に as-of 日付と事実・解釈の分離) を課す (ADR-0014 で 5 点から縮約) —
   正本は `templates/report-template.md`
 - 固定節は末尾 2 つのみ (ctl-016 の機械検査対象): **機会メモ**（日付付き締切を持つ
   機会だけを 何を / どこで / 失効日 の 3 行定型で。無い日は「なし」）と
-  **ソース**（最低 5 件、全 URL run 内解決済み）
+  **ソース**（最低 5 件、全 URL run 内解決済み）。ctl-016 の検査は非対称: `## ソース`
+  不在と出典 URL 0 件は hard fail、`## 機会メモ` 欠落 (`ARTICLE_SECTIONS` はこれ 1 つ) と
+  出典 < min_sources・本文 < 1,500 字は soft
 - **repo は read-only 参照のみ**。deploy・台帳更新はしない — note は読み物であって
   deploy ではない。取り込みは運用者が repo セッションで gate を通して行う
 
@@ -164,7 +177,8 @@ tail -f logs/$(date +%Y-%m-%d).log
 - `prompts/clarity-review-protocol.md` は呼2 の正本 — 欠陥検出限定 (新事実の追加・
   ソース節/機会メモ/frontmatter の変更は禁止)。品質バーを広げる改稿は入れない
 - `templates/report-template.md` は記述規律と固定 2 節の定義。**固定節の見出しを
-  変えるときは ctl-016 の必須節リスト (`dr_pipeline.py` ARTICLE_SECTIONS) を必ず同期する**
+  変えるときは ctl-016 の検査 (`dr_pipeline.py` の `ARTICLE_SECTIONS` = 機会メモ、および
+  `## ソース` の別建て hard check) を必ず同期する**
 - プロンプトファイルは全て日本語
 
 ### 過去に試行・棄却した機能

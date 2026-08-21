@@ -2,20 +2,20 @@ Language: English | [日本語](README.ja.md)
 
 # daily-research
 
-**A research feedback engine that runs inside your own research repositories.** Every morning, [Claude Code](https://docs.anthropic.com/en/docs/claude-code) is launched for one rotation-picked research line *with the line's repo as its working directory*. It reads the repo's own operational context — CLAUDE.md, task ledger, open questions, implementation log — and hunts for **external developments that move the repo's premises, questions, and positions**: new venues, new mechanisms, deadline-bound opportunities, refutations. Reports land in your [Obsidian](https://obsidian.md) vault as free-form explanatory notes written for a reader with zero prior context — something to read with your morning coffee, not a to-do queue. Deadline-bound opportunities are captured in a lightweight 機会メモ (opportunity memo) section at the end of each note.
+**A research feedback engine that runs inside your own research repositories.** Every morning, [Claude Code](https://docs.anthropic.com/en/docs/claude-code) is launched for one rotation-picked research line *with the line's repo as its working directory*. It reads the repo's own operational context — CLAUDE.md, task ledger, open questions, implementation log — picks **one external development that matters to the repo** — a new venue, mechanism, spec, or deadline-bound opportunity — and explains what happened, why it matters, and how the repo can use it. Reports land in your [Obsidian](https://obsidian.md) vault as free-form explanatory notes written for a reader with zero prior context — something to read with your morning coffee, not a to-do queue. Deadline-bound opportunities are captured in a lightweight 機会メモ (opportunity memo) section at the end of each note.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/shimo4228/daily-research) ![python](https://img.shields.io/badge/python-3.11%2B%20stdlib-3776ab.svg)
 
 It runs unattended via macOS `launchd`, with no API plumbing and no orchestration framework: a shell script drives Claude Code's non-interactive mode (`claude -p`), and a small stdlib-only Python module parses JSON/TOML. The intelligence lives in the prompts.
 
-> **Who it's for:** anyone maintaining one or more research repositories who wants a daily, self-directed stream of external research aimed at the repo's actual next action — not generic trends, and not a pile of corroborating surveys.
+> **Who it's for:** anyone maintaining one or more research repositories who wants a daily, self-directed explainer of one external development that matters to the repo's actual work — not generic trends, and not a pile of surveys.
 
 ## How it works
 
 ```mermaid
 flowchart TD
     cron["launchd — 05:00 daily"] --> orch["daily-research.sh"]
-    orch --> pick["rotation-pick — one rotated line + every daily line<br/>(epoch day % non-daily line count, deterministic)"]
+    orch --> pick["rotation-pick — one rotated line + every daily line<br/>(date ordinal % non-daily line count, deterministic)"]
     pick --> loop["call 1 · claude -p · cwd = the line's repo · Opus<br/>25-min timeout · 1 retry (401 aborts)"]
     loop --> ctx["input: repo CLAUDE.md (auto-loaded) + context_files<br/>+ line brief · past-themes dedup · report template"]
     ctx --> run["diff-first pass over state/&lt;line&gt;/ watched sources<br/>theme selection (3 yes/no questions)<br/>research with citation gate · self-contamination guard"]
@@ -23,7 +23,7 @@ flowchart TD
     out --> clarity["call 2 · fresh-context clarity revision · Sonnet<br/>defect-detection only · fail-open"]
 ```
 
-The orchestrator (`scripts/daily-research.sh`) picks **one rotated line per morning, plus every line marked `daily = true`** ([ADR-0011](docs/adr/0011-daily-line.md)). The rotation is deterministic over the non-daily lines defined in `config.toml` `tracks` (epoch day % non-daily line count — a 6-line rotation revisits each line every 6 days, [ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md)); daily lines run every day outside the cycle (`edge` since [ADR-0013](docs/adr/0013-edge-daily-line.md), 2026-08-20). For each picked line, call 1 runs `claude -p` once — model Opus, 25-minute timeout, one retry on transient failure (a 401 aborts the remaining lines while keeping finished results) — with the line's `target_repo` as the working directory. The run:
+The orchestrator (`scripts/daily-research.sh`) picks **one rotated line per morning, plus every line marked `daily = true`** ([ADR-0011](docs/adr/0011-daily-line.md)). The rotation is deterministic over the non-daily lines defined in `config.toml` `tracks` (proleptic Gregorian ordinal, `date.toordinal()`, % non-daily line count — a 6-line rotation revisits each line every 6 days, [ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md)); daily lines run every day outside the cycle (`edge` since [ADR-0013](docs/adr/0013-edge-daily-line.md), 2026-08-20). For each picked line, call 1 runs `claude -p` once — model Opus, 25-minute timeout, one retry on transient failure (a 401 aborts the remaining lines while keeping finished results) — with the line's `target_repo` as the working directory. The run:
 
 1. reads the repo's context and state — CLAUDE.md is auto-loaded; the config's `context_files` (task ledger, open questions, implementation log) are read explicitly;
 2. makes a **diff-first pass** over the line's watched sources in `state/<line>/` (`watched-sources.md`, `playbook.md` — the playbook is delta-update only);
@@ -35,9 +35,9 @@ The orchestrator (`scripts/daily-research.sh`) picks **one rotated line per morn
 
 Call 2 then hands the finished note to a **fresh-context clarity reviewer** (`claude -p`, Sonnet, no research context, Edit restricted to the day's note): it reads as a first-contact reader, fixes comprehension stumbles span-by-span — defect detection only, no new facts — and its failure is fail-open (the unrevised note survives).
 
-The objective function is "find external developments that move this repo's premises, questions, and positions — and deliver them as an explainer readable with zero prior context". Corroboration-as-theme is forbidden, "no change today" with evidence is a valid first-class output, and there is no discovery quota. Notes carry no proposals or approval requests ([ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)).
+The objective function is "pick one external development that matters to this repo and explain what happened, why it matters, and how the repo can use it — readable with zero prior context" ([ADR-0014](docs/adr/0014-trend-explanation-report.md)). The subject is the external event, not a verdict on the repo's position; the one remaining epistemic rule is to keep fact apart from interpretation (the earlier corroboration ban / mandatory-refutation / premise-challenge pass were retired on 2026-08-22 — they produced reports too adversarial to read). There is no discovery quota. Notes carry no proposals or approval requests ([ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)).
 
-This started as a generic trend-research tool. Fixed topic domains caused structural saturation, so on 2026-05-27 each track was remapped to a research repository ([ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)); a concept-graph coverage/frontier machinery followed ([ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md)), then a return to four 1:1 repo lines ([ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md)). On 2026-08-04 the central 2-pass concept-graph pipeline was retired entirely — its theme selection had converged on corroboration surveys — in favor of per-repo in-context research ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)). On 2026-08-05, after the first full run, the output was converted from actionable-tactics notes with a Slack approval brief to free-form explanatory reports — the proposal framing had turned every note into a pending to-do ([ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)). On 2026-08-13, after a `/dr-review` showed healthy production but a stalled consumption loop (5 reports/day exceeded both reading capacity and the sources' actual rate of change), daily all-line execution was replaced with one-line-per-day rotation plus a two-tier in-loop eval — theme selection and a fresh-context clarity revision ([ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md)).
+This started as a generic trend-research tool. Fixed topic domains caused structural saturation, so on 2026-05-27 each track was remapped to a research repository ([ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)); a concept-graph coverage/frontier machinery followed ([ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md)), then a return to four 1:1 repo lines ([ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md)). On 2026-08-04 the central 2-pass concept-graph pipeline was retired entirely — its theme selection had converged on corroboration surveys — in favor of per-repo in-context research ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)). On 2026-08-05, after the first full run, the output was converted from actionable-tactics notes with a Slack approval brief to free-form explanatory reports — the proposal framing had turned every note into a pending to-do ([ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)). On 2026-08-13, after a `/dr-review` showed healthy production but a stalled consumption loop (5 reports/day exceeded both reading capacity and the sources' actual rate of change), daily all-line execution was replaced with one-line-per-day rotation plus a two-tier in-loop eval — theme selection and a fresh-context clarity revision ([ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md)). On 2026-08-22 the report was simplified to "one external development + what it means for this repo", retiring the adversarial framing (corroboration ban, mandatory refutation, premise-challenge pass, `scoring_criteria`) from protocol, template, and config ([ADR-0014](docs/adr/0014-trend-explanation-report.md)).
 
 ## Core concepts
 
@@ -46,7 +46,7 @@ This started as a generic trend-research tool. Fixed topic domains caused struct
 - **Diff-first pass** — each line persists `watched-sources.md` (sources + last-seen state) and `playbook.md` (dated situation→action entries) in `state/<line>/`. Runs pick up only what changed since last-seen; re-surveying known themes is forbidden, and the playbook is updated by dated deltas only, never rewritten wholesale.
 - **Citation gate** — every URL in a report must have been resolved via WebFetch during the run; unresolved references are dropped or explicitly marked.
 - **Freshness-first** — knowledge in the LLM space goes stale on a one-week scale, so every claim carries an as-of date and every recommendation carries an expiry condition.
-- **Read-only repos** — the mapped repos are never edited, enforced at three layers: doctrine (protocol wording), execution (writes go only to the vault, `state/`, and `past_topics.json`), and permissions (`--allowedTools` restricts Write/Edit to absolute paths).
+- **Read-only repos** — the mapped repos are never edited, enforced at three layers: doctrine (protocol wording), execution (writes go only to the vault, `state/`, and `past_topics.json`), and permissions (`--allowedTools` restricts Write/Edit to absolute paths, and a `--disallowedTools Bash,Task,NotebookEdit` deny layer holds even when the user's default permission mode would widen the allow list).
 - **Frozen archive** — `graph.jsonld`, the retired concept-cluster graph, receives no more increments; it is kept for reading historical data ([schema](docs/graph-schema.md)).
 
 ## Prerequisites
@@ -76,7 +76,7 @@ chmod +x scripts/*.sh
 # 4. Verify Claude auth (real OAuth probe)
 ./scripts/check-auth.sh
 
-# 5. Test run — in a SEPARATE terminal, never inside a Claude Code session
+# 5. Test run (works from inside a Claude Code session too; DR_FORCE_TRACK=<line> runs one line)
 ./scripts/daily-research.sh
 
 # 6. Schedule with launchd (optional): 05:00 research
@@ -101,15 +101,11 @@ self_signals = ["github.com/YOUR_GITHUB_HANDLE", "Your Name"]
 
 [tracks.line_a]
 name = "Research Line A 前進"
-focus = "Immediately executable moves that advance line A — new venues, mechanisms, deadline-bound opportunities, refutations"
+focus = "Explain external developments relevant to line A and what they mean for the repo"
 aliases = ["old_track_a"]                        # legacy track names whose history keeps feeding dedup
 context_files = [".notes/TASKS.md", "docs/manifesto.md"]  # repo-relative; read in Step 1; missing files are skipped
-sources = ["arXiv / Semantic Scholar (your keywords) — only if it becomes a move or a refutation"]
-scoring_criteria = [
-  { name = "Executability",        weight = 45, desc = "Becomes a concrete move the operator can run this week" },
-  { name = "Deadline / freshness", weight = 25, desc = "Time-bound; worth acting on before it goes stale (~1 week)" },
-  { name = "Refutation / advance", weight = 30, desc = "Moves the repo's premises or open questions" },
-]
+sources = ["arXiv / Semantic Scholar (your keywords) — only when the repo can use it"]
+# daily = true                                   # run every morning outside the rotation (ADR-0011)
 
 [[tracks.line_a.repos]]
 key = "repo_a"
@@ -124,13 +120,13 @@ Reports are generated in Japanese by default; change the language constraint in 
 ```
 daily-research/
 ├── scripts/
-│   ├── daily-research.sh       # Orchestrator (per-line loop: claude -p with cwd = each line's repo)
+│   ├── daily-research.sh       # Orchestrator (rotation-pick → per line: call 1 research + call 2 clarity, cwd = the line's repo)
 │   ├── lib/                    # Sourced shell libraries + the Python parsing module
 │   │   ├── env.sh log.sh notify.sh lock.sh auth.sh claude.sh
 │   │   └── dr_pipeline.py      # Single stdlib-only JSON/TOML module (line-brief, past-themes, report-lint, metrics)
 │   ├── check-auth.sh           # Real OAuth probe health check (shares lib/auth.sh)
 │   └── pre-commit.sh           # Secret / syntax guard
-├── prompts/repo-research-protocol.md  # Per-repo research protocol (--append-system-prompt-file)
+├── prompts/                    # repo-research-protocol.md (call 1) + clarity-review-protocol.md (call 2)
 ├── templates/report-template.md       # Explanatory-report writing rules + fixed tail sections
 ├── state/                      # Per-line watched-sources / playbook / last-seen (gitignored)
 ├── graph.jsonld                # FROZEN archive of the retired concept-graph pipeline (docs/graph-schema.md)
@@ -143,11 +139,11 @@ daily-research/
 
 | Decision | Why |
 |----------|-----|
-| Per-repo in-context research: one Sonnet pass per line, cwd = the repo | The central 2-pass concept-graph pipeline could only see repos through synced graphs, so selection degenerated into gap-filling surveys; the operational context that knows what to advance lives inside each repo ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)) |
-| Objective = explanatory reports that move the repo's premises, not concept reinforcement | Corroboration-as-theme is a benchmarked failure mode ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)); the proposal/approval framing turned every note into a pending to-do, so notes are now reading material with a deadline-only 機会メモ tail ([ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)) |
+| Per-repo in-context research: per picked line, call 1 = Opus research + call 2 = Sonnet clarity revision, cwd = the repo | The central 2-pass concept-graph pipeline could only see repos through synced graphs, so selection degenerated into gap-filling surveys; the operational context that knows what to advance lives inside each repo ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)) |
+| Objective = explain one external development and what it means for the repo, not concept reinforcement | Corroboration-as-theme is a benchmarked failure mode ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)); the proposal/approval framing turned every note into a pending to-do, so notes are now reading material with a deadline-only 機会メモ tail ([ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)); the adversarial refutation framing was later retired for readability ([ADR-0014](docs/adr/0014-trend-explanation-report.md)) |
 | Diff-first + citation gate baked into the run structure | Survey-per-run is a documented anti-pattern; sycophantic drift needs structural countermeasures, not prompt intent ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)) |
 | Repos are read-only at three layers (doctrine / execution / permissions) | Contributions flow through vault notes a human folds back in, avoiding cross-repo pollution |
-| Lines map to research repositories | Fixed topic domains caused structural saturation ([ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)); four 1:1 repo lines since [ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md) |
+| Lines map to research repositories | Fixed topic domains caused structural saturation ([ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)); 1:1 repo lines since [ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md); 7 lines today (`akc` / `contemplative` / `aap` / `authorship` / `ans` / `desire` / `edge`), 6 in rotation + `edge` daily ([ADR-0013](docs/adr/0013-edge-daily-line.md)) |
 | Local state files, not external MCP memory | The previous Mem0 MCP integration ran zero times for 32 days due to silent failure; a local file fails loudly |
 | Shell orchestration + stdlib Python parser | No pip dependencies at runtime; JSON/TOML parsing lives in one testable `dr_pipeline.py` module |
 
@@ -155,7 +151,7 @@ Operational rationale (real auth probe vs `--version`, `--append-system-prompt-f
 
 ## Gotchas
 
-- **Run in a separate terminal** — `claude -p` cannot be nested inside another Claude Code session.
+- **Runs from inside a Claude Code session too** — `lib/env.sh` unsets `CLAUDECODE`, so the nested-session check passes (verified 2026-08-22). Test seams: `DR_FORCE_TRACK=<line>` (one line, outside the rotation), `DR_ONLY_TRACK=<line>` (only that line among today's picks), `DR_DATE=YYYY-MM-DD`.
 - **OAuth token expires ~4 days** — refresh by running `claude` interactively. The real auth probe fails loudly with a re-auth notification instead of silently double-failing.
 - **`ANTHROPIC_API_KEY` must be unset** — if set, Claude uses per-token billing instead of the Max plan. The script handles this with `unset`.
 - **Claude Code plugins cause hangs** — globally-installed plugins initialize their MCP servers on every `claude -p` call. Disable them per-project in `.claude/settings.json` (see [RUNBOOK](docs/RUNBOOK.md)).
@@ -166,7 +162,7 @@ Operational rationale (real auth probe vs `--version`, `--append-system-prompt-f
 - [RUNBOOK](docs/RUNBOOK.md) / [日本語](docs/RUNBOOK.ja.md) — operations: monitoring, troubleshooting
 - [CONTRIB](docs/CONTRIB.md) / [日本語](docs/CONTRIB.ja.md) — development: testing, CLI flags, environment variables
 - [graph-schema.md](docs/graph-schema.md) — schema of the frozen `graph.jsonld` archive (historical data)
-- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md) · [ADR-0002](docs/adr/0002-reports-as-frontier-diff.md) · [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) · [ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md) · [ADR-0005](docs/adr/0005-agent-systems-and-human-ai-publics-line-rebalance.md) · [ADR-0006](docs/adr/0006-self-improvement-loop-human-consumer.md) · [ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md) · [ADR-0008](docs/adr/0008-per-repo-in-context-research.md) — architecture decisions
+- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md) · [ADR-0002](docs/adr/0002-reports-as-frontier-diff.md) · [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) · [ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md) · [ADR-0005](docs/adr/0005-agent-systems-and-human-ai-publics-line-rebalance.md) · [ADR-0006](docs/adr/0006-self-improvement-loop-human-consumer.md) · [ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md) · [ADR-0008](docs/adr/0008-per-repo-in-context-research.md) · [ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md) · [ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md) · [ADR-0011](docs/adr/0011-daily-line.md) · [ADR-0012](docs/adr/0012-desire-back-to-rotation.md) · [ADR-0013](docs/adr/0013-edge-daily-line.md) · [ADR-0014](docs/adr/0014-trend-explanation-report.md) — architecture decisions
 
 ## License
 

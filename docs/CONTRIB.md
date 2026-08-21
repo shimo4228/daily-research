@@ -1,6 +1,6 @@
 # Contributing / Development Guide
 
-> Source of truth: `config.example.toml`, `scripts/*.sh`, `com.example.daily-research.plist`
+> Source of truth: `config.example.toml`, `scripts/*.sh`, `scripts/lib/dr_pipeline.py`, `prompts/*.md`, `com.example.daily-research.plist`
 
 ## Prerequisites
 
@@ -17,10 +17,11 @@
 
 ```
 daily-research/
-├── config.example.toml                  # Line → repo mapping, context_files, scoring (template)
+├── config.example.toml                  # Line → repo mapping, context_files, daily flag (template)
 ├── past_topics.json                     # Topic history (deduplication, gitignored)
 ├── prompts/
-│   └── repo-research-protocol.md       # Per-repo research protocol (--append-system-prompt-file)
+│   ├── repo-research-protocol.md       # Per-repo research protocol, call 1 (--append-system-prompt-file)
+│   └── clarity-review-protocol.md      # Fresh-context clarity revision protocol, call 2 (ADR-0010)
 ├── templates/
 │   └── report-template.md              # Explanatory-report writing rules + fixed tail sections (frontmatter)
 ├── scripts/
@@ -64,21 +65,24 @@ daily-research/
 | `ANTHROPIC_API_KEY` | **Must be unset** | If set, Claude uses per-token billing instead of Max plan |
 | `CLAUDE_TIMEOUT` | Script (internal) | Timeout in seconds for `claude -p` calls via `run_claude()`. 0 = no timeout (default); the research run (call 1) sets 1500s (25 min), the clarity run (call 2) sets 900s (15 min) |
 | `DEBUG` | User-set | Set to `1` to enable debug logging (PATH, CLAUDE_CMD) |
+| `DR_DATE` | User-set (test seam) | `YYYY-MM-DD` — fixes the date used for rotation-pick and report names (e2e tests pin the rotation with it). Default: today |
+| `DR_ONLY_TRACK` | User-set (test seam) | Run only this line among today's picked lines; errors if the line is not on today's rotation |
+| `DR_FORCE_TRACK` | User-set (test seam) | Run this one line today regardless of rotation (prompt-change trials). Not used on the launchd path |
 
 ## Configuration (`config.toml`)
 
 | Section | Purpose |
 |---------|---------|
-| `[general]` | Obsidian vault path, output directory, language, date format, `self_signals` (self-contamination guard: the operator's own artifacts never count as external signals) |
+| `[general]` | Obsidian vault path (`vault_path`), output directory (`output_dir`), `self_signals` (self-contamination guard: the operator's own artifacts never count as external signals). `language` / `date_format` are informational — not read by any script |
 | `[report]` | Minimum source count |
-| `[tracks.<name>]` | One block per line: `focus`, `aliases`, `context_files` (repo-relative paths read at the start of each run — task ledger, open questions, implementation log), `sources`, `scoring_criteria`, plus one `[[tracks.<name>.repos]]` entry (`key`, `target_repo` — becomes the run's cwd, `target_doi` optional) |
-| `[user_profile]` | Optional skills / interests / goal hints |
+| `[tracks.<name>]` | One block per line: `name`, `focus`, `aliases`, `context_files` (repo-relative paths read at the start of each run — task ledger, open questions, implementation log), `sources`, `daily` (bool; `true` = run every morning outside the rotation, ADR-0011), plus one `[[tracks.<name>.repos]]` entry (`key`, `target_repo` — becomes the run's cwd; `target_doi` is informational, not read by scripts) |
+| `[user_profile]` | Informational only — not read by any script |
 
 ## Development Workflow
 
 ### Making Changes to Research Behavior
 
-1. **Scoring weights** -- Edit `config.toml` scoring_criteria
+1. **Line focus / daily flag** -- Edit `config.toml` `focus` / `daily` (theme selection is the 3-question screen in the protocol, ADR-0014 — there are no scoring weights)
 2. **Research sources** -- Edit `config.toml` line sources
 3. **Repo context read by each run** -- Edit `config.toml` `context_files`
 4. **Report format** -- Edit `templates/report-template.md` (keep ctl-016 lint sections in sync)
@@ -100,12 +104,11 @@ daily-research/
 
 ```bash
 cd ~/MyAI_Lab/daily-research
-# Use a SEPARATE terminal (not inside Claude Code session)
 claude
 # Then manually follow prompts/repo-research-protocol.md steps
 ```
 
-**Important**: `claude -p` cannot be run from inside another Claude Code session (nested session check).
+**Note**: `./scripts/daily-research.sh` can also be run from inside a Claude Code session — `lib/env.sh` unsets `CLAUDECODE`, so the nested-session check passes (verified 2026-08-22). Use the `DR_FORCE_TRACK` / `DR_ONLY_TRACK` / `DR_DATE` seams above to run a single line.
 
 ## Testing
 

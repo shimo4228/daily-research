@@ -6,7 +6,7 @@
 # 使えない (2026-06-21 の本番はこれを通過した直後に実 API で 401)。real_auth_probe は
 # 安価な Haiku 呼び出しで実 API を叩き、is_error / api_error_status を検査する。
 #
-# daily-research.sh / check-auth.sh / bootstrap-graph.sh の 3 エントリポイントが
+# daily-research.sh / check-auth.sh の 2 エントリポイントが
 # これを共有し、形骸化した重複チェックを排除する。
 # run_claude には依存しない (auth.sh は run_claude を持たない check-auth.sh 等からも
 # source されるため、CLAUDE_CMD を直接叩く)。

@@ -48,8 +48,10 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 # launchd 経由
 launchctl start com.daily-research
 
-# 直接実行（Claude Code セッションとは別のターミナルで実行すること）
+# 直接実行 — Claude Code セッション内からも実行できる（lib/env.sh が CLAUDECODE を unset する）
 ./scripts/daily-research.sh
+# テスト用 seam: DR_FORCE_TRACK=<line>（輪番外の 1 line を今日の日付で実行）、
+# DR_ONLY_TRACK=<line>（当日担当のうち指定 line のみ）、DR_DATE=YYYY-MM-DD（輪番の日付を固定）
 ```
 
 ## アーキテクチャ
@@ -59,7 +61,7 @@ daily-research.sh (05:00)
 ├── ロック取得（アトミック mkdir）
 ├── 認証 probe（実 OAuth チェック）
 ├── config schema チェック（ADR-0008 以前の旧 schema は fail-fast）
-├── rotation-pick — 当日担当ラインを決定論選択: 輪番 1 ライン（epoch 日 % 非 daily
+├── rotation-pick — 当日担当ラインを決定論選択: 輪番 1 ライン（date.toordinal() % 非 daily
 │   ライン数、ADR-0010）+ `daily = true` の全ライン（毎日実行、ADR-0011）
 ├── 呼1: claude -p, cwd = 担当ラインの target_repo (Opus, --max-turns 55,
 │   25 分タイムアウト, transient 失敗時リトライ 1 回; 401 は中止)
@@ -110,20 +112,22 @@ launchctl list | grep daily-research
 | 認証有効 | `./scripts/check-auth.sh` | "OK: Claude authentication is valid" |
 | 今日のログが存在 | `ls logs/$(date +%Y-%m-%d).log` | ファイルが存在 |
 | ログに成功メッセージ | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | マッチあり |
-| レポートが生成済み | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | 設定したライン数のファイル |
+| レポートが生成済み | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | 当日*担当*ライン数のファイル（通常 2 本/日: 輪番 1 + daily 1） |
 
 ### ログメッセージ一覧
 
 | メッセージ | 意味 |
 |---------|------|
 | `Auth probe passed` | 実 OAuth probe が成功 |
+| `ERROR: Auth probe failed — OAuth likely expired` | 実 OAuth probe が失敗。ライン実行前に停止（exit 1） |
+| `ERROR: Another instance is running. Skipping.` | ロックディレクトリ `.daily-research.lock/` を生存中の PID が保持している |
 | `Config schema check passed` | `config.toml` が現行 (ADR-0008) schema に適合 |
 | `=== Line: <track> (<repo パス>) ===` | その repo を cwd にしたライン run の開始 |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | ライン run の実行統計（コスト、ターン数、所要時間、トークン数） |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | transient 失敗。1 回きりのリトライを開始 |
 | `ERROR: Line <track> returned 401 — aborting remaining lines` | run 中に認証が期限切れ。残ラインは中断、完走済みラインの成果は保持 |
-| `Line <track> report gate passed (N report)` | ctl-015: そのラインの `{date}_{track}_*.md` が vault に存在 |
-| `WARN: Line <track> produced no ..._*.md (ctl-015)` | run は走ったがレポートが無い — 失敗として計上 |
+| `Line <track> report gate passed` | ctl-015: そのラインの `{date}_{track}_*.md` が vault に存在 |
+| `WARN: report gate failed for line <track> — no <date>_<track>_*.md (ctl-015)` | run は走ったがレポートが無い — 失敗として計上 |
 | `Report existence gate passed: N report(s)` | 当日担当ラインが全て ctl-015 を通過（一部失敗時は `Failed (E_PARTIAL: ...)` になる） |
 | `WARN: report lint hard fail (ctl-016): ...` | 決定論 lint がソース節不在・出典 0 件を検出 |
 | `WARN: clarity pass failed ...` | 呼2 clarity の失敗 (fail-open — run 全体は成功のまま) |
@@ -133,7 +137,7 @@ launchctl list | grep daily-research
 
 ### 1. OAuth トークン期限切れ
 
-**症状**: ログに `ERROR: Claude authentication may have expired` が出力される。macOS 通知が表示される。
+**症状**: ログに `ERROR: Auth probe failed — OAuth likely expired` が出力される。macOS 通知が表示される。
 
 **原因**: Claude の OAuth トークンは約4日で期限切れになる。
 
@@ -165,29 +169,31 @@ which claude
 
 ### 3. ロックファイルによる実行ブロック
 
-**症状**: ログに `ERROR: Another instance is running (PID: ...)` が出力される。
+**症状**: ログに `ERROR: Another instance is running. Skipping.` が出力される。
 
 **原因**: 前回の実行がまだ実行中、またはクラッシュしてクリーンアップされなかった。
 
 **対処**:
 ```bash
-# PID が実際に実行中か確認
+# ロックは pid ファイルを持つディレクトリ
+cat .daily-research.lock/pid
 ps aux | grep daily-research
 
-# プロセスが存在しない場合、古いロックファイルを削除
-rm -f .daily-research.lock
+# プロセスが存在しない場合、古いロックディレクトリを削除
+# （PID が死んでいるロックは次回起動時にスクリプト自身が奪取する）
+rm -rf .daily-research.lock
 ```
 
 ### 4. 特定のラインが失敗し続ける
 
-**症状**: ログに `WARN: Line <track> failed after retry` または `WARN: Line <track> produced no ..._*.md (ctl-015)` が連日出力される。
+**症状**: ログに `WARN: Line <track> failed after retry` または `WARN: report gate failed for line <track> — ... (ctl-015)` が連日出力される。
 
 **原因**:
 - レート制限（Claude Max プラン枠の消費）または WebSearch 中のネットワーク障害
 - 深掘りしすぎた run がライン単位の 25 分タイムアウトを超過
 - `config.toml` の `target_repo` パスが存在しない・移動した
 
-**対処**: ログで exit 分類（`E_TRANSIENT` / `E_FATAL`）を確認する。1 ラインの失敗は他のラインを止めない — 他のレポートは生成・ingest される。`target_repo` の存在を確認してから手動で再実行する。401（`E_AUTH`）は OAuth 期限切れ: 問題 1 を参照。
+**対処**: ログで exit 分類（`E_TRANSIENT` / `E_FATAL`）を確認する。1 ラインの失敗は他のラインを止めない — 他のレポートは生成・ingest され、その日の final class は `E_PARTIAL`（exit 1、`=== Failed (E_PARTIAL:<lines>, exit code 1) ===`）になる。`E_NO_REPORT` はレポート 0 本の日に限る（ADR-0011）。`target_repo` の存在を確認してから手動で再実行する。401（`E_AUTH`）は OAuth 期限切れ: 問題 1 を参照。
 
 ### 5. `ANTHROPIC_API_KEY` が設定されている（従量課金）
 
@@ -243,7 +249,7 @@ ps aux | grep -E "pyright|sourcekit|claude-mem|sequential|japanese|ableton"
 
 **症状**: 最近と同じテーマのレポートが生成される。
 
-**原因**: `past_topics.json` が正しく更新されていない、またはスコアリング基準の調整が必要。
+**原因**: `past_topics.json` が正しく更新されていない（run のテーマ選別はここから渡される過去テーマの dedup リストに依存する）。
 
 **対処**:
 ```bash

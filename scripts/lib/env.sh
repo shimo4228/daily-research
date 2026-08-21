@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # env.sh — 環境サニタイズと PATH 設定。
-# daily-research.sh / bootstrap-graph.sh が source する。単独実行しない。
+# daily-research.sh / check-auth.sh が source する。単独実行しない。
 
 # APIキーが設定されていると従量課金になるため確実に除去
 unset ANTHROPIC_API_KEY
