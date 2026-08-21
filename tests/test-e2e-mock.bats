@@ -226,6 +226,22 @@ target_repo = "$MOCK_HOME/mock-repos/desire-frontier"
 EOF
 }
 
+# 輪番外 (daily でない) の line を config に追記する。fixture の輪番 4 line の末尾に
+# 足すので位相が変わりうる — DR_FORCE_TRACK のように輪番を使わない test 専用
+add_rotating_line() {
+  mkdir -p "$MOCK_HOME/mock-repos/desire-frontier"
+  cat >> "$MOCK_PROJECT/config.toml" << EOF
+
+[tracks.desire]
+name = "Desire Line"
+focus = "Desire line focus"
+
+[[tracks.desire.repos]]
+key = "desire"
+target_repo = "$MOCK_HOME/mock-repos/desire-frontier"
+EOF
+}
+
 get_log() {
   cat "$MOCK_PROJECT/logs/$DR_DATE.log"
 }
@@ -649,5 +665,34 @@ PYEOF
 
   echo "$log_content" | grep -q "DR_ONLY_TRACK=nonexistent は当日の担当 line に含まれない"
   ! echo "$log_content" | grep -q "=== Line:"
+  [ ! -f "$MOCK_HOME/.prompt_$PICKED" ]
+}
+
+# === Test: DR_FORCE_TRACK seam (輪番外の line を今日の日付で実行するテスト seam) ===
+
+@test "E2E force-track: DR_FORCE_TRACK runs a line that is not in today's rotation" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  add_rotating_line
+
+  HOME="$MOCK_HOME" DR_FORCE_TRACK=desire bash "$MOCK_PROJECT/scripts/daily-research.sh" 2>&1
+  local log_content
+  log_content=$(get_log)
+
+  echo "$log_content" | grep -q "DR_FORCE_TRACK seam: line desire を輪番外で実行"
+  echo "$log_content" | grep -q "Line: desire"
+  ! echo "$log_content" | grep -q "Rotation pick:"
+  echo "$log_content" | grep -q "Line desire report gate passed"
+  echo "$log_content" | grep -q "Completed successfully"
+  # 輪番なら当日担当だったはずの line は走らない
+  ! echo "$log_content" | grep -q "=== Line: akc"
+  ! echo "$log_content" | grep -q "=== Line: authorship"
+}
+
+@test "E2E force-track: DR_FORCE_TRACK not in config fails fast" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+
+  run env HOME="$MOCK_HOME" DR_FORCE_TRACK=nonexistent bash "$MOCK_PROJECT/scripts/daily-research.sh"
+  [ "$status" -ne 0 ]
+  get_log | grep -q "DR_FORCE_TRACK=nonexistent は config.toml に無い"
   [ ! -f "$MOCK_HOME/.prompt_$PICKED" ]
 }

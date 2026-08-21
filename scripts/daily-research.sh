@@ -141,7 +141,23 @@ done <<< "$TRACKS_TSV"
 # 1 line だけを実行する。新 line の初回試験などで、他 line の重複実行 (重複レポート・
 # 二重 ingest) を避ける用途。当日担当に無い track の指定は fail-fast — 輪番外 line の
 # 任意起動には使えない (rotation の決定論を seam が迂回しないため)。
-if [ -n "${DR_ONLY_TRACK:-}" ]; then
+# DR_FORCE_TRACK はプロンプト変更の試験用 seam: 輪番に関係なく指定 1 line を今日の
+# 日付で実行する (DR_ONLY_TRACK と違い当日担当でなくてよい)。launchd 経路では使わない。
+if [ -n "${DR_FORCE_TRACK:-}" ]; then
+  FORCE_ROWS=()
+  ALL_TSV=$(python3 "$DR_PY" tracks "$PROJECT_DIR/config.toml" 2>> "$LOG_FILE") || ALL_TSV=""
+  while IFS= read -r ROW; do
+    case "$ROW" in
+      "${DR_FORCE_TRACK}"$'\t'*) FORCE_ROWS+=("$ROW") ;;
+    esac
+  done <<< "$ALL_TSV"
+  if [ "${#FORCE_ROWS[@]}" -eq 0 ]; then
+    log "ERROR: DR_FORCE_TRACK=$DR_FORCE_TRACK は config.toml に無い"
+    exit 1
+  fi
+  TRACK_ROWS=("${FORCE_ROWS[@]}")
+  log "DR_FORCE_TRACK seam: line $DR_FORCE_TRACK を輪番外で実行 (test run)"
+elif [ -n "${DR_ONLY_TRACK:-}" ]; then
   ONLY_ROWS=()
   for ROW in "${TRACK_ROWS[@]}"; do
     case "$ROW" in
