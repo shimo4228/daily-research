@@ -47,6 +47,18 @@ fi
 
 log "=== Starting daily research ==="
 
+# 無人 run で model に絶対に渡さないツール (呼1 / 呼2 共通)。理由は ALLOWED_TOOLS の注記。
+DISALLOWED_TOOLS="Bash,Task,NotebookEdit"
+
+# run スコープのレポート検索: この invocation (lock 取得時刻 = $LOCK_DIR/pid の mtime) より
+# 新しい {date}_{track}_*.md だけを返す。同日の先行 invocation (DR_FORCE_TRACK 試験・
+# 手動再実行) が残した既存ノートで gate が通る・呼2 が古いノートを改稿する事故を防ぐ。
+# 呼ぶ側は REPORT_DIR / DATE / TRACK を設定済みであること。
+find_run_reports() {
+  [ -d "$REPORT_DIR" ] || return 0
+  find "$REPORT_DIR" -maxdepth 1 -name "${DATE}_${TRACK}_*.md" -newer "$LOCK_DIR/pid" 2>/dev/null
+}
+
 # === 依存コマンドチェック ===
 if ! command -v timeout &> /dev/null; then
   log "ERROR: 'timeout' command not found. Install coreutils: brew install coreutils"
@@ -241,6 +253,10 @@ $TEMPLATE"
   # (permission 層でも repo read-only を強制)。file permission の path 規則は
   # Edit(path) / Read(path) だけが consult される仕様 (Write(path) 規則は無視される) —
   # Edit(//abs/**) が Write ツールの書き込みも同 path に許可する。`//` = 絶対パス。
+  # deny 層 (2026-08-22 security review): ~/.claude/settings.json の permissions.defaultMode
+  # = "auto" は --allowedTools を上書きし、列挙していない Bash まで denial ゼロで通る
+  # (PoC 実証)。allow は加算リストであって制限ではない — 無人実行の境界は deny で書く。
+  # deny は auto mode にも allow にも優先する (同 PoC で確認)。
   ALLOWED_TOOLS="WebSearch,WebFetch,Read,Glob,Grep"
   ALLOWED_TOOLS="$ALLOWED_TOOLS,Edit(//${REPORT_DIR#/}/**)"
   ALLOWED_TOOLS="$ALLOWED_TOOLS,Edit(//${STATE_DIR#/}/**)"
@@ -248,11 +264,18 @@ $TEMPLATE"
 
   LINE_CLASS=""
   for ATTEMPT in 1 2; do
+    # timeout 後の retry で同一 line に 2 本目のノートを書く事故を防ぐ — attempt 1 が
+    # ノートを書いた後に落ちた (124 等) なら、再実行せずゲートへ進む (2026-08-20 edge で実害)
+    if [ "$ATTEMPT" = "2" ] && [ -n "$(find_run_reports)" ]; then
+      log "WARN: Line $TRACK attempt 1 left a report — skipping retry, going to gate"
+      break
+    fi
     LINE_EXIT=0
     LINE_JSON=$(cd "$TARGET_REPO" && CLAUDE_TIMEOUT=1500 run_claude -p "$LINE_PROMPT" \
       --permission-mode default \
       --append-system-prompt-file "$PROJECT_DIR/prompts/repo-research-protocol.md" \
       --allowedTools "$ALLOWED_TOOLS" \
+      --disallowedTools "$DISALLOWED_TOOLS" \
       --max-turns 55 \
       --model opus \
       --output-format json \
@@ -290,13 +313,27 @@ METRICS_STDIN+="RUN"$'\t'"$LINE_JSON"$'\n'
 # === レポート存在ゲート (ctl-015) — per line ===
 # 成否は「当日の {date}_{track}_*.md が vault に存在するか」の決定論条件で判定する。
 # モデルが質問だけして end_turn する成功化けは is_error では検出できない。
-# find は 1 回だけ走らせ、最初のヒットを呼2 clarity の対象ノートとして共有する
-# (${VAR%%$'\n'*} は pipe を使わない先頭行抽出 — set -o pipefail 下で head の
-# SIGPIPE がスクリプトごと落とす事故を避ける)。
+# 検索は run スコープ (find_run_reports)。複数ヒット時は最新 mtime を呼2 の対象にする —
+# find の readdir 順は不定で、2026-08-20 に古いノートが改稿され新ノートが未改稿で出荷された。
+# pipe を使わない (set -o pipefail 下で head の SIGPIPE がスクリプトごと落とす事故を避ける)。
 CLARITY_NOTE=""
-if [ -d "$REPORT_DIR" ]; then
-  LINE_REPORT_FILES=$(find "$REPORT_DIR" -maxdepth 1 -name "${DATE}_${TRACK}_*.md" 2>/dev/null)
-  CLARITY_NOTE=${LINE_REPORT_FILES%%$'\n'*}
+while IFS= read -r _f; do
+  [ -n "$_f" ] || continue
+  if [ -z "$CLARITY_NOTE" ] || [ "$_f" -nt "$CLARITY_NOTE" ]; then
+    CLARITY_NOTE="$_f"
+  fi
+done <<< "$(find_run_reports)"
+
+# 呼2 の --allowedTools にファイル名を埋め込むため、basename を検証する (2026-08-22 security
+# review): allowedTools はカンマ区切りで、model が書いた slug にカンマがあると
+# `Edit(//…),Write,…` のようにルールが注入され path 制限が無効化される (PoC 実証)。
+# 形から外れたノートは呼2 の対象にせず、gate も落とす。
+if [ -n "$CLARITY_NOTE" ]; then
+  _base=${CLARITY_NOTE##*/}
+  if ! printf '%s' "$_base" | grep -qE "^${DATE}_${TRACK}_[A-Za-z0-9._-]+\.md$"; then
+    log "ERROR: Line $TRACK report filename rejected (unsafe characters): $_base"
+    CLARITY_NOTE=""
+  fi
 fi
 
 if [ -z "$CLARITY_NOTE" ]; then
@@ -328,6 +365,7 @@ $CLARITY_NOTE"
     --permission-mode default \
     --append-system-prompt-file "$PROJECT_DIR/prompts/clarity-review-protocol.md" \
     --allowedTools "Read,Edit(//${CLARITY_NOTE#/})" \
+    --disallowedTools "$DISALLOWED_TOOLS" \
     --max-turns 15 \
     --model sonnet \
     --output-format json \

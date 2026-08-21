@@ -105,12 +105,14 @@ fi
 PROTOCOL=""
 PROMPT=""
 ALLOWED=""
+DISALLOWED=""
 PREV=""
 for arg in "$@"; do
   case "$PREV" in
     --append-system-prompt-file) PROTOCOL="$arg" ;;
     -p) PROMPT="$arg" ;;
     --allowedTools) ALLOWED="$arg" ;;
+    --disallowedTools) DISALLOWED="$arg" ;;
   esac
   PREV="$arg"
 done
@@ -138,6 +140,7 @@ if [[ "$PROTOCOL" == *repo-research-protocol.md ]]; then
   # 検証用にプロンプトと allowedTools を track 別に記録
   printf '%s' "$PROMPT" > "$MOCK_HOME_DIR/.prompt_$TRACK"
   printf '%s' "$ALLOWED" > "$MOCK_HOME_DIR/.allowed_$TRACK"
+  printf '%s' "$DISALLOWED" > "$MOCK_HOME_DIR/.disallowed_$TRACK"
   # 呼び出し回数カウンタ (retry テスト用)
   COUNT_FILE="$MOCK_HOME_DIR/.calls_$TRACK"
   COUNT=$(( $(cat "$COUNT_FILE" 2>/dev/null || echo 0) + 1 ))
@@ -174,11 +177,24 @@ if [[ "$PROTOCOL" == *repo-research-protocol.md ]]; then
   esac
 
   # noreport: success を返すがレポートを書かない (成功化け → ctl-015 が捕捉すべき)
-  if [[ "$SCENARIO" != "noreport" ]]; then
-    REPORT_DIR="$MOCK_HOME_DIR/mock-vault/daily-research"
-    mkdir -p "$REPORT_DIR"
-    echo "# mock report for $TRACK" > "$REPORT_DIR/${DR_DATE:-$(date +%Y-%m-%d)}_${TRACK}_mock-report.md"
-  fi
+  REPORT_DIR="$MOCK_HOME_DIR/mock-vault/daily-research"
+  mkdir -p "$REPORT_DIR"
+  case "$SCENARIO" in
+    noreport) ;;
+    comma-name)
+      # model が allowedTools 注入を狙うファイル名 (カンマ入り slug) を書く
+      echo "# mock report for $TRACK" > "$REPORT_DIR/${DR_DATE}_${TRACK}_x),Write,Read(a.md"
+      ;;
+    two-reports)
+      # 同 line に 2 ノート — 呼2 は最新 mtime の方を対象にすべき
+      echo "# older" > "$REPORT_DIR/${DR_DATE}_${TRACK}_older.md"
+      sleep 1
+      echo "# newest" > "$REPORT_DIR/${DR_DATE}_${TRACK}_newest.md"
+      ;;
+    *)
+      echo "# mock report for $TRACK" > "$REPORT_DIR/${DR_DATE:-$(date +%Y-%m-%d)}_${TRACK}_mock-report.md"
+      ;;
+  esac
 
   echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.05,"num_turns":3,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}}]'
   exit 0
@@ -188,6 +204,7 @@ fi
 if [[ "$PROTOCOL" == *clarity-review-protocol.md ]]; then
   printf '%s' "$PROMPT" > "$MOCK_HOME_DIR/.prompt_clarity"
   printf '%s' "$ALLOWED" > "$MOCK_HOME_DIR/.allowed_clarity"
+  printf '%s' "$DISALLOWED" > "$MOCK_HOME_DIR/.disallowed_clarity"
 
   if [[ "$SCENARIO" == "clarity-fail" ]]; then
     echo "ERROR: simulated clarity failure" >&2
@@ -505,6 +522,50 @@ get_log() {
   ! echo "$log_content" | grep -q "Completed successfully"
   echo "$log_content" | grep -q "ctl-015"
   echo "$log_content" | grep -q "Failed (E_NO_REPORT"
+}
+
+# === Test: deny 層 — defaultMode=auto 下でも Bash が model に渡らない (2026-08-22 security review) ===
+@test "E2E security: both calls pass --disallowedTools with Bash (allow list is not a restriction under auto mode)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+
+  run_script
+
+  grep -qE '(^|,)Bash(,|$)' "$MOCK_HOME/.disallowed_$PICKED"
+  grep -qE '(^|,)Bash(,|$)' "$MOCK_HOME/.disallowed_clarity"
+}
+
+# === Test: ctl-015 は run スコープ — 同日の先行ノートでは gate が通らない ===
+@test "E2E gate: a pre-existing same-day report does not satisfy the gate for a run that wrote nothing" {
+  echo "noreport" > "$MOCK_HOME/.mock_scenario"
+  mkdir -p "$MOCK_HOME/mock-vault/daily-research"
+  echo "# stale" > "$MOCK_HOME/mock-vault/daily-research/${DR_DATE}_${PICKED}_stale.md"
+  touch -t 202001010000 "$MOCK_HOME/mock-vault/daily-research/${DR_DATE}_${PICKED}_stale.md"
+
+  run run_script
+  [ "$status" -ne 0 ]
+  get_log | grep -q "ctl-015"
+  ! get_log | grep -q "Clarity pass:"
+}
+
+# === Test: 複数ノート時は最新 mtime が呼2 の対象 (find の readdir 順に依存しない) ===
+@test "E2E clarity: with two reports for one line, the newest one is reviewed" {
+  echo "two-reports" > "$MOCK_HOME/.mock_scenario"
+
+  run_script
+
+  get_log | grep -q "Clarity pass: ${DR_DATE}_${PICKED}_newest.md"
+  grep -q "_newest.md)" "$MOCK_HOME/.allowed_clarity"
+}
+
+# === Test: カンマ入りファイル名は呼2 の allowedTools へ注入されない ===
+@test "E2E security: a report filename with a comma is rejected, never embedded in clarity --allowedTools" {
+  echo "comma-name" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -ne 0 ]
+  get_log | grep -q "report filename rejected"
+  get_log | grep -q "ctl-015"
+  [ ! -f "$MOCK_HOME/.allowed_clarity" ]
 }
 
 # === Test: 不在 repo は skip され部分失敗になる ===

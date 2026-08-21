@@ -107,7 +107,9 @@ tail -f logs/$(date +%Y-%m-%d).log
   呼2 clarity 改稿。スコアの保存・蓄積はしない (ADR-0006)
 - **repo は read-only を三層で強制**: doctrine (プロトコル文言) + 書き込み先指定 +
   permission 層 (`--allowedTools` の Write/Edit を vault / state / past_topics の
-  絶対パスに制限)
+  絶対パスに制限 + `--disallowedTools "Bash,Task,NotebookEdit"`)。**allow は加算リストで
+  あって制限ではない** — `~/.claude/settings.json` の `defaultMode: "auto"` 下では
+  列挙外の Bash が denial ゼロで通った (2026-08-22 PoC)。無人実行の境界は deny で書く
 - **鮮度が一級制約**: LLM 界隈の知識は 1 週間スケールで陳腐化する。全 claim に
   as-of 日付、機会メモの全機会に失効日 (valid-until / 無効化イベント) を必須化
 - **レポート存在ゲート (ctl-015)**: 各担当 line の成否は当日の
@@ -128,7 +130,9 @@ tail -f logs/$(date +%Y-%m-%d).log
 - **`--append-system-prompt-file`** を使用（`--system-prompt-file` ではない）。
   Claude Code のデフォルト能力を保持するため
 - **`--allowedTools`** で最小権限: WebSearch, WebFetch, Read, Glob, Grep +
-  path 制限付き Write/Edit。`--dangerously-skip-permissions` は使わない
+  path 制限付き Write/Edit、**`--disallowedTools`** で Bash 等を deny (呼1 / 呼2 共通)。
+  `--dangerously-skip-permissions` は使わない。呼2 の allowedTools に埋めるノート名は
+  basename 検証済みのものだけ (カンマ入り slug でルール注入できるため)
 - **`< /dev/null`**: 全 `claude -p` 呼び出しで stdin をリダイレクト
 - **オーケストレーションは shell**、JSON/TOML 解析は stdlib python3
   (`scripts/lib/dr_pipeline.py`)。pip 依存はランタイムに導入しない
