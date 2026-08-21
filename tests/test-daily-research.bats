@@ -73,28 +73,34 @@ teardown() {
 
 # === 新プロトコルの contract (repo-research-protocol.md) ===
 
-@test "protocol leads with explanatory-report objective, not corroboration" {
+@test "protocol leads with trend-explanation objective, not adversarial framing (ADR-0014)" {
   grep -q '前提知識ゼロで読める解説レポート' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  grep -q '裏付け (corroboration) は成果ではない' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  # ADR-0009: 提案・承認要求はレポートに書かない
-  grep -q '提案・承認要求・作業手順は書かない' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  grep -q 'この repo にどう使えるか' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  grep -q '事実と解釈を分けて書く' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  # ADR-0009 の禁止は承認要求・手順に絞って維持
+  grep -q '承認要求・「〜すべき」・手順の列挙（1. 2. 3.）は書かない' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  # 撤去した対立フレーミングが戻っていない
+  ! grep -q '前提挑戦パス' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  ! grep -q '反証プレッシャー' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  ! grep -q 'theme_rank' "$PROJECT_DIR/prompts/repo-research-protocol.md"
 }
 
-@test "protocol mandates diff-first, premise-challenge, citation gate, self-signal guard" {
+@test "protocol mandates diff-first, citation gate, self-signal guard" {
   grep -q 'diff パス' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  grep -q '前提挑戦パス' "$PROJECT_DIR/prompts/repo-research-protocol.md"
   grep -q 'citation ゲート' "$PROJECT_DIR/prompts/repo-research-protocol.md"
   grep -q '自己汚染ガード' "$PROJECT_DIR/prompts/repo-research-protocol.md"
 }
 
 @test "protocol declares repo read-only and forbids tactic quota" {
   grep -q 'repo は read-only' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  grep -q 'ノルマは存在しない' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  grep -q '発見のノルマは無い' "$PROJECT_DIR/prompts/repo-research-protocol.md"
 }
 
-@test "template requires background explanation, counter-evidence, and fixed tail sections" {
-  grep -q '背景解説' "$PROJECT_DIR/templates/report-template.md"
-  grep -q '反対材料' "$PROJECT_DIR/templates/report-template.md"
+@test "template requires conclusion, background, implication, and fixed tail sections" {
+  grep -q '冒頭に結論' "$PROJECT_DIR/templates/report-template.md"
+  grep -q '初見の読者向けの背景' "$PROJECT_DIR/templates/report-template.md"
+  grep -q 'この repo への含意' "$PROJECT_DIR/templates/report-template.md"
+  ! grep -q 'theme_rank' "$PROJECT_DIR/templates/report-template.md"
   grep -q '## 機会メモ' "$PROJECT_DIR/templates/report-template.md"
   grep -q '## ソース' "$PROJECT_DIR/templates/report-template.md"
   grep -q '失効日' "$PROJECT_DIR/templates/report-template.md"

@@ -2,7 +2,7 @@ Language: [English](README.md) | 日本語
 
 # daily-research
 
-**自分の研究リポジトリの中で動くリサーチフィードバックエンジン。** 毎朝、[Claude Code](https://docs.anthropic.com/en/docs/claude-code) がライン (line) ごとに 1 回、*そのラインの repo を作業ディレクトリとして* 起動されます。repo 自身の運用文脈 — CLAUDE.md、タスク台帳、open questions、実施履歴 — を読み、**repo の前提・問い・立場を動かす外部の動き** — 新 venue、新機構、期限付き機会、反証 — を探します。レポートは前提知識ゼロで読める自由形式の解説ノートとして [Obsidian](https://obsidian.md) Vault に書き出されます — 朝のコーヒーと読む読み物であって、todo キューではありません。日付付き締切を持つ機会だけが、各ノート末尾の「機会メモ」節に記録されます。
+**自分の研究リポジトリの中で動くリサーチフィードバックエンジン。** 毎朝、[Claude Code](https://docs.anthropic.com/en/docs/claude-code) がライン (line) ごとに 1 回、*そのラインの repo を作業ディレクトリとして* 起動されます。repo 自身の運用文脈 — CLAUDE.md、タスク台帳、open questions、実施履歴 — を読み、**repo に関係する外部の動向**を 1 つ選び、何が起きたか・なぜ重要か・この repo にどう使えるかを解説します。レポートは前提知識ゼロで読める自由形式の解説ノートとして [Obsidian](https://obsidian.md) Vault に書き出されます — 朝のコーヒーと読む読み物であって、todo キューではありません。日付付き締切を持つ機会だけが、各ノート末尾の「機会メモ」節に記録されます。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/shimo4228/daily-research) ![python](https://img.shields.io/badge/python-3.11%2B%20stdlib-3776ab.svg)
 
@@ -17,7 +17,7 @@ flowchart TD
     cron["launchd — 毎朝 05:00"] --> orch["daily-research.sh"]
     orch --> loop["config.toml tracks のライン単位ループ<br/>claude -p · cwd = ラインの repo · Sonnet<br/>25 分タイムアウト · リトライ 1 回 (401 は全ライン中止)"]
     loop --> ctx["入力: repo の CLAUDE.md (自動ロード) + context_files<br/>+ line brief · 過去テーマ dedup · レポートテンプレート"]
-    ctx --> run["state/&lt;line&gt;/ の watched sources を diff-first で確認<br/>citation ゲート付きリサーチ · 前提挑戦パス"]
+    ctx --> run["state/&lt;line&gt;/ の watched sources を diff-first で確認<br/>citation ゲート付きリサーチ · 自己汚染ガード"]
     run --> out[("Obsidian Vault — 解説リサーチノート<br/>+ state/&lt;line&gt;/ + past_topics.json")]
 ```
 
@@ -25,21 +25,20 @@ flowchart TD
 
 1. repo の文脈と state を読む — CLAUDE.md は自動ロード、config の `context_files`（タスク台帳・open questions・実施履歴）は明示的に Read;
 2. `state/<line>/` の監視ソース（`watched-sources.md`、`playbook.md` — playbook は delta 更新のみ）を **diff-first** で確認する;
-3. 最も価値ある対象を選ぶ — repo の前提・問いへの影響度が第一、期限性が第二、反証性が第三;
+3. テーマを選ぶ — 候補 2〜3 件を「新規か / 一次ソースに届くか / repo のどこに使えるか固有名詞で言えるか」の 3 問で絞る（[ADR-0014](docs/adr/0014-trend-explanation-report.md)）;
 4. **citation ゲート**付きでリサーチする: 引用する URL はすべて run 内で WebFetch 解決済みであること;
-5. **前提挑戦パス**を実行する — repo の立場に反する・都合の悪い外部知見（反対材料）を本文で必ず扱う（anti-sycophancy）。加えて自己汚染ガード — 運用者自身の repo は外部シグナルとして数えない;
-6. 自由形式の解説ノートを vault に Write する（`{date}_{track}_{slug}.md`）。冒頭に結論、続けて前提知識ゼロの読者向けの背景解説、その後に各論。日付付き締切を持つ機会は末尾の固定節「機会メモ」（何を / どこで / **失効日**）へ;
+5. **事実と解釈を分ける** — 一次ソースで確認した事実は事実として、書き手の解釈は解釈として書く。加えて自己汚染ガード — 運用者自身の repo は外部シグナルとして数えない;
+6. 解説ノートを vault に Write する（`{date}_{track}_{slug}.md`、本文 3,000 字目安）。推奨骨格は「結論 → 何が起きたか → 前提知識ゼロの読者向けの背景 → この repo への含意（どの文書・task に使えるかを平文で。承認要求・手順列挙は書かない）」。日付付き締切を持つ機会は末尾の固定節「機会メモ」（何を / どこで / **失効日**）へ;
 7. `state/<line>/` と `past_topics.json` を更新する。
 
-目的関数は「**repo の前提・問い・立場を動かす外部の動きを見つけ、前提知識ゼロで読める解説レポートとして届ける**」。裏付け (corroboration) を主旨とするテーマは禁止、根拠付き「変化なし」は正の一級出力、発見ノルマはありません。提案・承認要求はノートに書きません（[ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)）。
+目的関数は「**repo に関係する外部の動向を 1 つ選び、何が起きたか・なぜ重要か・この repo にどう使えるかを、前提知識ゼロで読める解説レポートとして届ける**」（[ADR-0014](docs/adr/0014-trend-explanation-report.md)）。主語は外部の出来事で、repo の立場への賛否を主題にしません。発見ノルマはありません。承認要求・手順はノートに書きません（[ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)）。
 
 これはもともと汎用トレンドリサーチツールでした。固定トピックドメインが構造的飽和を招いたため、2026-05-27 に各トラックを研究リポジトリにマッピングし直し（[ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)）、concept-graph の coverage / frontier 機構（[ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md)）、4 repo 1:1 構成への回帰（[ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md)）を経て、2026-08-04 に中央 2 パス concept-graph パイプラインを全廃 — テーマ選定が裏付けサーベイに収束していたため — し、per-repo in-context research に移行しました（[ADR-0008](docs/adr/0008-per-repo-in-context-research.md)）。2026-08-05、初の全ライン走行を受けて、出力を actionable-tactics note + Slack 承認ブリーフから自由形式の解説レポートへ転換 — 提案という枠組みが全ノートを「返答待ち todo」にしていたためです（[ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)）。
 
 ## 中核概念
 
-- **解説レポート (explanatory report)** — レポート形式（[ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)）。本文は自由形式で、5 つの記述規律 — 冒頭に結論 / 前提知識ゼロの読者向け背景解説 / 反対材料を扱う / 定点観測の結果を含める / 全 claim に日付 — に従います。末尾に機械検査対象の固定 2 節: 「機会メモ」（日付付き締切を持つ機会のみ: 何を / どこで / 失効日）と「ソース」。提案・承認要求は書きません。
+- **解説レポート (explanatory report)** — レポート形式（[ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)）。本文は 3 つの記述規律 — 冒頭に結論 / 前提知識ゼロの読者向け背景 / 全 claim に日付と事実・解釈の分離 — に従い、推奨 4 節骨格（結論 / 何が起きたか / 背景 / この repo への含意）で約 3,000 字（[ADR-0014](docs/adr/0014-trend-explanation-report.md)）。末尾に機械検査対象の固定 2 節: 「機会メモ」（日付付き締切を持つ機会のみ: 何を / どこで / 失効日）と「ソース」。提案・承認要求は書きません。
 - **Diff-first パス** — 各ラインは `state/<line>/` に `watched-sources.md`（ソース + last-seen 状態）と `playbook.md`（日付付きの状況→行動集）を永続化します。run は last-seen 以降の差分だけを拾い、既知テーマの再サーベイは禁止。playbook は日付付き delta 更新のみで、全面書き直しはしません。
-- **前提挑戦パス** — anti-sycophancy の対抗策。執筆前に各 finding へ反証方向の検索を行い、レポートは repo の立場への反対材料を本文で必ず扱います。見つからなければ、空振りした反証クエリを明記します。
 - **Citation ゲート** — レポートに載る URL はすべて run 内で WebFetch 解決済みであること。未解決の参照は落とすか明示マークします。
 - **鮮度第一 (freshness-first)** — LLM 界隈の知識は 1 週間スケールで陳腐化します。すべての claim に as-of 日付、すべての推奨に失効条件を付けます。
 - **repo は read-only** — マッピングされた repo は決して編集されません。三層で強制: doctrine（プロトコル文言）+ 実行（書き込み先は vault / `state/` / `past_topics.json` のみ）+ permission 層（`--allowedTools` の Write/Edit を絶対パスで制限）。
@@ -141,7 +140,7 @@ daily-research/
 |------|------|
 | per-repo in-context research: ラインごと Sonnet 単一パス、cwd = repo | 中央 2 パス concept-graph パイプラインは repo を同期 graph 越しにしか見られず、選定が gap 埋めサーベイに縮退した。「進めるべき価値」を知る運用文脈は repo の中にある（[ADR-0008](docs/adr/0008-per-repo-in-context-research.md)） |
 | 目的関数 = repo の前提・問いを動かす解説レポート（概念補強ではなく） | 裏付け収束はベンチマーク実証済みの failure mode（[ADR-0008](docs/adr/0008-per-repo-in-context-research.md)）。提案・承認という枠組みは全ノートを「返答待ち todo」にしたため、ノートは読み物 + 期限付き機会だけの機会メモに転換（[ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)） |
-| diff-first + 前提挑戦 + citation ゲートを run 構造に組み込む | survey-per-run は文書化された anti-pattern。追従 drift はプロンプトの意図でなく構造で防ぐ（[ADR-0008](docs/adr/0008-per-repo-in-context-research.md)） |
+| diff-first + citation ゲートを run 構造に組み込む | survey-per-run は文書化された anti-pattern。追従 drift はプロンプトの意図でなく構造で防ぐ（[ADR-0008](docs/adr/0008-per-repo-in-context-research.md)） |
 | repo は三層 (doctrine / 実行 / permission) で read-only | 寄与は人間が取り込む Vault ノート経由で流れ、repo 間汚染を回避 |
 | ラインを研究 repo にマッピング | 固定トピックドメインが構造的飽和を招いた（[ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)）。[ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md) 以降は 4 repo 1:1 |
 | 外部 MCP メモリではなくローカル state ファイル | 旧 Mem0 MCP 統合は静かな失敗で 32 日間ゼロ稼働した; ローカルファイルは失敗が顕在化する |

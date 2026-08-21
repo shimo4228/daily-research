@@ -65,9 +65,9 @@ daily-research.sh (05:00)
 │   25-min timeout, one retry on transient failure; 401 aborts)
 │   ├── Read repo context (CLAUDE.md auto-loaded + context_files) + state/<line>/
 │   ├── Diff-first pass over watched sources · theme selection (2–3 candidates →
-│   │   binary checklist → theme_rank verdict, ADR-0010) · research with citation gate
-│   ├── Premise-challenge pass (counter-evidence is mandatory)
-│   └── Write free-form explanatory note → vault · update state + past_topics.json
+│   │   3 yes/no questions, ADR-0014) · research with citation gate
+│   └── Write explanatory note (conclusion / what happened / background /
+│       implications for this repo, ~3,000 chars) → vault · update state + past_topics.json
 ├── ctl-015 report-existence gate ({date}_{track}_*.md in vault)
 ├── Call 2: fresh-context clarity revision (Sonnet, no research context, Edit limited
 │   to the day's note; failure is fail-open — unrevised note survives, ADR-0010)

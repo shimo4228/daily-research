@@ -247,7 +247,7 @@ def cmd_past_themes(argv):
 
 
 # --- line-brief <config_path> <track>: per-repo 実行 (ADR-0008) のプロンプト注入用に
-#     line 定義 (focus / sources / 判断基準 / context_files / self_signals) を整形出力 ---
+#     line 定義 (focus / sources / context_files / self_signals) を整形出力 ---
 def cmd_line_brief(argv):
     if len(argv) < 2:
         print("usage: line-brief <config_path> <track>", file=sys.stderr)
@@ -269,13 +269,6 @@ def cmd_line_brief(argv):
         print(f"- name: {v['name']}")
     if v.get("focus"):
         print(f"- focus: {v['focus']}")
-    criteria = v.get("scoring_criteria") or []
-    if criteria:
-        print("- 判断基準 (優先順):")
-        for c in criteria:
-            print(
-                f"  - {c.get('name', '?')} (weight {c.get('weight', '?')}): {c.get('desc', '')}"
-            )
     sources = v.get("sources") or []
     if sources:
         print("- 探索の起点 (sources):")
@@ -625,7 +618,9 @@ def cmd_report_lint(argv):
         if len(text) < MIN_BODY_CHARS:
             soft.append(f"本文 {len(text)} 字 (< {MIN_BODY_CHARS})")
 
-        results.append({"file": name, "hard": hard, "soft": soft})
+        results.append(
+            {"file": name, "hard": hard, "soft": soft, "body_chars": len(text)}
+        )
 
     n_hard = sum(1 for r in results if r["hard"])
     n_soft = sum(1 for r in results if r["soft"])

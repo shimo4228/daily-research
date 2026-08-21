@@ -4,6 +4,8 @@
 
 Accepted — 決定 1（当日 1 line / ctl-015 の 1 本判定）は [ADR-0011](0011-daily-line.md) により一部修正（daily line の追加実行と部分失敗セマンティクス）
 
+> **注記 (2026-08-22, ADR-0014)**: 決定 3 のテーマ層 (T1〜T6 チェックリスト / 反証プレッシャー / `theme_rank` verdict) と決定 6 の `theme_rank` 分布による成功基準は ADR-0014 で廃止した。決定 1・2・4・5 (rotation / in-loop 原則 / 呼2 clarity / モデル配分) は有効。
+
 ## Date
 
 2026-08-13

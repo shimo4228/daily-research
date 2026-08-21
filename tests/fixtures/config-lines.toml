@@ -14,10 +14,6 @@ focus = "AKC line focus"
 aliases = ["agent_systems", "agent_cognition"]
 context_files = [".notes/TASKS.md", "docs/inspiration.md"]
 sources = ["fixture-source-a", "fixture-source-b"]
-scoring_criteria = [
-  { name = "実行可能性", weight = 45, desc = "今週実行できる手になるか" },
-  { name = "期限性・鮮度", weight = 25, desc = "期限付き機会か" },
-]
 
 [[tracks.akc.repos]]
 key = "akc"

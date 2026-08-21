@@ -1,6 +1,6 @@
 # daily-research
 
-Claude Code 非対話モード (`claude -p`) + macOS launchd で毎朝 AM 5:00 に自律リサーチを実行するシステム。7 つの研究ライン (line) が 7 つの研究 repo に 1:1 でマッピングされる (`akc` = agent-knowledge-cycle / `contemplative` = contemplative-agent / `aap` = agent-attribution-practice / `authorship` = authorship-strategy / `ans` = attention-not-self / `desire` = desire-frontier / `edge` = edge-frontier。desire / edge 以外は DOI 登録済み)。**rotation + 二層 eval (ADR-0010) + daily line 機構 (ADR-0011、2026-08-20 以降は `edge` が daily = ADR-0013)**: 毎朝、輪番で選ばれた 1 line (と `daily = true` の line があればそれも) が `claude -p` を **cwd = 対象 repo** で実行し (per-repo in-context research, ADR-0008)、repo 自身の運用文脈 (CLAUDE.md / タスク台帳 / open questions / 実施履歴) から「repo の前提・問い・立場を動かす外部の動き」をリサーチする。run 内でテーマ候補を複数生成して二値チェックリストで選別し (`theme_rank`)、執筆後に fresh-context の clarity 改稿 (呼2) が可読性を仕上げる。出力は**前提知識ゼロで読める自由形式の解説レポート** (ADR-0009) を Obsidian vault へ — 提案・承認要求は書かず、日付付き締切を持つ機会だけを末尾「機会メモ」に記録する。7:00 の Slack 承認ブリーフは廃止済み (ADR-0009)。
+Claude Code 非対話モード (`claude -p`) + macOS launchd で毎朝 AM 5:00 に自律リサーチを実行するシステム。7 つの研究ライン (line) が 7 つの研究 repo に 1:1 でマッピングされる (`akc` = agent-knowledge-cycle / `contemplative` = contemplative-agent / `aap` = agent-attribution-practice / `authorship` = authorship-strategy / `ans` = attention-not-self / `desire` = desire-frontier / `edge` = edge-frontier。desire / edge 以外は DOI 登録済み)。**rotation + 二層 eval (ADR-0010) + daily line 機構 (ADR-0011、2026-08-20 以降は `edge` が daily = ADR-0013)**: 毎朝、輪番で選ばれた 1 line (と `daily = true` の line があればそれも) が `claude -p` を **cwd = 対象 repo** で実行し (per-repo in-context research, ADR-0008)、repo 自身の運用文脈 (CLAUDE.md / タスク台帳 / open questions / 実施履歴) から「repo に関係する外部の動向」を 1 つ選んで解説し、repo への含意を添える (ADR-0014)。run 内でテーマ候補を複数生成して 3 問 (新規か / 一次到達か / 使い道を言えるか) で選別し、執筆後に fresh-context の clarity 改稿 (呼2) が可読性を仕上げる。出力は**前提知識ゼロで読める自由形式の解説レポート** (ADR-0009) を Obsidian vault へ — 提案・承認要求は書かず、日付付き締切を持つ機会だけを末尾「機会メモ」に記録する。7:00 の Slack 承認ブリーフは廃止済み (ADR-0009)。
 
 ## Tech Stack
 
@@ -87,22 +87,24 @@ tail -f logs/$(date +%Y-%m-%d).log
   transient 失敗は 1 回リトライ、401 は残 line 中断 — 完走済み line の集計は保持) を
   **cwd = target_repo** で実行。
   プロトコル正本は `prompts/repo-research-protocol.md` (`--append-system-prompt-file`)。
-  per-line 注入 = `dr_pipeline.py line-brief` (focus / 判断基準 / context_files /
+  per-line 注入 = `dr_pipeline.py line-brief` (focus / sources / context_files /
   self_signals) + past-themes (dedup) + テンプレート。**呼2** = fresh-context clarity
   改稿 (model sonnet、15 分、研究文脈なし、対象ノートのみ Edit 可、失敗は fail-open) —
   正本は `prompts/clarity-review-protocol.md`
-- **目的関数 (ADR-0009)**: 「repo の前提・問い・立場を動かす外部の動きを見つけ、
-  前提知識ゼロで読める解説レポートとして届ける」。裏付け (corroboration) を主旨とする
-  ノートは禁止。**発見ノルマなし** — 「変化なし」は根拠付きの正の出力 (Goodhart 回避)。
-  提案・承認要求・作業手順は書かない — レポートは読み物であって作業指示ではない
+- **目的関数 (ADR-0014、ADR-0009 を修正)**: 「repo に関係する外部の動向を 1 つ選び、
+  何が起きたか・なぜ重要か・この repo にどう使えるかを、前提知識ゼロで読める解説レポートと
+  して届ける」。主語は外部の出来事 — repo の立場への賛否・位置関係の議論を主題にしない。
+  残す認識規律は「事実と解釈を分けて書く」だけ (裏付け禁止・反証義務・前提挑戦パスは
+  2026-08-22 に撤去 — 反証過多で読めないレポートになった)。**発見ノルマなし**。
+  承認要求・「すべき」・手順列挙は書かないが、使い道 (どの ADR / task / 問いにどう使えるか)
+  は平文で書く — レポートは読み物であって作業指示ではない
 - **run 構造**: 文脈読込 → diff パス (state/ の watched-sources を前回比差分だけ確認、
-  re-survey 禁止、失効項目の再検証) → テーマ選別 (候補 2〜3 → 二値チェックリスト
-  T1〜T6 → 反証プレッシャー → `theme_rank` verdict = A見込み/B見込み/Deepen後。
-  弱テーマ日もランク付きで通常執筆 — 却下ゲートにしない、ADR-0010) → リサーチ
-  (citation ゲート = 全 URL を run 内 WebFetch 解決) → 前提挑戦パス (反対材料の
-  記述義務 + 自己汚染ガード) → vault へ note → state 更新 (playbook は日付付き
-  delta のみ) → 呼2 clarity 改稿。eval は **in-loop 型のみ** — verdict は同じ朝の
-  run 内で消費され、スコアの保存・蓄積はしない (ADR-0006 の条件を満たす条件付き復活)
+  re-survey 禁止。結果はテーマ候補の入力であり本文への網羅記述義務はない) → テーマ選択
+  (候補 2〜3 → 3 問 Yes/No → 1 件。verdict 記録なし、ADR-0014) → リサーチ
+  (citation ゲート = 全 URL を run 内 WebFetch 解決 + 自己汚染ガード) → vault へ note
+  (推奨 4 節骨格: 結論 / 何が起きたか / 背景 / この repo への含意 + 固定 2 節、
+  本文 3,000 字目安 — lint しない) → state 更新 (playbook は日付付き delta のみ) →
+  呼2 clarity 改稿。スコアの保存・蓄積はしない (ADR-0006)
 - **repo は read-only を三層で強制**: doctrine (プロトコル文言) + 書き込み先指定 +
   permission 層 (`--allowedTools` の Write/Edit を vault / state / past_topics の
   絶対パスに制限)
@@ -116,8 +118,8 @@ tail -f logs/$(date +%Y-%m-%d).log
 - **自己改善ループ (ADR-0006、preserve)**: 毎朝の run を `metrics.jsonl` (gitignore)
   に永続記録 (呼1 は pass2、呼2 は clarity_pass = ran/ok + 実測、pass1 は None、
   fallback_used はリトライ発生の意味)。決定論レポート lint (ctl-016、hard fail のみ
-  即日 notify) は固定 2 節 (機会メモ / ソース) を検査 — 本文の記述規律の質は人間
-  consumer が判断。消費は対話 skill `/dr-review` (週 1 目安)。効果を意図した変更
+  即日 notify) は固定 2 節 (機会メモ / ソース) を検査し `body_chars` を残す — 本文の
+  記述規律の質は人間 consumer が判断。消費は対話 skill `/dr-review` (週 1 目安)。効果を意図した変更
   commit には `DR-Expect:` trailer。**事後採点の LLM judge は復活させない** —
   eval は run 内で verdict が消費される in-loop 型に限る (ADR-0010)
 - **7:00 morning brief は廃止 (ADR-0009)**: 毎朝の Slack 承認リクエストが全ノートを
@@ -187,8 +189,10 @@ tail -f logs/$(date +%Y-%m-%d).log
   のみ `daily = true` で毎日実行 (ADR-0011)、2026-08-18 に輪番へ戻した (ADR-0012)。
   2026-08-20 に `edge` (AI 活用の限界突破事例、接地 repo = edge-frontier) を daily で
   新設 (ADR-0013)。
-  呼1 = Opus 研究 (テーマ選別込み)、呼2 = Sonnet clarity 改稿。ライン数・repo
-  マッピング・輪番順は config.toml から動的取得。成功基準は 4 週後の /dr-review で
-  判定 (repo 還元件数 / theme_rank 分布 / 主観)
+  呼1 = Opus 研究 (テーマ選択込み)、呼2 = Sonnet clarity 改稿。ライン数・repo
+  マッピング・輪番順は config.toml から動的取得。
+  **2026-08-22 にレポートを「動向解説 + repo への含意」へ単純化 (ADR-0014)**: 対立的
+  フレーミング (裏付け禁止 / 反証義務 / 前提挑戦パス / theme_rank / scoring_criteria) を
+  プロトコル・テンプレート・config の 3 層から撤去。可読性の主観判定は 2026-08-30
 - 蓄積層: Obsidian vault の LLM-wiki (ingest は Pass 3 で継続) + line 別 state
   (watched-sources / playbook)。中央 graph.jsonld は凍結アーカイブ

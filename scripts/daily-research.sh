@@ -189,7 +189,7 @@ else
   STATE_DIR="$PROJECT_DIR/state/$TRACK"
   mkdir -p "$STATE_DIR"
 
-  # line 定義 (focus / sources / 判断基準 / context_files / self_signals) を config から生成
+  # line 定義 (focus / sources / context_files / self_signals) を config から生成
   LINE_BRIEF=$(python3 "$DR_PY" line-brief "$PROJECT_DIR/config.toml" "$TRACK" 2>> "$LOG_FILE") \
     || LINE_BRIEF="(line-brief 生成失敗。config.toml を Read して line 定義を確認すること)"
 

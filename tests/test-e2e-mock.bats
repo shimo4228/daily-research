@@ -331,7 +331,8 @@ get_log() {
   echo "$prompt" | grep -q "state/$PICKED"
   echo "$prompt" | grep -q "past_topics.json"
   echo "$prompt" | grep -q "機会メモ"   # テンプレート注入
-  echo "$prompt" | grep -q "theme_rank"  # テーマ選別層 (ADR-0010) のテンプレート注入
+  echo "$prompt" | grep -q "この repo への含意"  # 4 節骨格 (ADR-0014) のテンプレート注入
+  ! echo "$prompt" | grep -q "判断基準 (優先順)"  # scoring_criteria は廃止 (ADR-0014)
   echo "$prompt" | grep -q "github.com/example-author"  # self_signals
 }
 

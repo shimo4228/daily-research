@@ -22,7 +22,7 @@ daily-research/
 ├── prompts/
 │   └── repo-research-protocol.md       # Per-repo research protocol (--append-system-prompt-file)
 ├── templates/
-│   └── report-template.md              # Explanatory-report writing rules + fixed tail sections (frontmatter incl. theme_rank)
+│   └── report-template.md              # Explanatory-report writing rules + fixed tail sections (frontmatter)
 ├── scripts/
 │   ├── daily-research.sh               # Main entry point (rotation: one line/day; call 1 research + call 2 clarity); sources lib/
 │   ├── check-auth.sh                   # OAuth check via real_auth_probe() + notification

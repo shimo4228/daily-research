@@ -36,17 +36,19 @@ python3 scripts/lib/dr_pipeline.py metrics-backfill metrics.jsonl logs   # ロ�
 ### 2. 品質 signal
 
 ```bash
-python3 scripts/lib/dr_pipeline.py report-lint "<vault>/daily-research" "$(date +%Y-%m-%d)" config.toml graph.jsonld
+python3 scripts/lib/dr_pipeline.py report-lint "<vault>/daily-research" "$(date +%Y-%m-%d)" config.toml
 python3 scripts/lib/dr_pipeline.py wiki-quality-scan "<vault>" 30 config.toml
 ```
 
 - lint: metrics.jsonl 内の蓄積分から hard / soft violation のトレンドを出す
 - wiki-quality-scan: line 別 FLAGGED 率 (一次未照合・推定扱い注記) を提示。
   特定 line に偏っていたら research-protocol.md の出典照合指示の弱点候補
-- **theme_rank 分布 (ADR-0010)**: vault の当月ノート frontmatter から集計する —
-  `grep -h '^theme_rank:' "<vault>/daily-research/"$(date +%Y-%m)*.md | sort | uniq -c`。
-  成功基準は「A 見込みが週 1 本以上」。A が直近 10 本中 2 本を超えて出ていたら
-  基準ドリフト (甘さ) を疑う
+- **本文字数の推移 (ADR-0014)**: lint 出力の `results[].body_chars` (metrics.jsonl の
+  `lint` にも入る) を line 別に見る。目安は 3,000 字以内 — 超過が常態化したら
+  プロトコル Step 5 の長さ指示が効いていない signal (機械 lint は意図的に置かない)
+- **可読性の主観判定 (ADR-0014 Review-when)**: 2026-08-30 に 2026-08-23 以降の 7 日分を
+  通読し「最後まで読めたか / repo に使えたものがあったか」を判定する。
+  `theme_rank` 分布の集計は ADR-0014 で廃止した (frontmatter に無い)
 
 ### 3. DR-Expect 突合 (改善変更の効果検証)
 

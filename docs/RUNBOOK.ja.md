@@ -64,10 +64,10 @@ daily-research.sh (05:00)
 ├── 呼1: claude -p, cwd = 担当ラインの target_repo (Opus, --max-turns 55,
 │   25 分タイムアウト, transient 失敗時リトライ 1 回; 401 は中止)
 │   ├── repo 文脈 (CLAUDE.md 自動ロード + context_files) + state/<line>/ を Read
-│   ├── watched sources の diff-first 確認 · テーマ選別（候補 2〜3 → 二値チェックリスト
-│   │   → theme_rank verdict、ADR-0010）· citation ゲート付きリサーチ
-│   ├── 前提挑戦パス（反対材料の記述は必須）
-│   └── 自由形式の解説ノートを vault に Write · state + past_topics.json 更新
+│   ├── watched sources の diff-first 確認 · テーマ選択（候補 2〜3 → 3 問 Yes/No、
+│   │   ADR-0014）· citation ゲート付きリサーチ
+│   └── 解説ノート（結論 / 何が起きたか / 背景 / この repo への含意、約 3,000 字）を
+│       vault に Write · state + past_topics.json 更新
 ├── ctl-015 レポート存在ゲート（vault の {date}_{track}_*.md）
 ├── 呼2: fresh-context clarity 改稿 (Sonnet, 研究文脈なし, 対象ノートのみ Edit 可,
 │   失敗は fail-open — 改稿なし版が残り run は成功のまま, ADR-0010)

@@ -269,7 +269,7 @@ def test_line_brief_emits_line_definition(monkeypatch, capsys):
     assert rc == 0
     assert "name: AKC Line" in out
     assert "focus: AKC line focus" in out
-    assert "実行可能性 (weight 45)" in out
+    assert "判断基準" not in out  # scoring_criteria は廃止 (ADR-0014)
     assert "fixture-source-a" in out
     assert ".notes/TASKS.md" in out
     assert "github.com/example-author" in out  # self_signals (自己汚染ガード)
