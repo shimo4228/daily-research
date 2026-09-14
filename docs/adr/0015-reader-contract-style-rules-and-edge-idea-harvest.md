@@ -4,9 +4,6 @@
 
 Accepted (ADR-0014 Review-when 第 1 項の早期発火への応答。ADR-0014 の 4 節骨格は研究 line で存続、edge line のみ節構成を置換)
 
-> 2026-09-06: 日次リサーチの現在の目的・実行経路は [ADR-0016](0016-discovery-first-edition.md) を参照。本記録は当時の判断として保存する。
-
-
 ## Date
 
 2026-08-27

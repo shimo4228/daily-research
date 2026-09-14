@@ -884,24 +884,3 @@ def test_metrics_append_source_defaults_to_live(monkeypatch, tmp_path):
     monkeypatch.setattr("sys.stdin", io.StringIO(""))
     assert dr_pipeline.main(["metrics-append", str(metrics), "2026-08-22", "OK", "1", "0"]) == 0
     assert json.loads(metrics.read_text())["source"] == "live"
-
-
-def test_discovery_lint_accepts_short_edition_without_opportunity(monkeypatch, capsys, tmp_path):
-    (tmp_path / '2026-08-05_discovery_edition.md').write_text(
-        '---\ncategory: discovery\n---\n# A short discovery\n\n'
-        'A source-backed short report.\n\n## ソース\n- [Primary](https://example.org/a)\n'
-    )
-    rc, out, _ = run_cmd(monkeypatch, capsys, _lint_args(tmp_path))
-    assert rc == 0
-    assert json.loads(out)['results'][0]['soft'] == []
-
-
-def test_discovery_wiki_scan_fixed_filename(monkeypatch, capsys, tmp_path):
-    import datetime
-    today = datetime.date.today().isoformat()
-    concept = tmp_path / 'wiki' / 'concept'
-    concept.mkdir(parents=True)
-    (concept / 'A.md').write_text(f'FLAGGED [[{today}_discovery_edition]]\n')
-    rc, out, _ = run_cmd(monkeypatch, capsys, ['wiki-quality-scan', str(tmp_path), '30', CONFIG])
-    assert rc == 0
-    assert json.loads(out)['by_line'] == {'discovery': 1}

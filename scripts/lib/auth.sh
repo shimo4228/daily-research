@@ -16,13 +16,11 @@
 real_auth_probe() {
   local probe_json fields code err
   if command -v timeout >/dev/null 2>&1; then
-    probe_json=$(timeout -k 5 60 "$CLAUDE_CMD" --safe-mode -p ok --tools "" \
-      --permission-prompts none --max-turns 1 --model haiku \
-      --no-session-persistence --output-format json < /dev/null 2>/dev/null) || true
+    probe_json=$(timeout 60 "$CLAUDE_CMD" -p ok --max-turns 1 --model haiku \
+      --output-format json < /dev/null 2>/dev/null) || true
   else
-    probe_json=$("$CLAUDE_CMD" --safe-mode -p ok --tools "" \
-      --permission-prompts none --max-turns 1 --model haiku \
-      --no-session-persistence --output-format json < /dev/null 2>/dev/null) || true
+    probe_json=$("$CLAUDE_CMD" -p ok --max-turns 1 --model haiku \
+      --output-format json < /dev/null 2>/dev/null) || true
   fi
   # error-fields の "api_error_status<TAB>is_error" を取り出す。api_error_status が空でも
   # 先頭フィールドを保持するためパラメータ展開を使う (TAB は IFS 空白で read が潰すため)。

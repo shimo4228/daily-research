@@ -1,40 +1,169 @@
-# Daily Research
+Language: [English](README.md) | 日本語
 
-次に考えたいこと・試したいことを発見する、朝の日本語リサーチレポート。
-主役1本と短い発見を通じて、知らなかった実例、研究、問いに出会います。
-今のプロジェクトにすぐ使えることは必須条件にしません。
+# daily-research
 
-[English](README.md)
+**自分の研究リポジトリの中で動くリサーチフィードバックエンジン。** 毎朝、[Claude Code](https://docs.anthropic.com/en/docs/claude-code) が輪番で選ばれた研究ライン (line) のために、*そのラインの repo を作業ディレクトリとして* 起動されます。repo 自身の運用文脈 — CLAUDE.md、タスク台帳、open questions、実施履歴 — を読み、**repo に関係する外部の動向**を 1 つ選び、何が起きたか・なぜ重要か・この repo にどう使えるかを解説します。レポートは前提知識ゼロで読める自由形式の解説ノートとして [Obsidian](https://obsidian.md) Vault に書き出されます — 朝のコーヒーと読む読み物であって、todo キューではありません。日付付き締切を持つ機会だけが、各ノート末尾の「機会メモ」節に記録されます。
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/shimo4228/daily-research) ![python](https://img.shields.io/badge/python-3.11%2B%20stdlib-3776ab.svg)
+
+macOS `launchd` で無人実行されます。API の配管もオーケストレーションフレームワークも不要 — shell スクリプトが Claude Code の非対話モード (`claude -p`) を駆動し、小さな stdlib のみの Python モジュールが JSON/TOML を解析します。知性はプロンプトに宿ります。
+
+> **対象**: 研究リポジトリを 1 つ以上運用していて、汎用トレンドでも裏付けサーベイの山でもなく、repo の実際の次アクションを狙った、日次・自律的な外部研究の流れが欲しい人。
 
 ## 仕組み
 
-Claude Opusが短い読者紹介から外部を探索します。別のOpusが調査素材と直近30日分の記事索引を受け取り、追加調査も行いながら一号を編集します。材料に応じて短報だけの日や休刊も選べます。
-
-両工程は専用の作業場所で`--safe-mode`を使い、WebSearch/WebFetchだけを利用します。
-モデルが返すJSONをPythonが検査・保存します。探索には研究repoや蓄積したplaybookを渡しません。
-読者紹介は、実際の記事への本人の反応を確認して更新します。
-
-通常号・短報号はObsidian Vaultへ`YYYY-MM-DD_discovery_edition.md`として保存し、休刊案内は非公開の実行記録に残します。当日分を新しく保存した場合は既存のwiki ingestへ渡します。付属のlaunchd設定は毎朝5時実行です。
-
-## 始める
-
-Bash、Python 3.11以上、GNU `timeout`（Homebrewのcoreutils）、認証済みのClaude Code CLIが必要です。CLIは`--safe-mode`と構造化JSON出力に対応する版を使用します。Claudeのサブスクリプション認証を利用します。
-
-```bash
-cp config.example.toml config.toml
-cp reader-profile.example.md reader-profile.md
-# config.tomlのVaultパスとreader-profile.mdを編集
-./scripts/daily-research.sh --preview
+```mermaid
+flowchart TD
+    cron["launchd — 毎朝 05:00"] --> orch["daily-research.sh"]
+    orch --> pick["rotation-pick — 輪番 1 ライン + daily ライン全部<br/>(date ordinal % 非 daily ライン数、決定論)"]
+    pick --> loop["呼1 · claude -p · cwd = ラインの repo · Opus<br/>25 分タイムアウト · リトライ 1 回 (401 は残ラインを中断)"]
+    loop --> ctx["入力: repo の CLAUDE.md (自動ロード) + context_files<br/>+ line brief · 過去テーマ dedup · レポートテンプレート"]
+    ctx --> run["state/&lt;line&gt;/ の watched sources を diff-first で確認<br/>テーマ選別 (3 問 Yes/No)<br/>citation ゲート付きリサーチ · 自己汚染ガード"]
+    run --> out[("Obsidian Vault — 解説リサーチノート<br/>+ state/&lt;line&gt;/ + past_topics.json")]
+    out --> clarity["呼2 · fresh-context clarity 改稿 · Sonnet<br/>欠陥検出限定 · fail-open"]
 ```
 
-試作はrepo内の非公開作業領域へ保存し、Vault・本番履歴・wikiには混ぜません。
-通常の保存は`--preview`なしで実行します。`--date YYYY-MM-DD`で号の日付、`--config PATH`で設定を指定できます。当日以外の日付には`--preview`が必要です。過去日付を指定しても、当時のWeb環境を再現するものではありません。
+オーケストレータ (`scripts/daily-research.sh`) は毎朝 **輪番 1 ライン + `daily = true` のライン全部**を選びます（[ADR-0011](docs/adr/0011-daily-line.md)）。輪番は `config.toml` `tracks` の非 daily ラインに対して決定論的です（proleptic Gregorian 序数 `date.toordinal()` % 非 daily ライン数 — 6 ラインなら 6 日周期、[ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md)）。daily ラインは周期の外で毎日走ります（2026-08-20 の [ADR-0013](docs/adr/0013-edge-daily-line.md) 以降は `edge`）。選ばれた各ラインにつき、呼1 が `claude -p` を 1 回実行します — モデルは Opus、25 分タイムアウト、transient 失敗時のリトライ 1 回（401 は残ラインを中断しますが、完走済みラインの成果は保持）— 作業ディレクトリはラインの `target_repo` です。各 run は:
 
-スケジュールと復旧は[運用ガイド](docs/RUNBOOK.ja.md)、検証は[開発ガイド](docs/CONTRIB.ja.md)、判断の記録は[ADR-0016](docs/adr/0016-discovery-first-edition.md)を参照してください。
+1. repo の文脈と state を読む — CLAUDE.md は自動ロード、config の `context_files`（タスク台帳・open questions・実施履歴）は明示的に Read;
+2. `state/<line>/` の監視ソース（`watched-sources.md`、`playbook.md` — playbook は delta 更新のみ）を **diff-first** で確認する;
+3. テーマを選ぶ — 候補 2〜3 件を「新規か / 一次ソースに届くか / repo のどこに使えるか固有名詞で言えるか」の 3 問で絞る（[ADR-0014](docs/adr/0014-trend-explanation-report.md)）;
+4. **citation ゲート**付きでリサーチする: 引用する URL はすべて run 内で WebFetch 解決済みであること;
+5. **事実と解釈を分ける** — 一次ソースで確認した事実は事実として、書き手の解釈は解釈として書く。加えて自己汚染ガード — 運用者自身の repo は外部シグナルとして数えない;
+6. 解説ノートを vault に Write する（`{date}_{track}_{slug}.md`、本文 3,000 字目安）。推奨骨格は「結論 → 何が起きたか → 前提知識ゼロの読者向けの背景 → この repo への含意（どの文書・task に使えるかを平文で。承認要求・手順列挙は書かない）」。日付付き締切を持つ機会は末尾の固定節「機会メモ」（何を / どこで / **失効日**）へ;
+7. `state/<line>/` と `past_topics.json` を更新する。
 
-## 読みながら確かめる
+続いて呼2 が完成ノートを **fresh-context の clarity reviewer**（`claude -p`、Sonnet、研究文脈なし、Edit は当日ノートのみ）に渡します: 初見の読者として読み、つまずき箇所を範囲単位で直す — 欠陥検出限定で新事実は足さず、失敗は fail-open（未改稿のノートが残る）です。
 
-1週間後に「続きを知りたくなったもの」「新しく考え始めたこと」「また同じ話と感じたもの」を振り返ります。
-候補素材も残すため、見つけられなかったのか、編集で落としたのかを確認できます。本数・出典数を面白さの指標にはしません。
+目的関数は「**repo に関係する外部の動向を 1 つ選び、何が起きたか・なぜ重要か・この repo にどう使えるかを、前提知識ゼロで読める解説レポートとして届ける**」（[ADR-0014](docs/adr/0014-trend-explanation-report.md)）。主語は外部の出来事で、repo の立場への賛否を主題にしません。発見ノルマはありません。承認要求・手順はノートに書きません（[ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)）。
 
-旧graphと研究状態は履歴として保存します。この構成による改善は、実際の記事と読者の反応で確かめます。
+これはもともと汎用トレンドリサーチツールでした。固定トピックドメインが構造的飽和を招いたため、2026-05-27 に各トラックを研究リポジトリにマッピングし直し（[ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)）、concept-graph の coverage / frontier 機構（[ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md)）、4 repo 1:1 構成への回帰（[ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md)）を経て、2026-08-04 に中央 2 パス concept-graph パイプラインを全廃 — テーマ選定が裏付けサーベイに収束していたため — し、per-repo in-context research に移行しました（[ADR-0008](docs/adr/0008-per-repo-in-context-research.md)）。2026-08-05、初の全ライン走行を受けて、出力を actionable-tactics note + Slack 承認ブリーフから自由形式の解説レポートへ転換 — 提案という枠組みが全ノートを「返答待ち todo」にしていたためです（[ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)）。2026-08-13、`/dr-review` で生産は健全だが消費ループが止まっている（1 日 5 本は読む容量もソースの実際の変化速度も超えていた）と分かり、毎日全ライン実行を 1 日 1 ライン輪番 + 二層 in-loop eval（テーマ選別と fresh-context clarity 改稿）に置き換えました（[ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md)）。2026-08-22、レポートを「外部動向 1 つ + この repo への含意」に単純化し、対立的フレーミング（裏付け禁止・反証義務・前提挑戦パス・`scoring_criteria`）をプロトコル・テンプレート・config から撤去しました（[ADR-0014](docs/adr/0014-trend-explanation-report.md)）。
+
+## 中核概念
+
+- **解説レポート (explanatory report)** — レポート形式（[ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)）。本文は 3 つの記述規律 — 冒頭に結論 / 前提知識ゼロの読者向け背景 / 全 claim に日付と事実・解釈の分離 — に従い、推奨 4 節骨格（結論 / 何が起きたか / 背景 / この repo への含意）で約 3,000 字（[ADR-0014](docs/adr/0014-trend-explanation-report.md)）。末尾に機械検査対象の固定 2 節: 「機会メモ」（日付付き締切を持つ機会のみ: 何を / どこで / 失効日）と「ソース」。提案・承認要求は書きません。
+- **輪番 + 二層 in-loop eval** — 毎朝、輪番 1 ライン（+ `daily = true` のラインは毎日、[ADR-0011](docs/adr/0011-daily-line.md)）。執筆前にテーマ候補を選別し、fresh-context の別プロセスが完成ノートを初見読者向けに改稿します（[ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md)）。判定は同じ run の中で消費され、スコアは保存しません — [ADR-0006](docs/adr/0006-self-improvement-loop-human-consumer.md) の「人間が consumer」原則はそのままです。
+- **Diff-first パス** — 各ラインは `state/<line>/` に `watched-sources.md`（ソース + last-seen 状態）と `playbook.md`（日付付きの状況→行動集）を永続化します。run は last-seen 以降の差分だけを拾い、既知テーマの再サーベイは禁止。playbook は日付付き delta 更新のみで、全面書き直しはしません。
+- **Citation ゲート** — レポートに載る URL はすべて run 内で WebFetch 解決済みであること。未解決の参照は落とすか明示マークします。
+- **鮮度第一 (freshness-first)** — LLM 界隈の知識は 1 週間スケールで陳腐化します。すべての claim に as-of 日付、すべての推奨に失効条件を付けます。
+- **repo は read-only** — マッピングされた repo は決して編集されません。三層で強制: doctrine（プロトコル文言）+ 実行（書き込み先は vault / `state/` / `past_topics.json` のみ）+ permission 層（`--allowedTools` の Write/Edit を絶対パスで制限し、`--disallowedTools Bash,Task,NotebookEdit` の deny 層がユーザー側の permission mode に関わらず効く）。
+- **凍結アーカイブ** — 退役した concept-cluster graph `graph.jsonld` への増分は停止しました。過去データの読み出し用に残されています（[スキーマ](docs/graph-schema.md)）。
+
+## 前提条件
+
+| 要件 | 備考 |
+|------|------|
+| [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) | `brew install claude` または npm 経由 |
+| [Claude Max プラン](https://claude.ai) | 非対話モードをコスト0で利用するため |
+| `python3` >= 3.11 | JSON/TOML 解析に stdlib のみ（`json` / `tomllib` / `re`）。macOS system 3.9 は `tomllib` 非対応のため Homebrew の `python3` を使う |
+| macOS | スケジューリングに `launchd` を使用（Linux は `cron` / `systemd` に適宜変更） |
+| Obsidian (任意) | Markdown 対応ツールなら何でも可 |
+| 研究リポジトリ | run が読める運用文脈（CLAUDE.md、タスク台帳、open questions）を持つ repo を 1 つ以上 |
+
+## クイックスタート
+
+```bash
+# 1. クローン
+git clone https://github.com/shimo4228/daily-research.git daily-research
+cd daily-research
+
+# 2. 設定 — vault_path と self_signals を設定し、ライン (1 line = 1 repo) を定義
+cp config.example.toml config.toml
+
+# 3. スクリプトに実行権限を付与
+chmod +x scripts/*.sh
+
+# 4. Claude の認証を確認（実 OAuth probe）
+./scripts/check-auth.sh
+
+# 5. テスト実行（Claude Code セッション内からも実行可。DR_FORCE_TRACK=<line> で 1 ラインだけ）
+./scripts/daily-research.sh
+
+# 6. launchd でスケジュール (任意): 05:00 リサーチ
+cp com.example.daily-research.plist com.daily-research.plist             # YOUR_USERNAME を編集
+ln -sf "$(pwd)/com.daily-research.plist" ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.daily-research.plist
+```
+
+**Claude Code skill としてインストール**: このリポジトリはルートに [`SKILL.md`](SKILL.md) マニフェストを備えているため、`~/.claude/skills/daily-research` へ clone すると `/daily-research` で呼び出せます。
+
+## ラインの設定
+
+各 `[tracks.X]` エントリは研究 **ライン (line)** で、`[[tracks.X.repos]]` エントリ 1 つで研究リポジトリ 1 つにマッピングされます。関心領域は、実行時に repo の中から読まれる repo 自身の運用文脈です。
+
+```toml
+[general]
+vault_path = "/path/to/your/obsidian/vault"
+output_dir = "daily-research"
+# 自己汚染ガード: これらの文字列に一致する成果物は「外部シグナル」として
+# 数えない (第三者による言及・採用の観測は正当)
+self_signals = ["github.com/YOUR_GITHUB_HANDLE", "Your Name"]
+
+[tracks.line_a]
+name = "Research Line A 前進"
+focus = "line A の外部動向の解説と repo への含意"
+aliases = ["old_track_a"]                        # 旧 track 名。履歴 dedup を継続する
+context_files = [".notes/TASKS.md", "docs/manifesto.md"]  # repo 相対。Step 1 で Read、無ければ skip
+sources = ["arXiv / Semantic Scholar (your keywords) — ただし repo に使える場合のみ"]
+# daily = true                                   # 輪番の外で毎朝実行する (ADR-0011)
+
+[[tracks.line_a.repos]]
+key = "repo_a"
+target_repo = "/path/to/your/research-repo-a"    # run の cwd になる (read-only)
+target_doi = "10.xxxx/zenodo.xxxxxxxx"           # 任意
+```
+
+レポートはデフォルトで日本語生成です。出力言語は `prompts/repo-research-protocol.md` の言語制約を変更します。CLI フラグ・環境変数は [CONTRIB](docs/CONTRIB.md) を参照。
+
+## プロジェクト構成
+
+```
+daily-research/
+├── scripts/
+│   ├── daily-research.sh       # オーケストレータ (rotation-pick → ラインごとに呼1 研究 + 呼2 clarity、cwd = ラインの repo)
+│   ├── lib/                    # sourced shell ライブラリ + Python 解析モジュール
+│   │   ├── env.sh log.sh notify.sh lock.sh auth.sh claude.sh
+│   │   └── dr_pipeline.py      # JSON/TOML の単一 stdlib モジュール (line-brief, past-themes, report-lint, metrics)
+│   ├── check-auth.sh           # 実 OAuth probe ヘルスチェック (lib/auth.sh を共有)
+│   └── pre-commit.sh           # secret / 構文ガード
+├── prompts/                    # repo-research-protocol.md (呼1) + clarity-review-protocol.md (呼2)
+├── templates/report-template.md       # 解説レポートの記述規律 + 固定 2 節
+├── state/                      # ラインごとの watched-sources / playbook / last-seen (gitignored)
+├── graph.jsonld                # 退役 concept-graph パイプラインの凍結アーカイブ (docs/graph-schema.md)
+├── config.example.toml         # line → repo マッピング (config.toml は gitignore)
+├── tests/                      # bats (daily-research / e2e-mock / lib) + pytest (dr_pipeline_test.py)
+└── docs/                       # RUNBOOK, CONTRIB, graph-schema, adr/
+```
+
+## 主要な設計判断
+
+| 判断 | 理由 |
+|------|------|
+| per-repo in-context research: 担当ラインごとに呼1 = Opus 研究 + 呼2 = Sonnet clarity 改稿、cwd = repo | 中央 2 パス concept-graph パイプラインは repo を同期 graph 越しにしか見られず、選定が gap 埋めサーベイに縮退した。「進めるべき価値」を知る運用文脈は repo の中にある（[ADR-0008](docs/adr/0008-per-repo-in-context-research.md)） |
+| 目的関数 = 外部動向 1 つの解説と repo への含意（概念補強ではなく） | 裏付け収束はベンチマーク実証済みの failure mode（[ADR-0008](docs/adr/0008-per-repo-in-context-research.md)）。提案・承認という枠組みは全ノートを「返答待ち todo」にしたため、ノートは読み物 + 期限付き機会だけの機会メモに転換（[ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)）。対立的な反証フレーミングは後に可読性のため撤去（[ADR-0014](docs/adr/0014-trend-explanation-report.md)） |
+| diff-first + citation ゲートを run 構造に組み込む | survey-per-run は文書化された anti-pattern。追従 drift はプロンプトの意図でなく構造で防ぐ（[ADR-0008](docs/adr/0008-per-repo-in-context-research.md)） |
+| repo は三層 (doctrine / 実行 / permission) で read-only | 寄与は人間が取り込む Vault ノート経由で流れ、repo 間汚染を回避 |
+| ラインを研究 repo にマッピング | 固定トピックドメインが構造的飽和を招いた（[ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)）。[ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md) 以降は repo 1:1。現在は 7 ライン（`akc` / `contemplative` / `aap` / `authorship` / `ans` / `desire` / `edge`）、輪番 6 + daily の `edge`（[ADR-0013](docs/adr/0013-edge-daily-line.md)） |
+| 外部 MCP メモリではなくローカル state ファイル | 旧 Mem0 MCP 統合は静かな失敗で 32 日間ゼロ稼働した; ローカルファイルは失敗が顕在化する |
+| Shell オーケストレーション + stdlib Python 解析 | ランタイムに pip 依存なし; JSON/TOML 解析を単一のテスト可能な `dr_pipeline.py` に集約 |
+
+運用面の根拠（実 auth probe と `--version` の違い、`--append-system-prompt-file`、パス制限付き `--allowedTools`、`--max-turns`、`< /dev/null` stdin リダイレクト）は [CONTRIB](docs/CONTRIB.md) にあります。著者自身の運用では、daily-research は複数の研究ラインが共有する知識循環の *書き込み* 側としても機能しています — ロードマップではなく観察された稼働中のアーキテクチャです（[ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md)）。自己改善ループ — ライン単位のレポート存在ゲート (ctl-015)、決定論的レポート lint (ctl-016)、`metrics.jsonl`、`DR-Expect:` 突合、`/dr-review` — は [ADR-0006](docs/adr/0006-self-improvement-loop-human-consumer.md) から維持されています。
+
+## 注意事項
+
+- **Claude Code セッション内からも実行できます** — `lib/env.sh` が `CLAUDECODE` を unset するため、ネストセッションチェックを通ります（2026-08-22 実証）。テスト用 seam: `DR_FORCE_TRACK=<line>`（輪番外の 1 ライン）、`DR_ONLY_TRACK=<line>`（当日担当のうち指定ラインのみ）、`DR_DATE=YYYY-MM-DD`。
+- **OAuth トークンは約4日で期限切れ** — `claude` を対話的に実行してリフレッシュ。実 auth probe が期限切れを再認証通知とともに loud に失敗させ、サイレントな double-fail を防ぎます。
+- **`ANTHROPIC_API_KEY` は未設定であること** — 設定されていると Max プランではなくトークン単位課金になります。スクリプトが `unset` で対処します。
+- **Claude Code プラグインがハングを引き起こす** — グローバルインストールされたプラグインは `claude -p` 呼び出しごとに MCP サーバーを初期化します。`.claude/settings.json` でプロジェクト単位で無効化してください（[RUNBOOK](docs/RUNBOOK.md) 参照）。
+- **launchd は `.zshrc` を読み込まない** — 全 PATH エントリをスクリプトと plist に明示してください。
+
+## ドキュメント
+
+- [RUNBOOK](docs/RUNBOOK.md) / [日本語](docs/RUNBOOK.ja.md) — 運用: モニタリング、トラブルシューティング
+- [CONTRIB](docs/CONTRIB.md) / [日本語](docs/CONTRIB.ja.md) — 開発: テスト、CLI フラグ、環境変数
+- [graph-schema.md](docs/graph-schema.md) — 凍結アーカイブ `graph.jsonld` のスキーマ（過去データ用）
+- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md) · [ADR-0002](docs/adr/0002-reports-as-frontier-diff.md) · [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) · [ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md) · [ADR-0005](docs/adr/0005-agent-systems-and-human-ai-publics-line-rebalance.md) · [ADR-0006](docs/adr/0006-self-improvement-loop-human-consumer.md) · [ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md) · [ADR-0008](docs/adr/0008-per-repo-in-context-research.md) · [ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md) · [ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md) · [ADR-0011](docs/adr/0011-daily-line.md) · [ADR-0012](docs/adr/0012-desire-back-to-rotation.md) · [ADR-0013](docs/adr/0013-edge-daily-line.md) · [ADR-0014](docs/adr/0014-trend-explanation-report.md) — アーキテクチャ決定記録
+
+## ライセンス
+
+[MIT](LICENSE)
