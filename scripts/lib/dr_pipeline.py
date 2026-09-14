@@ -37,6 +37,21 @@ def _result_dict(raw):
 
 
 # --- config helpers: 1 line = N repos schema の解析 + 旧 schema 検出 guard ---
+_TRACK_NAME_RE = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def _lines_per_day(cfg):
+    """[general].lines_per_day (1 日に走らせる輪番 line 数、ADR-0017)。既定 1。
+    int >= 1 のみ許す — bool は int の subclass なので明示的に除く
+    (lines_per_day = true が 1 として黙って通る事故を防ぐ)。"""
+    k = cfg.get("general", {}).get("lines_per_day", 1)
+    if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+        raise ValueError(
+            f"[general].lines_per_day must be an integer >= 1, got {k!r}"
+        )
+    return k
+
+
 def _load_tracks(config_path):
     """config.toml を読み (cfg, tracks) を返す。旧 schema (tracks.X 直下に
     target_repo) を検出したら ValueError — 再編後のコードが旧 config のまま
@@ -45,7 +60,14 @@ def _load_tracks(config_path):
     with open(config_path, "rb") as f:
         cfg = tomllib.load(f)
     tracks = cfg.get("tracks", {})
+    _lines_per_day(cfg)  # 型違反は起動時の schema check で fail-fast
     for name, v in tracks.items():
+        # track 名は state/<track> のパス、receipt の report 名検証、呼2 の
+        # --allowedTools に入る。区切り文字 (カンマ・スラッシュ等) を持たせない。
+        if not _TRACK_NAME_RE.fullmatch(name):
+            raise ValueError(
+                f"track name must match [A-Za-z0-9_-]+, got {name!r}"
+            )
         if isinstance(v, dict) and "target_repo" in v:
             raise ValueError(
                 f"config uses the legacy schema: target_repo directly under [tracks.{name}]. "
@@ -88,6 +110,43 @@ def _track_rows(tracks):
     return rows
 
 
+def _searches(d):
+    """claude -p result dict から Web 検索回数を返す。
+    実出力 (2026-09 時点) は WebSearch を modelUsage.<model>.webSearchRequests に
+    計上し usage.server_tool_use.web_search_requests は 0 のまま — server_tool_use
+    だけを見ると検索した run も 0 になる。tool_counts は旧形式 / test mock の表現
+    (WebSearch + WebFetch)。優先: tool_counts > modelUsage 合算 > server_tool_use。"""
+    d = _result_dict(d) or {}
+    if not isinstance(d, dict):
+        return 0
+
+    def _int(v):
+        return v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else 0
+
+    tc = d.get("tool_counts")
+    if isinstance(tc, dict):
+        return _int(tc.get("WebSearch", 0)) + _int(tc.get("WebFetch", 0))
+    mu = d.get("modelUsage")
+    if isinstance(mu, dict):
+        total = sum(
+            _int(m.get("webSearchRequests", 0)) for m in mu.values() if isinstance(m, dict)
+        )
+        if total:
+            return total
+    stu = (d.get("usage") or {}).get("server_tool_use") or {}
+    return _int(stu.get("web_search_requests", 0)) if isinstance(stu, dict) else 0
+
+
+# --- searches: stdin の claude -p JSON から検索回数を 1 行で出力 (quiet-suspect 判定用) ---
+# 解析失敗は 0 (常に rc 0)。
+def cmd_searches(argv):
+    try:
+        print(_searches(json.loads(sys.stdin.read() or "null")))
+    except (ValueError, AttributeError, TypeError):  # 非 JSON / 想定外の型
+        print(0)
+    return 0
+
+
 # --- error-fields: stdin JSON から "api_error_status<TAB>is_error" を出力 (auth/401 判定用) ---
 def cmd_error_fields(argv):
     try:
@@ -112,8 +171,7 @@ def cmd_log_summary(argv):
         dur = round(d.get("duration_ms", 0) / 1000)
         inp = d.get("usage", {}).get("input_tokens", 0)
         out = d.get("usage", {}).get("output_tokens", 0)
-        tc = d.get("tool_counts", {})
-        searches = tc.get("WebSearch", 0) + tc.get("WebFetch", 0)
+        searches = _searches(d)
         tool_str = f" searches={searches}" if searches else ""
         print(
             f"SUMMARY {label}: cost=${cost:.4f} turns={turns} duration={dur}s tokens_in={inp} tokens_out={out}{tool_str}"
@@ -184,11 +242,14 @@ def cmd_tracks(argv):
 
 
 # --- rotation-pick <config_path> <date>: 当日担当 line 群を決定論選択して出力 ---
-# 出力形式は tracks と同じ "line<TAB>repo_key<TAB>target_repo"。1 行目は非 daily 行の
-# 輪番選択 (date.toordinal() % 非daily行数。proleptic Gregorian 序数 — Unix epoch 日で
-# 再実装すると位相がずれるので注意)、以降に daily = true の line の行が config 記述順で
-# 続く (daily line は毎日実行され、輪番の周期を変えない)。daily の無い config では
-# 従来どおり 1 行のみ。全行 daily の config では輪番行なしで daily 行のみ。
+# 出力形式は tracks と同じ "line<TAB>repo_key<TAB>target_repo"。先頭は非 daily 行の
+# window 輪番 (ADR-0017): k = [general].lines_per_day、n = 非 daily 行数、
+# start = (day * k) % n、rotating[(start + i) % n] for i < min(k, n)。
+# day = date.toordinal() (proleptic Gregorian 序数 — Unix epoch 日で再実装すると
+# 位相がずれるので注意)。窓は毎日 k 行ずつ進むので、k と n が互いに素なら n 日で
+# 各行がちょうど k 回選ばれる。k = 1 は旧 day % n と同一位相 (ADR-0010)。
+# 以降に daily = true の line の行が config 記述順で続く (daily line は毎日実行され、
+# 輪番の周期を変えない)。全行 daily の config では輪番行なしで daily 行のみ。
 # state ファイル不要で、同日の再実行は常に同じ行群を返す (冪等)。順序は config.toml の
 # 記述順 (tomllib は挿入順を保持する)。
 # 注意: 輪番の単位は line ではなく repos 行 — 現行 config は 1 line = 1 repo なので
@@ -201,7 +262,7 @@ def cmd_rotation_pick(argv):
         return 64
     config_path, date_s = argv[:2]
     try:
-        _, tracks = _load_tracks(config_path)
+        cfg, tracks = _load_tracks(config_path)
     except ValueError as e:
         print(str(e), file=sys.stderr)
         return 1
@@ -218,7 +279,9 @@ def cmd_rotation_pick(argv):
     daily = [r for r in rows if r[3]]
     picked = []
     if rotating:
-        picked.append(rotating[day % len(rotating)])
+        k, n = _lines_per_day(cfg), len(rotating)
+        start = (day * k) % n
+        picked.extend(rotating[(start + i) % n] for i in range(min(k, n)))
     picked.extend(daily)
     for track, key, repo, _d in picked:
         print(f"{track}\t{key}\t{repo}")
@@ -254,12 +317,14 @@ def cmd_past_themes(argv):
     by_line = defaultdict(list)
     for t in topics:
         line = line_of.get(t.get("track"))
-        if line and t.get("title"):
+        if line and (t.get("title") or t.get("question")):
             by_line[line].append(t)
 
-    print("=== 過去テーマ履歴 (line 別直近 10 件) ===")
-    print("以下と同じテーマ・同じ主ソース (論文・プロジェクト) の再選定は禁止。")
-    print("後続研究・新展開を扱う場合のみ可 (rationale に何が新展開かを明記すること)。")
+    print("=== 過去テーマ履歴 (line 別直近 10 件、問い単位) ===")
+    print("各行は「問い — 答えの範囲 (answer_scope)」。判定は問い単位で行う:")
+    print("- 同じ問い + 同じ答え = 再選定禁止")
+    print("- 同じ問い + 新証拠 = 更新として可 (何が新しい証拠かを本文に書く)")
+    print("- 同じ topic + 別の問い = 可")
     print()
     for line, v in tracks.items():
         items = by_line.get(line, [])
@@ -270,14 +335,18 @@ def cmd_past_themes(argv):
         items.sort(key=lambda t: t.get("date", ""))
         print(f"Track: {line}{suffix}")
         for t in items[-10:]:
-            title = t["title"][:120] + ("…" if len(t["title"]) > 120 else "")
-            print(f"  - {t.get('date', '?')} {title}")
+            head = str(t.get("question") or t.get("title"))
+            head = head[:120] + ("…" if len(head) > 120 else "")
+            scope = t.get("answer_scope")
+            suffix = f" — {str(scope)[:120]}" if scope else ""
+            print(f"  - {t.get('date', '?')} {head}{suffix}")
         print()
     return 0
 
 
 # --- line-brief <config_path> <track>: per-repo 実行 (ADR-0008) のプロンプト注入用に
-#     line 定義 (focus / sources / context_files / self_signals) を整形出力 ---
+#     line 定義 (name / focus / sources / self_signals) を整形出力。context_files は
+#     冒頭で読む文脈ではなく、テーマ選定後に読む候補として別節に出す (ADR-0017) ---
 def cmd_line_brief(argv):
     if len(argv) < 2:
         print("usage: line-brief <config_path> <track>", file=sys.stderr)
@@ -293,7 +362,7 @@ def cmd_line_brief(argv):
         print(f"unknown track: {track}", file=sys.stderr)
         return 1
 
-    print("### Line 定義 (config.toml より)")
+    print("## Line 定義 (config)")
     print()
     if v.get("name"):
         print(f"- name: {v['name']}")
@@ -304,11 +373,6 @@ def cmd_line_brief(argv):
         print("- 探索の起点 (sources):")
         for s in sources:
             print(f"  - {s}")
-    ctx = v.get("context_files") or []
-    if ctx:
-        print("- context_files (Step 1 で必ず Read。存在しないものは skip 可):")
-        for c in ctx:
-            print(f"  - {c}")
     signals = cfg.get("general", {}).get("self_signals") or []
     if signals:
         print(
@@ -317,6 +381,124 @@ def cmd_line_brief(argv):
         print("  として数えない。第三者による言及・採用の観測は正当):")
         for s in signals:
             print(f"  - {s}")
+    ctx = v.get("context_files") or []
+    if ctx:
+        print()
+        print("## 選定後に読む候補 (Step 3b)")
+        print()
+        print("テーマ (問い) を選んだ後、含意の前提確認に関係するものだけを読む。")
+        print("存在しないものは skip してよい。")
+        for c in ctx:
+            print(f"- {c}")
+    return 0
+
+
+# --- receipt-read <path> <date> <track>: 呼1 の run receipt を検証して TSV 1 行で出力 ---
+# stdout: "status<TAB>report<TAB>reason<TAB>reason_code" (report が null なら空欄)。
+# 不正 (非 JSON / 非 object / status enum 外 / date・line 不一致 / report 名不正 /
+# article・brief で report 無し) は stdout 空で rc 1 — shell の gate が line 失敗にする。
+# report は model 由来文字列なので {date}_{track}_[A-Za-z0-9._-]+.md に限定する
+# (パス区切り・カンマを通さない)。shell は report を allowedTools に埋めない
+# (呼2 の対象は run スコープの find 結果) — ここでの検証は gate 判定用。
+RECEIPT_STATUSES = ("article", "brief", "quiet", "hold")
+REASON_CODES = ("no_new_evidence", "thin_material", "fetch_failed", "carry_over")
+_CTRL_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def cmd_receipt_read(argv):
+    if len(argv) < 3:
+        print("usage: receipt-read <path> <date> <track>", file=sys.stderr)
+        return 64
+    path, date_s, track = argv[:3]
+
+    def bad(msg):
+        print(f"receipt-read: {msg}", file=sys.stderr)
+        return 1
+
+    try:
+        with open(path) as f:
+            d = json.load(f)
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
+        return bad(f"unreadable receipt: {e}")
+    if not isinstance(d, dict):
+        return bad("receipt is not a JSON object")
+    status = d.get("status")
+    if status not in RECEIPT_STATUSES:
+        return bad(f"invalid status {status!r}")
+    if "date" in d and d["date"] != date_s:
+        return bad(f"date mismatch {d['date']!r} != {date_s!r}")
+    if "line" in d and d["line"] != track:
+        return bad(f"line mismatch {d['line']!r} != {track!r}")
+    report = d.get("report")
+    if report is None or report == "":
+        report = ""
+    elif not isinstance(report, str) or not re.fullmatch(
+        rf"{re.escape(date_s)}_{re.escape(track)}_[A-Za-z0-9._-]+\.md", report
+    ):
+        return bad(f"invalid report name {report!r}")
+    if status in ("article", "brief") and not report:
+        return bad(f"status {status} requires report")
+    reason = d.get("reason")
+    reason = "" if reason is None else _CTRL_RE.sub(" ", str(reason))[:200]
+    code = d.get("reason_code")
+    code = code if code in REASON_CODES else "unspecified"
+    print(f"{status}\t{report}\t{reason}\t{code}")
+    return 0
+
+
+# --- verify-read [path]: 呼2 の verify.json を 1 行 JSON に正規化して出力 ---
+# {supported, partial, unsupported, unverifiable, edits, ran}。各値は int >= 0
+# (bool / 文字列 / 負値 / 小数は 0)。ファイル欠損・破損・非 object は全零 + ran:false。
+# 常に rc 0 (計測は non-fatal)。
+VERIFY_KEYS = ("supported", "partial", "unsupported", "unverifiable", "edits")
+
+
+def _nonneg_int(v):
+    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else 0
+
+
+def cmd_verify_read(argv):
+    path = argv[0] if argv else ""
+    d = None
+    if path:
+        try:
+            with open(path) as f:
+                d = json.load(f)
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            d = None
+    ran = isinstance(d, dict)
+    out = {k: _nonneg_int(d.get(k)) if ran else 0 for k in VERIFY_KEYS}
+    out["ran"] = ran
+    print(json.dumps(out))
+    return 0
+
+
+# --- config-get <config_path> <section.key> [default]: config の 1 値を出力 ---
+# 値が無い・config が読めない場合は default (省略時は空行)。bool は true/false。
+def cmd_config_get(argv):
+    if len(argv) < 2:
+        print("usage: config-get <config_path> <section.key> [default]", file=sys.stderr)
+        return 64
+    config_path, dotted = argv[:2]
+    default = argv[2] if len(argv) >= 3 else ""
+    try:
+        tomllib = _tomllib()
+        with open(config_path, "rb") as f:
+            node = tomllib.load(f)
+    except (OSError, ValueError):
+        print(default)
+        return 0
+    for part in dotted.split("."):
+        if not isinstance(node, dict) or part not in node:
+            print(default)
+            return 0
+        node = node[part]
+    if isinstance(node, bool):
+        print("true" if node else "false")
+    elif isinstance(node, (dict, list)):
+        print(json.dumps(node, ensure_ascii=False))
+    else:
+        print(node)
     return 0
 
 
@@ -329,14 +511,13 @@ def cmd_line_brief(argv):
 def _pass_metrics(d):
     """claude -p result JSON から 1 pass 分の metric dict を抽出する。"""
     d = _result_dict(d) or {}
-    tc = d.get("tool_counts", {})
     return {
         "cost": round(float(d.get("total_cost_usd", 0) or 0), 4),
         "turns": int(d.get("num_turns", 0) or 0),
         "duration_s": round((d.get("duration_ms", 0) or 0) / 1000),
         "tokens_in": int(d.get("usage", {}).get("input_tokens", 0) or 0),
         "tokens_out": int(d.get("usage", {}).get("output_tokens", 0) or 0),
-        "searches": int(tc.get("WebSearch", 0)) + int(tc.get("WebFetch", 0)),
+        "searches": _searches(d),
     }
 
 
@@ -393,11 +574,35 @@ def _total_cost(record):
     )
 
 
+LINE_STATE_KEYS = (
+    "article",
+    "brief",
+    "quiet",
+    "hold",
+    "mismatch",
+    "suspect",
+    "unverified",
+)
+
+
+def _sum_verification(verifies):
+    """VERIFY 行群を合算する。行が無ければ None (呼2 が走らなかった日)。"""
+    if not verifies:
+        return None
+    total = {k: sum(_nonneg_int(v.get(k)) for v in verifies) for k in VERIFY_KEYS}
+    total["lines_verified"] = sum(1 for v in verifies if v.get("ran") is True)
+    return total
+
+
 # --- metrics-append <metrics_path> <date> <final_class> <report_count> <retry:0|1> ---
 # stdin: 1 行 1 レコード、統一 framing "LABEL\t[meta\t]payload"。
 #   RUN\t{json}          — claude -p result JSON。pass2 に合算 (ADR-0008 の写像)
 #   LINT\t{json}         — report-lint (ctl-016) の JSON
-#   CLARITY\t<ok:0|1>\t{json} — 呼2 clarity 改稿の発動記録 (ADR-0010)
+#   CLARITY\t<ok:0|1>\t{json} — 呼2 (clarity + 原典照合) の発動記録 (ADR-0010/0017)
+#   STATE\t<track>\t<token>[\t<token>...] — line の内容状態 (ADR-0017)。token は
+#                        LINE_STATE_KEYS のいずれかで 1 つずつ加算 (article / brief /
+#                        quiet / hold が本体、mismatch / suspect / unverified は重ね計上)
+#   VERIFY\t{json}       — verify-read の出力。5 key を合算、lines_verified = ran の数
 # ラベル不明・payload 破損の行は skip (収集は non-fatal)。
 # pass1 は per-repo 化で廃止 (None 固定)。第 5 引数はリトライ発生の有無で、
 # レコード互換のため旧フィールド名 fallback_used に記録する。
@@ -418,12 +623,25 @@ def cmd_metrics_append(argv):
     source = argv[5] if len(argv) > 5 and argv[5] else "live"
 
     runs, lint, clarities = [], None, []
+    line_states = {k: 0 for k in LINE_STATE_KEYS}
+    verifies = []
     for line in sys.stdin.read().split("\n"):
         line = line.strip()
         if not line:
             continue
         label, _, payload = line.partition("\t")
-        if label == "CLARITY":
+        if label == "STATE":
+            for token in payload.split("\t")[1:]:
+                if token in line_states:
+                    line_states[token] += 1
+        elif label == "VERIFY":
+            try:
+                v = json.loads(payload)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(v, dict):
+                verifies.append(v)
+        elif label == "CLARITY":
             ok, _, cj = payload.partition("\t")
             try:
                 clarities.append(
@@ -474,6 +692,8 @@ def cmd_metrics_append(argv):
         "pass2": _sum_pass_metrics(runs),
         "clarity_pass": clarity,
         "lint": lint,
+        "line_states": line_states,
+        "verification": _sum_verification(verifies),
     }
     record["total_cost"] = _total_cost(record)
     with open(metrics_path, "a") as f:
@@ -532,6 +752,9 @@ def cmd_metrics_backfill(argv):
                             "pass2": None,
                             "clarity_pass": None,
                             "lint": None,
+                            # ADR-0017 の field はログから復元しない
+                            "line_states": None,
+                            "verification": None,
                         }
                         runs.append(run)
                         continue
@@ -592,11 +815,23 @@ def cmd_metrics_backfill(argv):
     return 0
 
 
+def _frontmatter_kind(text):
+    """先頭 YAML frontmatter の kind: を返す (無ければ article)。"""
+    m = re.match(r"---\n(.*?)\n---", text, re.DOTALL)
+    if m:
+        k = re.search(r"^kind:\s*[\"']?([A-Za-z_-]+)", m.group(1), re.MULTILINE)
+        if k:
+            return k.group(1)
+    return "article"
+
+
 # --- report-lint <report_dir> <date> [config_path] ---
 # 当日レポートの決定論的品質検査 (ctl-016)。stdout に JSON 1 行。
 # exit 0 = 全 PASS または soft violation のみ / 2 = hard fail あり。
 # hard: ソース節不在・出典 URL 0 件 (レポートの体を成していない)
 # soft: 出典 < min_sources / 必須節欠落 / 本文長不足
+# kind (ADR-0017): frontmatter の kind: を読む (無ければ article)。brief (短報) は
+# 必須節 (機会メモ) と本文長の soft を免除し、hard と出典数 soft は article と同じ。
 # 必須節は自由形式レポート (ADR-0009) の機械検査対象 — 機会メモのみ
 # (ソース節は hard 判定として別途検査)。本文の記述規律は人間 consumer が判断する。
 def cmd_report_lint(argv):
@@ -644,6 +879,7 @@ def cmd_report_lint(argv):
             results.append({"file": name, "hard": [f"read error: {e}"], "soft": []})
             continue
 
+        kind = _frontmatter_kind(text)
         urls = re.findall(r"\[[^\]]*\]\((https?://[^)]+)\)", text)
         n_sources = len(set(urls))
         if "## ソース" not in text:
@@ -653,15 +889,22 @@ def cmd_report_lint(argv):
         elif n_sources < min_sources:
             soft.append(f"出典 URL {n_sources} 件 (< {min_sources})")
 
-        missing = [s for s in ARTICLE_SECTIONS if f"## {s}" not in text]
-        if missing:
-            soft.append(f"必須節欠落: {', '.join(missing)}")
+        if kind != "brief":
+            missing = [s for s in ARTICLE_SECTIONS if f"## {s}" not in text]
+            if missing:
+                soft.append(f"必須節欠落: {', '.join(missing)}")
 
-        if len(text) < MIN_BODY_CHARS:
-            soft.append(f"本文 {len(text)} 字 (< {MIN_BODY_CHARS})")
+            if len(text) < MIN_BODY_CHARS:
+                soft.append(f"本文 {len(text)} 字 (< {MIN_BODY_CHARS})")
 
         results.append(
-            {"file": name, "hard": hard, "soft": soft, "body_chars": len(text)}
+            {
+                "file": name,
+                "kind": kind,
+                "hard": hard,
+                "soft": soft,
+                "body_chars": len(text),
+            }
         )
 
     n_hard = sum(1 for r in results if r["hard"])
@@ -794,7 +1037,9 @@ def cmd_review_age(argv):
 # commit_date より後の record 群で metric を評価し、verdict を 1 行ずつ出力。
 # metric 語彙: {pass1|pass2}_turns_{p50|p90|max} / {pass1|pass2}_cost_{mean|max} /
 #   total_cost_{mean|max} / fallback_rate / report_count_min / no_report_count /
-#   lint_hard_count
+#   lint_hard_count / quiet_rate / receipt_count_min / unsupported_rate /
+#   unverifiable_rate / clarity_ok_rate (ADR-0017。line_states / verification /
+#   clarity_pass が None の record は分母から除く)
 def cmd_expect_check(argv):
     if len(argv) < 1:
         print("usage: expect-check <metrics_path>  (expects on stdin)", file=sys.stderr)
@@ -847,7 +1092,32 @@ def cmd_expect_check(argv):
             return sum(1 for r in recs if r.get("final_class") == "E_NO_REPORT")
         if name == "lint_hard_count":
             return sum((r.get("lint") or {}).get("hard_fail", 0) for r in recs)
+        states = [r["line_states"] for r in recs if isinstance(r.get("line_states"), dict)]
+        if name == "quiet_rate":
+            quiet = sum(s.get("quiet", 0) + s.get("hold", 0) for s in states)
+            total = sum(receipts(s) for s in states)
+            return quiet / total if total else None
+        if name == "receipt_count_min":
+            return min(receipts(s) for s in states) if states else None
+        verif = [r["verification"] for r in recs if isinstance(r.get("verification"), dict)]
+        if name in ("unsupported_rate", "unverifiable_rate"):
+            sup = sum(v.get("supported", 0) for v in verif)
+            par = sum(v.get("partial", 0) for v in verif)
+            uns = sum(v.get("unsupported", 0) for v in verif)
+            unv = sum(v.get("unverifiable", 0) for v in verif)
+            if name == "unsupported_rate":
+                # 取得失敗 (unverifiable) は分母に入れない — 照合できた claim 中の不一致率
+                denom = sup + par + uns
+                return (uns + par) / denom if denom else None
+            denom = sup + par + uns + unv
+            return unv / denom if denom else None
+        if name == "clarity_ok_rate":
+            cps = [r["clarity_pass"] for r in recs if isinstance(r.get("clarity_pass"), dict)]
+            return sum(1 for c in cps if c.get("ok")) / len(cps) if cps else None
         return None
+
+    def receipts(s):
+        return sum(s.get(k, 0) for k in ("article", "brief", "quiet", "hold"))
 
     OPS = {
         "<=": lambda a, b: a <= b,
@@ -889,6 +1159,10 @@ COMMANDS = {
     "rotation-pick": cmd_rotation_pick,
     "past-themes": cmd_past_themes,
     "line-brief": cmd_line_brief,
+    "receipt-read": cmd_receipt_read,
+    "verify-read": cmd_verify_read,
+    "config-get": cmd_config_get,
+    "searches": cmd_searches,
     "metrics-append": cmd_metrics_append,
     "metrics-backfill": cmd_metrics_backfill,
     "report-lint": cmd_report_lint,

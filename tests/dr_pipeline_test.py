@@ -884,3 +884,545 @@ def test_metrics_append_source_defaults_to_live(monkeypatch, tmp_path):
     monkeypatch.setattr("sys.stdin", io.StringIO(""))
     assert dr_pipeline.main(["metrics-append", str(metrics), "2026-08-22", "OK", "1", "0"]) == 0
     assert json.loads(metrics.read_text())["source"] == "live"
+
+
+# =============================================================================
+# ADR-0017: window rotation / content states / receipt / verification metrics
+# =============================================================================
+
+CONFIG_K3 = str(FIXTURES / "config-lines-per-day.toml")
+K3_ORDER = ["akc", "contemplative", "aap", "authorship", "ans", "desire", "edge"]
+
+
+def _pick(monkeypatch, capsys, config, date_s):
+    rc, out, err = run_cmd(monkeypatch, capsys, ["rotation-pick", config, date_s])
+    assert rc == 0, err
+    return [row.split("\t")[0] for row in out.strip().splitlines()]
+
+
+def _write_cfg(tmp_path, general_extra="", tracks=("a", "b", "c"), daily=()):
+    body = f'[general]\nvault_path = "/v"\noutput_dir = "d"\n{general_extra}\n'
+    for t in tracks:
+        body += f'[tracks.{t}]\nname = "{t}"\n'
+        if t in daily:
+            body += "daily = true\n"
+        body += f'[[tracks.{t}.repos]]\nkey = "{t}"\ntarget_repo = "/nonexistent/{t}"\n'
+    cfg = tmp_path / "cfg.toml"
+    cfg.write_text(body)
+    return str(cfg)
+
+
+@pytest.mark.unit
+def test_rotation_window_k3_n7_each_line_three_times_in_seven_days(monkeypatch, capsys):
+    import datetime
+
+    base = datetime.date(2026, 9, 15)
+    counts = {t: 0 for t in K3_ORDER}
+    for i in range(7):
+        d = (base + datetime.timedelta(days=i)).isoformat()
+        lines = _pick(monkeypatch, capsys, CONFIG_K3, d)
+        assert len(lines) == 3
+        assert len(set(lines)) == 3  # 同日重複なし
+        # 窓は config 記述順で連続 (mod N)
+        start = K3_ORDER.index(lines[0])
+        assert lines == [K3_ORDER[(start + j) % 7] for j in range(3)]
+        # 冪等
+        assert _pick(monkeypatch, capsys, CONFIG_K3, d) == lines
+        for t in lines:
+            counts[t] += 1
+    assert set(counts.values()) == {3}
+
+
+@pytest.mark.unit
+def test_rotation_window_consecutive_days_advance_by_k(monkeypatch, capsys):
+    a = _pick(monkeypatch, capsys, CONFIG_K3, "2026-09-15")
+    b = _pick(monkeypatch, capsys, CONFIG_K3, "2026-09-16")
+    c = _pick(monkeypatch, capsys, CONFIG_K3, "2026-09-17")
+    # plan の dry pick と一致 (live config と同じ line 順)
+    assert a == ["edge", "akc", "contemplative"]
+    assert b == ["aap", "authorship", "ans"]
+    assert c == ["desire", "edge", "akc"]
+
+
+@pytest.mark.unit
+def test_rotation_window_k_greater_than_n_outputs_each_line_once(monkeypatch, capsys, tmp_path):
+    cfg = _write_cfg(tmp_path, "lines_per_day = 5")
+    lines = _pick(monkeypatch, capsys, cfg, "2026-09-15")
+    assert sorted(lines) == ["a", "b", "c"]
+
+
+@pytest.mark.unit
+def test_rotation_window_k1_keeps_legacy_phase(monkeypatch, capsys, tmp_path):
+    from datetime import date, timedelta
+
+    cfg = _write_cfg(tmp_path, "lines_per_day = 1")
+    base = date(2026, 9, 15)
+    for i in range(6):
+        d = base + timedelta(days=i)
+        assert _pick(monkeypatch, capsys, cfg, d.isoformat()) == [
+            ["a", "b", "c"][d.toordinal() % 3]
+        ]
+
+
+@pytest.mark.unit
+def test_rotation_window_with_daily_line_appended(monkeypatch, capsys, tmp_path):
+    cfg = _write_cfg(
+        tmp_path, "lines_per_day = 2", tracks=("a", "b", "c", "d"), daily=("d",)
+    )
+    lines = _pick(monkeypatch, capsys, cfg, "2026-09-15")
+    assert len(lines) == 3
+    assert lines[-1] == "d"
+    assert "d" not in lines[:2] and len(set(lines[:2])) == 2
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("value", ["0", "-1", "true", '"3"', "2.5"])
+def test_lines_per_day_validation_fails_fast(monkeypatch, capsys, tmp_path, value):
+    cfg = _write_cfg(tmp_path, f"lines_per_day = {value}")
+    rc, _, err = run_cmd(monkeypatch, capsys, ["tracks", cfg])
+    assert rc == 1
+    assert "lines_per_day" in err
+
+
+@pytest.mark.unit
+def test_track_name_must_be_path_safe(monkeypatch, capsys, tmp_path):
+    cfg = tmp_path / "bad-name.toml"
+    cfg.write_text(
+        '[tracks."a,b"]\nname = "x"\n'
+        '[[tracks."a,b".repos]]\nkey = "a"\ntarget_repo = "/nonexistent/a"\n'
+    )
+    rc, _, err = run_cmd(monkeypatch, capsys, ["tracks", str(cfg)])
+    assert rc == 1
+    assert "track name" in err
+
+
+# --- line-brief: context_files は選定後の候補として別節 ---
+
+
+@pytest.mark.unit
+def test_line_brief_separates_context_files_section(monkeypatch, capsys):
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["line-brief", CONFIG, "akc"])
+    assert rc == 0
+    head, sep, tail = out.partition("## 選定後に読む候補 (Step 3b)")
+    assert sep
+    assert "## Line 定義 (config)" in head
+    assert "focus: AKC line focus" in head
+    assert "github.com/example-author" in head
+    assert ".notes/TASKS.md" not in head
+    assert ".notes/TASKS.md" in tail
+    assert "必ず Read" not in out
+
+
+# --- past-themes: 問い単位 ---
+
+
+@pytest.mark.unit
+def test_past_themes_prefers_question_and_states_rules(monkeypatch, capsys, tmp_path):
+    past = tmp_path / "past_topics.json"
+    past.write_text(
+        json.dumps(
+            {
+                "topics": [
+                    {"track": "akc", "date": "2026-09-01", "title": "Old title only"},
+                    {
+                        "track": "akc",
+                        "date": "2026-09-02",
+                        "title": "T2",
+                        "question": "Does X change Y?",
+                        "answer_scope": "only for Z",
+                    },
+                    {"track": "aap", "date": "2026-09-03", "question": "Q without title"},
+                ]
+            }
+        )
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["past-themes", str(past), CONFIG])
+    assert rc == 0
+    assert "同じ問い + 同じ答え" in out
+    assert "同じ問い + 新証拠" in out
+    assert "同じ topic + 別の問い" in out
+    assert "2026-09-01 Old title only" in out
+    assert "2026-09-02 Does X change Y? — only for Z" in out
+    assert "T2" not in out  # question があれば title は出さない
+    assert "Q without title" in out
+
+
+# --- receipt-read ---
+
+
+def _receipt(tmp_path, obj, raw=None):
+    p = tmp_path / "receipt.json"
+    p.write_text(raw if raw is not None else json.dumps(obj))
+    return str(p)
+
+
+def _rr(monkeypatch, capsys, path, date="2026-09-15", track="akc"):
+    return run_cmd(monkeypatch, capsys, ["receipt-read", path, date, track])
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "status,report",
+    [
+        ("article", "2026-09-15_akc_some-slug.md"),
+        ("brief", "2026-09-15_akc_short.v2.md"),
+        ("quiet", None),
+        ("hold", ""),
+    ],
+)
+def test_receipt_read_valid_states(monkeypatch, capsys, tmp_path, status, report):
+    p = _receipt(
+        tmp_path,
+        {
+            "date": "2026-09-15",
+            "line": "akc",
+            "status": status,
+            "report": report,
+            "question": "q",
+            "reason": "r",
+            "reason_code": "no_new_evidence",
+        },
+    )
+    rc, out, _ = _rr(monkeypatch, capsys, p)
+    assert rc == 0
+    assert out == f"{status}\t{report or ''}\tr\tno_new_evidence\n"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "obj,raw",
+    [
+        ({"status": "published", "report": None}, None),
+        ({"status": "Article", "report": "2026-09-15_akc_x.md"}, None),
+        (None, "not json"),
+        (None, "[1, 2]"),
+        ({"status": "article", "report": "2026-09-15_akc_x),Write,Read(a.md"}, None),
+        ({"status": "article", "report": "../2026-09-15_akc_x.md"}, None),
+        ({"status": "article", "report": "sub/2026-09-15_akc_x.md"}, None),
+        ({"status": "article", "report": "2026-09-15_aap_x.md"}, None),
+        ({"status": "article", "report": "2026-09-15_akc_x.md", "date": "2026-09-14"}, None),
+        ({"status": "article", "report": "2026-09-15_akc_x.md", "line": "aap"}, None),
+        ({"status": "article", "report": None}, None),
+        ({"status": "brief"}, None),
+        ({"status": "quiet", "report": 3}, None),
+    ],
+    ids=[
+        "bad-status",
+        "status-case",
+        "non-json",
+        "non-object",
+        "comma-report",
+        "dotdot-report",
+        "slash-report",
+        "other-track-report",
+        "date-mismatch",
+        "line-mismatch",
+        "article-null-report",
+        "brief-missing-report",
+        "non-string-report",
+    ],
+)
+def test_receipt_read_rejects_invalid(monkeypatch, capsys, tmp_path, obj, raw):
+    p = _receipt(tmp_path, obj, raw)
+    rc, out, _ = _rr(monkeypatch, capsys, p)
+    assert rc == 1
+    assert out == ""
+
+
+@pytest.mark.unit
+def test_receipt_read_missing_file_is_invalid(monkeypatch, capsys, tmp_path):
+    rc, _, _ = _rr(monkeypatch, capsys, str(tmp_path / "nope.json"))
+    assert rc == 1
+
+
+@pytest.mark.unit
+def test_receipt_read_sanitizes_reason_and_rounds_reason_code(monkeypatch, capsys, tmp_path):
+    p = _receipt(
+        tmp_path,
+        {"status": "quiet", "reason": "a\tb\nc\r" + "x" * 300, "reason_code": "bogus"},
+    )
+    rc, out, _ = _rr(monkeypatch, capsys, p)
+    assert rc == 0
+    fields = out.rstrip("\n").split("\t")
+    assert len(fields) == 4
+    assert fields[0] == "quiet" and fields[1] == ""
+    assert "\n" not in fields[2] and fields[2].startswith("a b c")
+    assert len(fields[2]) <= 200
+    assert fields[3] == "unspecified"
+
+
+@pytest.mark.unit
+def test_receipt_read_missing_reason_code_is_unspecified(monkeypatch, capsys, tmp_path):
+    p = _receipt(tmp_path, {"status": "hold"})
+    rc, out, _ = _rr(monkeypatch, capsys, p)
+    assert rc == 0
+    assert out == "hold\t\t\tunspecified\n"
+
+
+# --- verify-read ---
+
+
+@pytest.mark.unit
+def test_verify_read_normalizes_to_one_line(monkeypatch, capsys, tmp_path):
+    p = tmp_path / "v.json"
+    p.write_text(
+        '{\n  "supported": 4,\n  "partial": 1,\n  "unsupported": 0,\n'
+        '  "unverifiable": 2,\n  "edits": 3\n}\n'
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["verify-read", str(p)])
+    assert rc == 0
+    assert out.count("\n") == 1
+    assert json.loads(out) == {
+        "supported": 4,
+        "partial": 1,
+        "unsupported": 0,
+        "unverifiable": 2,
+        "edits": 3,
+        "ran": True,
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("args", [[], [""], ["/nonexistent/v.json"], ["BROKEN"]])
+def test_verify_read_missing_or_broken_is_zero_not_ran(monkeypatch, capsys, tmp_path, args):
+    if args == ["BROKEN"]:
+        p = tmp_path / "v.json"
+        p.write_text("{not json")
+        args = [str(p)]
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["verify-read", *args])
+    assert rc == 0
+    d = json.loads(out)
+    assert d["ran"] is False
+    assert all(d[k] == 0 for k in ("supported", "partial", "unsupported", "unverifiable", "edits"))
+
+
+@pytest.mark.unit
+def test_verify_read_coerces_bad_values_to_zero(monkeypatch, capsys, tmp_path):
+    p = tmp_path / "v.json"
+    p.write_text(json.dumps({"supported": -1, "partial": "2", "unsupported": True, "edits": 1.5}))
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["verify-read", str(p)])
+    assert rc == 0
+    d = json.loads(out)
+    assert d == {
+        "supported": 0,
+        "partial": 0,
+        "unsupported": 0,
+        "unverifiable": 0,
+        "edits": 0,
+        "ran": True,
+    }
+
+
+# --- searches (quiet-suspect の入力) ---
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "stdin,expected",
+    [
+        # 実出力: WebSearch は modelUsage 側に計上され server_tool_use は 0 のまま
+        (
+            (
+                '{"type":"result","usage":{"server_tool_use":{"web_search_requests":0}},'
+                '"modelUsage":{"haiku":{"webSearchRequests":9},"opus":{"webSearchRequests":0}}}'
+            ),
+            9,
+        ),
+        ('{"usage":{"server_tool_use":{"web_search_requests":2}}}', 2),
+        ('{"tool_counts":{"WebSearch":3,"WebFetch":1}}', 4),
+        ('[{"type":"assistant"},{"type":"result","modelUsage":{"m":{"webSearchRequests":5}}}]', 5),
+        ("", 0),
+        ("garbage", 0),
+        ('{"usage":{}}', 0),
+    ],
+    ids=["model-usage", "server-tool-use", "tool-counts", "array", "empty", "garbage", "none"],
+)
+def test_searches_reader(monkeypatch, capsys, stdin, expected):
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["searches"], stdin)
+    assert rc == 0
+    assert out.strip() == str(expected)
+
+
+@pytest.mark.unit
+def test_success_fixture_searches_come_from_model_usage(monkeypatch, capsys):
+    stdin = (FIXTURES / "result-success.json").read_text()
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["searches"], stdin)
+    assert rc == 0 and out.strip() == "19"
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["log-summary", "Run(akc)"], stdin)
+    assert "searches=19" in out
+
+
+# --- config-get ---
+
+
+@pytest.mark.unit
+def test_config_get_reads_value_and_default(monkeypatch, capsys, tmp_path):
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["config-get", CONFIG_K3, "verification.model", "opus"])
+    assert rc == 0 and out.strip() == "sonnet"
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["config-get", CONFIG_K3, "general.lines_per_day"])
+    assert rc == 0 and out.strip() == "3"
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["config-get", CONFIG, "verification.model", "sonnet"])
+    assert rc == 0 and out.strip() == "sonnet"
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["config-get", str(tmp_path / "no.toml"), "a.b", "dflt"])
+    assert rc == 0 and out.strip() == "dflt"
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["config-get", CONFIG, "verification.model"])
+    assert rc == 0 and out == "\n"
+
+
+@pytest.mark.unit
+def test_config_get_usage(monkeypatch, capsys):
+    rc, _, _ = run_cmd(monkeypatch, capsys, ["config-get", CONFIG])
+    assert rc == 64
+
+
+# --- metrics-append: STATE / VERIFY ---
+
+
+@pytest.mark.unit
+def test_metrics_append_counts_line_states_and_verification(monkeypatch, capsys, tmp_path):
+    metrics = tmp_path / "metrics.jsonl"
+    v1 = '{"supported": 3, "partial": 1, "unsupported": 1, "unverifiable": 0, "edits": 2, "ran": true}'
+    v2 = '{"supported": 0, "partial": 0, "unsupported": 0, "unverifiable": 0, "edits": 0, "ran": false}'
+    stdin = (
+        f"RUN\t{RUN1_JSON}\n"
+        "STATE\takc\tarticle\n"
+        f"VERIFY\t{v1}\n"
+        "STATE\taap\tarticle\tmismatch\n"
+        f"VERIFY\t{v2}\n"
+        "STATE\taap\tunverified\n"
+        "STATE\tans\tquiet\tsuspect\n"
+        "STATE\tedge\thold\n"
+        "STATE\tdesire\tbrief\n"
+        "STATE\tx\tbogus-token\n"
+        "VERIFY\tnot-json\n"
+    )
+    rc, _, _ = run_cmd(
+        monkeypatch, capsys, ["metrics-append", str(metrics), "2026-09-15", "OK", "3", "0"], stdin
+    )
+    assert rc == 0
+    rec = json.loads(metrics.read_text())
+    assert rec["line_states"] == {
+        "article": 2,
+        "brief": 1,
+        "quiet": 1,
+        "hold": 1,
+        "mismatch": 1,
+        "suspect": 1,
+        "unverified": 1,
+    }
+    assert rec["verification"] == {
+        "supported": 3,
+        "partial": 1,
+        "unsupported": 1,
+        "unverifiable": 0,
+        "edits": 2,
+        "lines_verified": 1,
+    }
+
+
+@pytest.mark.unit
+def test_metrics_append_without_state_or_verify(monkeypatch, capsys, tmp_path):
+    metrics = tmp_path / "metrics.jsonl"
+    rc, _, _ = run_cmd(
+        monkeypatch, capsys, ["metrics-append", str(metrics), "2026-09-15", "E_NO_REPORT", "0", "0"], ""
+    )
+    assert rc == 0
+    rec = json.loads(metrics.read_text())
+    assert rec["line_states"] == {
+        k: 0 for k in ("article", "brief", "quiet", "hold", "mismatch", "suspect", "unverified")
+    }
+    assert rec["verification"] is None
+
+
+@pytest.mark.unit
+def test_metrics_backfill_new_fields_are_none(monkeypatch, capsys, tmp_path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "2026-08-05.log").write_text(BACKFILL_LOG_PER_REPO)
+    metrics = tmp_path / "metrics.jsonl"
+    rc, _, _ = run_cmd(monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)])
+    assert rc == 0
+    rec = json.loads(metrics.read_text())
+    assert rec["line_states"] is None
+    assert rec["verification"] is None
+
+
+# --- expect-check: 新 metric ---
+
+
+@pytest.mark.unit
+def test_expect_check_content_state_and_verification_metrics(monkeypatch, capsys, tmp_path):
+    metrics = tmp_path / "metrics.jsonl"
+    zero = {k: 0 for k in ("article", "brief", "quiet", "hold", "mismatch", "suspect", "unverified")}
+    recs = [
+        {
+            "date": "2026-09-15",
+            "final_class": "OK",
+            "line_states": {**zero, "article": 2, "quiet": 1},
+            "verification": {"supported": 6, "partial": 1, "unsupported": 1, "unverifiable": 2, "edits": 1, "lines_verified": 2},
+            "clarity_pass": {"ran": True, "ok": True},
+        },
+        {
+            "date": "2026-09-16",
+            "final_class": "OK",
+            "line_states": {**zero, "brief": 1, "hold": 1},
+            "verification": {"supported": 2, "partial": 0, "unsupported": 0, "unverifiable": 0, "edits": 0, "lines_verified": 1},
+            "clarity_pass": {"ran": True, "ok": False},
+        },
+        # backfill 相当: 新 field None は集計から除く
+        {"date": "2026-09-17", "final_class": "OK", "line_states": None, "verification": None, "clarity_pass": None},
+    ]
+    metrics.write_text("\n".join(json.dumps(r) for r in recs) + "\n")
+    stdin = (
+        "2026-09-14\tquiet_rate <= 0.5\n"        # (1+1)/5 = 0.4
+        "2026-09-14\treceipt_count_min >= 3\n"   # min(3, 2) = 2
+        "2026-09-14\tunsupported_rate <= 0.2\n"  # (1+1)/(6+1+1+2+0+0) = 0.2
+        "2026-09-14\tunverifiable_rate <= 0.1\n" # 2/12
+        "2026-09-14\tclarity_ok_rate >= 0.5\n"   # 1/2
+        "2026-09-20\tquiet_rate <= 0.5\n"
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["expect-check", str(metrics)], stdin)
+    assert rc == 0
+    lines = out.strip().splitlines()
+    assert lines[0].startswith("ACHIEVED\t") and "0.4" in lines[0]
+    assert lines[1].startswith("NOT_ACHIEVED\t") and "実測 2" in lines[1]
+    assert lines[2].startswith("ACHIEVED\t")
+    assert lines[3].startswith("NOT_ACHIEVED\t") and "0.1667" in lines[3]
+    assert lines[4].startswith("ACHIEVED\t")
+    assert lines[5].startswith("INSUFFICIENT_DATA\t")
+
+
+# --- report-lint: kind ---
+
+
+@pytest.mark.unit
+def test_report_lint_brief_is_exempt_from_memo_and_length(monkeypatch, capsys, tmp_path):
+    brief = (
+        "---\ndate: 2026-09-15\nkind: brief\ntags: [x]\n---\n\n短報の本文。\n\n"
+        "## ソース\n- [a](https://a.com)\n"
+    )
+    (tmp_path / "2026-09-15_akc_brief.md").write_text(brief)
+    (tmp_path / "2026-09-15_aap_article.md").write_text(
+        "---\ndate: 2026-09-15\n---\n\n本文\n\n## ソース\n- [a](https://a.com)\n"
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, _lint_args(tmp_path, "2026-09-15"))
+    assert rc == 0
+    by_file = {r["file"]: r for r in json.loads(out)["results"]}
+    b = by_file["2026-09-15_akc_brief.md"]
+    assert b["kind"] == "brief"
+    assert not any("機会メモ" in s or "本文" in s for s in b["soft"])
+    assert any("出典 URL 1 件" in s for s in b["soft"])
+    a = by_file["2026-09-15_aap_article.md"]
+    assert a["kind"] == "article"
+    assert any("機会メモ" in s for s in a["soft"])
+    assert any("本文" in s for s in a["soft"])
+
+
+@pytest.mark.unit
+def test_report_lint_brief_still_hard_fails_without_sources(monkeypatch, capsys, tmp_path):
+    (tmp_path / "2026-09-15_akc_brief.md").write_text("---\nkind: brief\n---\n\n短報のみ\n")
+    rc, out, _ = run_cmd(monkeypatch, capsys, _lint_args(tmp_path, "2026-09-15"))
+    assert rc == 2
+    r = json.loads(out)["results"][0]
+    assert r["kind"] == "brief"
+    assert any("ソース節" in h for h in r["hard"])

@@ -24,7 +24,8 @@ setup() {
   cp "$REAL_PROJECT_DIR/scripts/daily-research.sh" "$MOCK_PROJECT/scripts/"
   cp -R "$REAL_PROJECT_DIR/scripts/lib" "$MOCK_PROJECT/scripts/"
   cp "$REAL_PROJECT_DIR/prompts/repo-research-protocol.md" "$MOCK_PROJECT/prompts/"
-  cp "$REAL_PROJECT_DIR/prompts/clarity-review-protocol.md" "$MOCK_PROJECT/prompts/"
+  # 呼2 protocol は mock が名前で識別するだけなので stub で足りる (ADR-0017)
+  cp "$REAL_PROJECT_DIR/tests/fixtures/verification-protocol.stub.md" "$MOCK_PROJECT/prompts/verification-protocol.md"
   cp "$REAL_PROJECT_DIR/templates/report-template.md" "$MOCK_PROJECT/templates/"
 
   # 対象 repo (cwd になる) を作る。akc / authorship の 2 line 構成
@@ -187,39 +188,110 @@ if [[ "$PROTOCOL" == *repo-research-protocol.md ]]; then
       ;;
   esac
 
-  # noreport: success を返すがレポートを書かない (成功化け → ctl-015 が捕捉すべき)
+  # 内容状態 seam (ADR-0017): $MOCK_HOME/.state_<track> に article|brief|quiet|hold
+  # (既定 article)、.reason_code_<track> に reason_code (既定 no_new_evidence)。
+  STATE=$(cat "$MOCK_HOME_DIR/.state_$TRACK" 2>/dev/null || echo article)
+  REASON_CODE=$(cat "$MOCK_HOME_DIR/.reason_code_$TRACK" 2>/dev/null || echo no_new_evidence)
+  RECEIPT=$(printf '%s\n' "$PROMPT" | grep -oE '/[^ ]*/runs/[0-9-]+\.json' | head -1)
+  EVIDENCE=$(printf '%s\n' "$PROMPT" | grep -oE '/[^ ]*/runs/[0-9-]+\.md' | head -1)
+  PAST=$(printf '%s\n' "$PROMPT" | grep -oE '/[^ ]*/past_topics\.json' | head -1)
+  printf '%s' "$RECEIPT" > "$MOCK_HOME_DIR/.receipt_path_$TRACK"
+
   REPORT_DIR="$MOCK_HOME_DIR/mock-vault/daily-research"
   mkdir -p "$REPORT_DIR"
+  REPORT_NAME="${DR_DATE:-$(date +%Y-%m-%d)}_${TRACK}_mock-report.md"
+  write_receipt() {  # $1 = status, $2 = report basename or empty
+    local report_json=null
+    [ -n "$2" ] && report_json="\"$2\""
+    printf '{"date": "%s", "line": "%s", "status": "%s", "report": %s, "question": "mock question for %s", "reason": "mock reason", "reason_code": "%s"}\n' \
+      "$DR_DATE" "$TRACK" "$1" "$report_json" "$TRACK" "$REASON_CODE" > "$RECEIPT"
+  }
+  append_past_topic() {
+    python3 - "$PAST" "$TRACK" "$DR_DATE" << 'PY'
+import json, sys
+path, track, date = sys.argv[1:4]
+d = json.load(open(path))
+d.setdefault("topics", []).append({
+    "date": date, "track": track, "title": f"mock title for {track}", "slug": "mock-report",
+    "question": f"mock question for {track}", "answer_scope": "mock scope",
+    "keywords": [], "summary": "", "opportunities": [],
+})
+json.dump(d, open(path, "w"))
+PY
+  }
+
   case "$SCENARIO" in
-    noreport) ;;
+    noreport) ;;   # success を返すが何も書かない (成功化け → receipt gate が捕捉すべき)
+    receipt-missing)
+      echo "# mock report for $TRACK" > "$REPORT_DIR/$REPORT_NAME"
+      ;;
+    receipt-article-no-file)
+      write_receipt article "$REPORT_NAME"
+      ;;
+    receipt-quiet-with-file)
+      echo "# mock report for $TRACK" > "$REPORT_DIR/$REPORT_NAME"
+      write_receipt quiet ""
+      ;;
+    receipt-bad-json)
+      echo "# mock report for $TRACK" > "$REPORT_DIR/$REPORT_NAME"
+      echo "not json" > "$RECEIPT"
+      ;;
     comma-name)
       # model が allowedTools 注入を狙うファイル名 (カンマ入り slug) を書く
-      echo "# mock report for $TRACK" > "$REPORT_DIR/${DR_DATE}_${TRACK}_x),Write,Read(a.md"
+      _bad="${DR_DATE}_${TRACK}_x),Write,Read(a.md"
+      echo "# mock report for $TRACK" > "$REPORT_DIR/$_bad"
+      write_receipt article "$_bad"
       ;;
     two-reports)
       # 同 line に 2 ノート — 呼2 は最新 mtime の方を対象にすべき
       echo "# older" > "$REPORT_DIR/${DR_DATE}_${TRACK}_older.md"
       sleep 1
       echo "# newest" > "$REPORT_DIR/${DR_DATE}_${TRACK}_newest.md"
+      write_receipt article "${DR_DATE}_${TRACK}_newest.md"
       ;;
     *)
-      echo "# mock report for $TRACK" > "$REPORT_DIR/${DR_DATE:-$(date +%Y-%m-%d)}_${TRACK}_mock-report.md"
+      case "$STATE" in
+        article|brief)
+          if [ "$STATE" = "brief" ]; then
+            printf -- '---\nkind: brief\n---\n\n# mock brief for %s\n' "$TRACK" > "$REPORT_DIR/$REPORT_NAME"
+          else
+            echo "# mock report for $TRACK" > "$REPORT_DIR/$REPORT_NAME"
+          fi
+          echo "# evidence for $TRACK" > "$EVIDENCE"
+          write_receipt "$STATE" "$REPORT_NAME"
+          append_past_topic
+          ;;
+        quiet|hold)
+          write_receipt "$STATE" ""
+          ;;
+      esac
       ;;
   esac
 
-  echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.05,"num_turns":3,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}}]'
+  # 検索回数: 実出力と同じく modelUsage.<model>.webSearchRequests に載せる。
+  # .nosearch_<track> があれば検索 0 回の run を返す (quiet-suspect テスト用)
+  SEARCH_USAGE=',"modelUsage":{"mock-haiku":{"webSearchRequests":4}}'
+  [ -f "$MOCK_HOME_DIR/.nosearch_$TRACK" ] && SEARCH_USAGE=''
+  echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.05,"num_turns":3,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}'"$SEARCH_USAGE"'}]'
   exit 0
 fi
 
-# --- 呼2: clarity 改稿 (clarity-review-protocol.md、ADR-0010) ---
-if [[ "$PROTOCOL" == *clarity-review-protocol.md ]]; then
+# --- 呼2: clarity 改稿 + 原典照合 (verification-protocol.md、ADR-0010/0017) ---
+if [[ "$PROTOCOL" == *verification-protocol.md ]]; then
   printf '%s' "$PROMPT" > "$MOCK_HOME_DIR/.prompt_clarity"
   printf '%s' "$ALLOWED" > "$MOCK_HOME_DIR/.allowed_clarity"
   printf '%s' "$DISALLOWED" > "$MOCK_HOME_DIR/.disallowed_clarity"
+  printf '%s\n' "$@" > "$MOCK_HOME_DIR/.args_clarity"
 
   if [[ "$SCENARIO" == "clarity-fail" ]]; then
     echo "ERROR: simulated clarity failure" >&2
     exit 1
+  fi
+
+  # verify.json はプロンプトに渡されたパスへ書く (verify-missing は書かない)
+  if [[ "$SCENARIO" != "verify-missing" ]]; then
+    VERIFY=$(printf '%s\n' "$PROMPT" | grep -oE '/[^ ]*/runs/[0-9-]+\.verify\.json' | head -1)
+    [ -n "$VERIFY" ] && printf '{"supported": 3, "partial": 1, "unsupported": 0, "unverifiable": 1, "edits": 2}\n' > "$VERIFY"
   fi
 
   echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.02,"num_turns":2,"duration_ms":8000,"usage":{"input_tokens":1500,"output_tokens":300}}]'
@@ -230,6 +302,21 @@ echo "Unknown protocol: $PROTOCOL" >&2
 exit 1
 MOCK_SCRIPT
   chmod +x "$MOCK_HOME/.claude/local/claude"
+
+  # osascript stub: 通知本文を $MOCK_HOME/.notify_log に記録する (本物の通知を出さない)。
+  # lib/env.sh が $HOME/.claude/local を PATH 先頭に置くので /usr/bin より先に見つかる。
+  cat > "$MOCK_HOME/.claude/local/osascript" << 'STUB'
+#!/bin/bash
+MOCK_HOME_DIR="$(dirname "$(dirname "$(dirname "$0")")")"
+printf '%s\n' "$*" >> "$MOCK_HOME_DIR/.notify_log"
+exit 0
+STUB
+  chmod +x "$MOCK_HOME/.claude/local/osascript"
+}
+
+# 記録された通知本文に固定文字列が含まれるか
+notified() {
+  grep -qF -- "$1" "$MOCK_HOME/.notify_log"
 }
 
 # === Helper ===
@@ -375,7 +462,15 @@ get_log() {
   echo "$prompt" | grep -q "state/$PICKED"
   echo "$prompt" | grep -q "past_topics.json"
   echo "$prompt" | grep -q "機会メモ"   # テンプレート注入
-  echo "$prompt" | grep -q "この repo への含意"  # 4 節骨格 (ADR-0014) のテンプレート注入
+  # 書き込み先の列挙 (ADR-0017): state の brief / pending / 根拠ファイル / run receipt
+  echo "$prompt" | grep -q "run receipt"
+  echo "$prompt" | grep -q "brief.md"
+  echo "$prompt" | grep -q "pending.md"
+  echo "$prompt" | grep -q "state/$PICKED/runs/${DR_DATE}.json"
+  echo "$prompt" | grep -q "state/$PICKED/runs/${DR_DATE}.md"
+  echo "$prompt" | grep -q "answer_scope"
+  # context_files は選定後に読む候補として別節 (line-brief)
+  echo "$prompt" | grep -q "## Line 定義 (config)"
   ! echo "$prompt" | grep -q "判断基準 (優先順)"  # scoring_criteria は廃止 (ADR-0014)
   echo "$prompt" | grep -q "github.com/example-author"  # self_signals
 }
@@ -419,19 +514,28 @@ get_log() {
   echo "$log_content" | grep -q "SUMMARY Clarity:"
   echo "$log_content" | grep -q "Clarity pass ok"
 
-  # 呼2 は対象ノートだけを Edit でき、リサーチツール・Bash・glob 権限を持たない
-  local allowed prompt
+  # 呼2 は対象ノートと verify.json だけを Edit でき、WebFetch (原典照合) は持つが
+  # WebSearch・Bash・glob 権限を持たない (ADR-0017)
+  local allowed disallowed prompt
   allowed=$(cat "$MOCK_HOME/.allowed_clarity")
-  echo "$allowed" | grep -q "Edit(//"
-  echo "$allowed" | grep -q "mock-vault/daily-research/${DR_DATE}_${PICKED}_"
+  [ "$allowed" = "Read,WebFetch,Edit(//${MOCK_HOME#/}/mock-vault/daily-research/${DR_DATE}_${PICKED}_mock-report.md),Edit(//${MOCK_PROJECT#/}/state/$PICKED/runs/${DR_DATE}.verify.json)" ]
   ! echo "$allowed" | grep -q "WebSearch"
-  ! echo "$allowed" | grep -q "WebFetch"
   ! echo "$allowed" | grep -q "Bash"
   ! echo "$allowed" | grep -q '\*\*'          # 単一ファイル限定 — glob を含まない
   ! echo "$allowed" | grep -q "past_topics"
-  ! echo "$allowed" | grep -q "state/"
+  # state/ を含む allow は verify.json の 1 件だけ
+  [ "$(printf '%s' "$allowed" | tr ',' '\n' | grep -c 'state/')" -eq 1 ]
+  printf '%s' "$allowed" | tr ',' '\n' | grep 'state/' | grep -q "runs/${DR_DATE}.verify.json)$"
+  disallowed=$(cat "$MOCK_HOME/.disallowed_clarity")
+  printf '%s' "$disallowed" | grep -qE '(^|,)WebSearch(,|$)'
+  printf '%s' "$disallowed" | grep -qE '(^|,)Bash(,|$)'
+  # max-turns 30 / model は config-get の既定 sonnet
+  grep -A1 -x -- '--max-turns' "$MOCK_HOME/.args_clarity" | grep -qx 30
+  grep -A1 -x -- '--model' "$MOCK_HOME/.args_clarity" | grep -qx sonnet
   prompt=$(cat "$MOCK_HOME/.prompt_clarity")
   echo "$prompt" | grep -q "対象ファイル"
+  echo "$prompt" | grep -q "state/$PICKED/runs/${DR_DATE}.verify.json"
+  echo "$prompt" | grep -q "書き込みはこの 2 ファイル"
 }
 
 @test "E2E clarity: clarity failure is fail-open (report survives, run still succeeds)" {
@@ -443,6 +547,10 @@ get_log() {
 
   echo "$log_content" | grep -q "WARN: clarity pass failed"
   echo "$log_content" | grep -q "Completed successfully"
+  # 呼2 失敗は未検証として出す (silent にしない、ADR-0017)
+  echo "$log_content" | grep -q "Line $PICKED is unverified"
+  echo "$log_content" | grep -q "未検証: $PICKED"
+  notified "未検証: $PICKED"
   ls "$MOCK_HOME/mock-vault/daily-research/${DR_DATE}_${PICKED}_"*.md
 }
 
@@ -808,4 +916,296 @@ PYEOF
   [ "$status" -ne 0 ]
   get_log | grep -q "DR_FORCE_TRACK=nonexistent は config.toml に無い"
   [ ! -f "$MOCK_HOME/.prompt_$PICKED" ]
+}
+
+# === ADR-0017: 内容状態 / receipt gate / 検証結果 ===
+
+# metrics.jsonl の 1 レコード目に python の assert を当てる (stdin = assert 本文)
+assert_metrics() {
+  python3 -c '
+import json, sys
+rec = json.loads(open(sys.argv[1]).read().splitlines()[0])
+exec(sys.stdin.read())
+' "$MOCK_PROJECT/metrics.jsonl"
+}
+
+@test "E2E states: article records STATE, VERIFY, verify.json and a Line states summary" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  local log_content
+  log_content=$(get_log)
+
+  echo "$log_content" | grep -q "Line $PICKED state: article"
+  echo "$log_content" | grep -q "Line $PICKED report gate passed"
+  echo "$log_content" | grep -q "VERIFY $PICKED: {\"supported\": 3, \"partial\": 1, \"unsupported\": 0, \"unverifiable\": 1, \"edits\": 2, \"ran\": true}"
+  echo "$log_content" | grep -q "Line states: article=1 brief=0 quiet=0 hold=0 (今朝: $PICKED)"
+  notified "今朝のリサーチレポートが完成しました (今朝: $PICKED)\""
+  ! echo "$log_content" | grep -q "unverified"
+  [ -f "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.json" ]
+  [ -f "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.verify.json" ]
+  assert_metrics << 'PY'
+assert rec["final_class"] == "OK", rec
+assert rec["line_states"] == {"article": 1, "brief": 0, "quiet": 0, "hold": 0, "mismatch": 0, "suspect": 0, "unverified": 0}, rec
+assert rec["verification"] == {"supported": 3, "partial": 1, "unsupported": 0, "unverifiable": 1, "edits": 2, "lines_verified": 1}, rec
+PY
+}
+
+@test "E2E states: brief passes the gate, gets verified, and is labelled (brief)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  echo brief > "$MOCK_HOME/.state_$PICKED"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  get_log | grep -q "Line $PICKED state: brief"
+  get_log | grep -q "Clarity pass ok"
+  get_log | grep -q "Line states: article=0 brief=1 quiet=0 hold=0 (今朝: $PICKED(brief))"
+  assert_metrics << 'PY'
+assert rec["line_states"]["brief"] == 1, rec
+# lint は kind: brief を読み、機会メモ / 本文長の soft を免除する
+assert rec["lint"]["results"][0]["kind"] == "brief", rec
+assert not any("機会メモ" in s for s in rec["lint"]["results"][0]["soft"]), rec
+PY
+}
+
+@test "E2E states: quiet is a normal outcome (gate passes, no clarity, no-update notify)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  echo quiet > "$MOCK_HOME/.state_$PICKED"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  local log_content
+  log_content=$(get_log)
+  echo "$log_content" | grep -q "Line $PICKED state: quiet (reason_code=no_new_evidence) mock reason"
+  echo "$log_content" | grep -q "Line $PICKED report gate passed"
+  echo "$log_content" | grep -q "Completed successfully"
+  ! echo "$log_content" | grep -q "Clarity pass:"
+  ! echo "$log_content" | grep -q "VERIFY $PICKED"
+  ! echo "$log_content" | grep -q "fetch failure"
+  echo "$log_content" | grep -q "Line states: article=0 brief=0 quiet=1 hold=0 (更新なし: $PICKED)"
+  notified "今朝は更新なし (更新なし: $PICKED)\""
+  [ ! -f "$MOCK_HOME/.prompt_clarity" ]
+  assert_metrics << 'PY'
+assert rec["final_class"] == "OK", rec
+assert rec["line_states"]["quiet"] == 1 and rec["line_states"]["suspect"] == 0, rec
+assert rec["verification"] is None, rec
+assert rec["clarity_pass"] is None, rec
+PY
+}
+
+@test "E2E states: hold with an empty pending.md warns but passes" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  echo hold > "$MOCK_HOME/.state_$PICKED"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  get_log | grep -q "Line $PICKED state: hold"
+  get_log | grep -q "hold but state/$PICKED/pending.md is empty"
+  get_log | grep -q "Line states: article=0 brief=0 quiet=0 hold=1 (更新なし: $PICKED(hold))"
+  assert_metrics << 'PY'
+assert rec["line_states"]["hold"] == 1, rec
+PY
+}
+
+@test "E2E states: hold with a non-empty pending.md does not warn" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  echo hold > "$MOCK_HOME/.state_$PICKED"
+  mkdir -p "$MOCK_PROJECT/state/$PICKED"
+  echo "- pending question (再開条件: X)" > "$MOCK_PROJECT/state/$PICKED/pending.md"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  ! get_log | grep -q "pending.md is empty"
+}
+
+@test "E2E gate: a report without a run receipt fails the line" {
+  echo "receipt-missing" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -ne 0 ]
+  get_log | grep -q "report gate failed for line $PICKED — no run receipt runs/${DR_DATE}.json (ctl-015)"
+  get_log | grep -q "Failed (E_NO_REPORT"
+  [ ! -f "$MOCK_HOME/.prompt_clarity" ]
+  # retry skip は report だけでも効く (呼1 は 1 回)
+  [ "$(cat "$MOCK_HOME/.calls_$PICKED")" -eq 1 ]
+}
+
+@test "E2E gate: receipt says article but the run wrote no report — line fails" {
+  echo "receipt-article-no-file" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -ne 0 ]
+  get_log | grep -q "report gate failed for line $PICKED — receipt status article but no ${DR_DATE}_${PICKED}_\*.md from this run (ctl-015)"
+  [ ! -f "$MOCK_HOME/.prompt_clarity" ]
+  assert_metrics << 'PY'
+assert rec["final_class"] == "E_NO_REPORT", rec
+assert sum(rec["line_states"].values()) == 0, rec
+PY
+}
+
+@test "E2E gate: receipt says quiet but the run wrote a report — file wins (article + mismatch)" {
+  echo "receipt-quiet-with-file" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  get_log | grep -q "receipt says quiet but this run wrote ${DR_DATE}_${PICKED}_mock-report.md — treating as article (file wins, mismatch)"
+  get_log | grep -q "Line $PICKED state: article"
+  get_log | grep -q "Clarity pass ok"
+  assert_metrics << 'PY'
+assert rec["line_states"]["article"] == 1 and rec["line_states"]["mismatch"] == 1, rec
+assert rec["line_states"]["quiet"] == 0, rec
+PY
+}
+
+@test "E2E gate: an unparsable receipt fails the line" {
+  echo "receipt-bad-json" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -ne 0 ]
+  get_log | grep -q "report gate failed for line $PICKED — invalid run receipt runs/${DR_DATE}.json (ctl-015)"
+  get_log | grep -q "receipt-read: unreadable receipt"
+  [ ! -f "$MOCK_HOME/.prompt_clarity" ]
+}
+
+@test "E2E gate: a stale receipt from an earlier invocation does not satisfy the gate" {
+  echo "noreport" > "$MOCK_HOME/.mock_scenario"
+  mkdir -p "$MOCK_PROJECT/state/$PICKED/runs"
+  printf '{"date": "%s", "line": "%s", "status": "quiet", "report": null}\n' "$DR_DATE" "$PICKED" \
+    > "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.json"
+  touch -t 202001010000 "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.json"
+
+  run run_script
+  [ "$status" -ne 0 ]
+  get_log | grep -q "report gate failed for line $PICKED — no run receipt"
+}
+
+@test "E2E retry: a receipt left by a failed attempt 1 skips the retry" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  echo quiet > "$MOCK_HOME/.state_$PICKED"
+  # attempt 1 が quiet の receipt を書いた後に非ゼロ exit する: mock 本体を包むラッパー
+  mv "$MOCK_HOME/.claude/local/claude" "$MOCK_HOME/.claude/local/claude-real"
+  cat > "$MOCK_HOME/.claude/local/claude" << 'EOF'
+#!/bin/bash
+out=$("$(dirname "$0")/claude-real" "$@"); rc=$?
+printf '%s\n' "$out"
+case " $* " in *repo-research-protocol.md*) exit 1 ;; esac
+exit $rc
+EOF
+  chmod +x "$MOCK_HOME/.claude/local/claude"
+
+  run run_script
+  get_log | grep -q "attempt 1 left a report or receipt — skipping retry"
+  [ "$(cat "$MOCK_HOME/.calls_$PICKED")" -eq 1 ]
+  get_log | grep -q "Line $PICKED state: quiet"
+}
+
+@test "E2E states: verify.json missing marks the line unverified (run still OK)" {
+  echo "verify-missing" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  local log_content
+  log_content=$(get_log)
+  echo "$log_content" | grep -q "Clarity pass ok"
+  echo "$log_content" | grep -q "VERIFY $PICKED: {.*\"ran\": false}"
+  echo "$log_content" | grep -q "Line $PICKED is unverified"
+  notified "今朝のリサーチレポートが完成しました (今朝: $PICKED / 未検証: $PICKED)"
+  assert_metrics << 'PY'
+assert rec["line_states"]["article"] == 1 and rec["line_states"]["unverified"] == 1, rec
+assert rec["verification"]["lines_verified"] == 0, rec
+PY
+}
+
+@test "E2E states: a stale verify.json from an earlier run is removed before clarity" {
+  echo "verify-missing" > "$MOCK_HOME/.mock_scenario"
+  mkdir -p "$MOCK_PROJECT/state/$PICKED/runs"
+  echo '{"supported": 9, "partial": 0, "unsupported": 0, "unverifiable": 0, "edits": 0}' \
+    > "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.verify.json"
+
+  run run_script
+  get_log | grep -q "VERIFY $PICKED: {\"supported\": 0, .*\"ran\": false}"
+  [ ! -f "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.verify.json" ]
+}
+
+@test "E2E states: clarity failure counts as unverified in metrics" {
+  echo "clarity-fail" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  assert_metrics << 'PY'
+assert rec["line_states"]["unverified"] == 1, rec
+assert rec["clarity_pass"]["ok"] is False, rec
+PY
+}
+
+@test "E2E states: quiet with reason_code fetch_failed is flagged as a suspected fetch failure" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  echo quiet > "$MOCK_HOME/.state_$PICKED"
+  echo fetch_failed > "$MOCK_HOME/.reason_code_$PICKED"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  get_log | grep -q "Line $PICKED quiet looks like a fetch failure (reason_code=fetch_failed, searches=4)"
+  notified "今朝は更新なし (更新なし: $PICKED / 取得失敗の疑い: $PICKED)"
+  assert_metrics << 'PY'
+assert rec["final_class"] == "OK", rec
+assert rec["line_states"]["quiet"] == 1 and rec["line_states"]["suspect"] == 1, rec
+PY
+}
+
+@test "E2E states: hold with zero searches is flagged as a suspected fetch failure" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  echo hold > "$MOCK_HOME/.state_$PICKED"
+  touch "$MOCK_HOME/.nosearch_$PICKED"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  get_log | grep -q "Line $PICKED hold looks like a fetch failure (reason_code=no_new_evidence, searches=0)"
+  assert_metrics << 'PY'
+assert rec["line_states"]["suspect"] == 1, rec
+PY
+}
+
+@test "E2E states: partial failure notify lists published, unchanged, and failed lines" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  add_daily_line
+  echo quiet > "$MOCK_HOME/.state_$PICKED"
+  printf 'desire\n' > "$MOCK_HOME/.fail_tracks"
+
+  run run_script
+  [ "$status" -ne 0 ]
+  get_log | grep -q "Failed (E_PARTIAL"
+  notified "リサーチが一部失敗しました (更新なし: $PICKED / failed: desire)。ログを確認してください。"
+}
+
+# === ADR-0017: lines_per_day window ===
+
+@test "E2E window: lines_per_day = 2 runs both lines and line 2 sees line 1's question" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  # [general] に lines_per_day を差し込む (既存 mock config は K=1 のまま)
+  python3 - "$MOCK_PROJECT/config.toml" << 'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read().replace('output_dir = "daily-research"\n', 'output_dir = "daily-research"\nlines_per_day = 2\n', 1)
+open(p, "w").write(s)
+PY
+
+  run run_script
+  [ "$status" -eq 0 ]
+  local log_content
+  log_content=$(get_log)
+  echo "$log_content" | grep -q "Rotation pick: akc, authorship (ADR-0010/0017)"
+  echo "$log_content" | grep -q "Today's lines: 2"
+  echo "$log_content" | grep -q "Line akc report gate passed"
+  echo "$log_content" | grep -q "Line authorship report gate passed"
+  echo "$log_content" | grep -q "Line states: article=2 brief=0 quiet=0 hold=0 (今朝: akc, authorship)"
+  # past-themes は line ごとに再計算 — 後続 line は先行 line の問いを見る
+  grep -q "mock question for akc — mock scope" "$MOCK_HOME/.prompt_authorship"
+  ! grep -q "mock question for authorship" "$MOCK_HOME/.prompt_akc"
+  assert_metrics << 'PY'
+assert rec["line_states"]["article"] == 2, rec
+assert rec["verification"]["lines_verified"] == 2, rec
+assert rec["verification"]["supported"] == 6, rec
+PY
 }

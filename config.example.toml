@@ -1,6 +1,9 @@
 [general]
 vault_path = "/path/to/your/obsidian/vault"
 output_dir = "daily-research"
+# Rotating lines run per morning (ADR-0017). Integer >= 1 (default 1). The window
+# advances by lines_per_day each day; daily = true lines run in addition.
+lines_per_day = 3
 language = "ja"            # informational — not read by scripts (output language lives in prompts/)
 date_format = "%Y-%m-%d"   # informational — not read by scripts
 # Self-contamination guard (ADR-0008): artifacts matching these strings are never
@@ -13,23 +16,31 @@ self_signals = [
 [report]
 min_sources = 5
 
-# === Lines (tracks) — per-repo in-context research (ADR-0008 / ADR-0009 / ADR-0010) ===
+# Second call (ADR-0017): fresh-context clarity revision + source re-fetch check.
+# Results are written to state/<line>/runs/{date}.verify.json and recorded in metrics.
+[verification]
+model = "sonnet"
+
+# === Lines (tracks) — per-repo in-context research (ADR-0008 / ADR-0010 / ADR-0017) ===
 # Each track is a research LINE mapped 1:1 to a research repository via a
-# [[tracks.<line>.repos]] entry. Each morning the orchestrator picks ONE line by
-# rotation (date.toordinal() % non-daily line count — proleptic Gregorian ordinal,
-# not Unix epoch day; the cycle follows the order lines are written in this file,
-# ADR-0010; `daily = true` lines are excluded from the modulus, ADR-0011) and runs
-# `claude -p` with cwd = target_repo, so the run reads the repo's own operational context (CLAUDE.md auto-loads;
-# context_files are read explicitly) and produces a free-form explanatory
-# research note in the vault.
+# [[tracks.<line>.repos]] entry. Track names must match [A-Za-z0-9_-]+.
+# Each morning the orchestrator picks a WINDOW of [general].lines_per_day lines:
+# k = lines_per_day, n = non-daily line count, day = date.toordinal() (proleptic
+# Gregorian ordinal, not Unix epoch day), start = (day * k) % n, lines
+# start .. start+k-1 (mod n) in the order they are written in this file
+# (ADR-0017; k = 1 is the ADR-0010 phase; `daily = true` lines are excluded from n,
+# ADR-0011). Each picked line runs `claude -p` with cwd = target_repo and ends in one
+# of four content states — article / brief / quiet / hold — declared in a run
+# receipt (state/<line>/runs/{date}.json). The note's frontmatter `kind:` is
+# article or brief.
 #
-# context_files: repo-relative paths the run must Read in Step 1 (task ledger,
-# open questions, implementation log). Missing files are skipped.
+# context_files: repo-relative paths offered as candidates to Read AFTER the
+# question is chosen (Step 3b), not at the start of the run. Missing files are skipped.
 # aliases: former track names — keeps past_topics.json dedup working across
 # reorganizations.
 # daily: set `daily = true` on a line to run it EVERY morning in addition to the
 # rotation (the line is excluded from the rotation cycle; rotation-pick outputs
-# the rotated line first, then all daily lines).
+# the rotated window first, then all daily lines).
 # template: optional project-relative path to a per-line report template
 # (section structure). Defaults to templates/report-template.md when omitted;
 # an unreadable path falls back to the default at runtime (ADR-0015).
@@ -38,11 +49,11 @@ min_sources = 5
 name = "Example Line 前進"
 # daily = true  # uncomment to run this line every day instead of in rotation
 # template = "templates/report-template-example.md"  # per-line section structure override
-focus = "example-repo line の外部動向の解説と repo への含意"
+focus = "example-repo が扱う主題 (例: agent の知識循環) の外部動向"
 aliases = []
 context_files = [".notes/TASKS.md", "docs/manifesto.md"]
 sources = [
-  "arXiv / Semantic Scholar (your domain keywords) — ただし文献は repo に使える場合のみ",
+  "arXiv / Semantic Scholar (your domain keywords)",
   "関連 venue / registry / standard の新規開設・仕様変更",
 ]
 

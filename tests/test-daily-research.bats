@@ -248,3 +248,58 @@ teardown() {
   grep -qx 'metrics.jsonl' "$PROJECT_DIR/.gitignore"
   grep -qx 'state/' "$PROJECT_DIR/.gitignore"
 }
+
+# === ADR-0017: window 輪番 / receipt gate / 呼2 = clarity + 原典照合 ===
+
+@test "orchestrator logs every picked line and recomputes past themes per line" {
+  grep -q 'PICKED_LIST' "$SCRIPT"
+  grep -q 'Rotation pick: \$PICKED_LIST (ADR-0010/0017)' "$SCRIPT"
+  grep -q "Today's lines: " "$SCRIPT"
+  # past-themes はループ (for ROW in TRACK_ROWS) の内側でだけ呼ぶ
+  awk '/^for ROW in "\$\{TRACK_ROWS\[@\]\}"; do/{inloop=1} /^done  # for ROW/{inloop=0}
+       /python3 "\$DR_PY" past-themes/{ if (inloop) ok=1; else bad=1 }
+       END{exit !(ok && !bad)}' "$SCRIPT"
+}
+
+@test "orchestrator hoists STATE_DIR and wires receipt / evidence / verify paths" {
+  grep -q 'mkdir -p "\$STATE_DIR/runs"' "$SCRIPT"
+  grep -q 'RECEIPT_PATH="\$STATE_DIR/runs/\${DATE}.json"' "$SCRIPT"
+  grep -q 'VERIFY_PATH="\$STATE_DIR/runs/\${DATE}.verify.json"' "$SCRIPT"
+  grep -q 'runs/\${DATE}.md' "$SCRIPT"
+  grep -q 'brief.md' "$SCRIPT"
+  grep -q 'pending.md' "$SCRIPT"
+  grep -q 'receipt-read' "$SCRIPT"
+  grep -q 'verify-read' "$SCRIPT"
+  grep -q '"STATE"' "$SCRIPT"
+  grep -q '"VERIFY"' "$SCRIPT"
+  # run スコープ判定は find -newer (bash 3.2 の -nt は秒精度)
+  grep -q -- '-newer "\$LOCK_DIR/pid"' "$SCRIPT"
+}
+
+@test "second call is verification: WebFetch allowed, WebSearch denied, note + verify.json only" {
+  grep -q 'prompts/verification-protocol.md' "$SCRIPT"
+  ! grep -q 'clarity-review-protocol.md' "$SCRIPT"
+  grep -qF -- '--allowedTools "Read,WebFetch,Edit(//${CLARITY_NOTE#/}),Edit(//${VERIFY_PATH#/})"' "$SCRIPT"
+  grep -qF -- '--disallowedTools "$DISALLOWED_TOOLS,WebSearch"' "$SCRIPT"
+  grep -qF -- '--max-turns 30' "$SCRIPT"
+  grep -qF -- '--model "$VERIFY_MODEL"' "$SCRIPT"
+  grep -qF 'CLAUDE_TIMEOUT=1200' "$SCRIPT"
+  grep -q 'config-get "\$PROJECT_DIR/config.toml" verification.model sonnet' "$SCRIPT"
+  grep -qF 'rm -f "$VERIFY_PATH"' "$SCRIPT"
+}
+
+@test "config.example.toml documents lines_per_day and [verification]" {
+  grep -qE '^lines_per_day = [0-9]+' "$PROJECT_DIR/config.example.toml"
+  grep -qx '\[verification\]' "$PROJECT_DIR/config.example.toml"
+  grep -qE '^model = "sonnet"' "$PROJECT_DIR/config.example.toml"
+  python3 "$PROJECT_DIR/scripts/lib/dr_pipeline.py" tracks "$PROJECT_DIR/config.example.toml" > /dev/null
+}
+
+@test "past_topics.example.json carries a question-granular entry" {
+  python3 - "$PROJECT_DIR/past_topics.example.json" << 'PY'
+import json, sys
+t = json.load(open(sys.argv[1]))["topics"][0]
+for k in ("date", "track", "title", "slug", "question", "answer_scope", "keywords", "summary", "opportunities"):
+    assert k in t, k
+PY
+}

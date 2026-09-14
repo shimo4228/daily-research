@@ -1,4 +1,19 @@
 {
   "version": 1,
-  "topics": []
+  "topics": [
+    {
+      "date": "2026-09-15",
+      "track": "example_line",
+      "title": "Example: registry X が provenance 欄を必須化",
+      "slug": "registry-x-provenance-required",
+      "question": "registry X の provenance 必須化は、既存エントリの再登録を要求するか",
+      "answer_scope": "2026-09-15 時点の公式 changelog の範囲。移行期限は未公表",
+      "keywords": [
+        "provenance",
+        "registry"
+      ],
+      "summary": "registry X が新規登録に provenance 欄を必須化した。既存エントリの扱いは未確定。",
+      "opportunities": []
+    }
+  ]
 }
