@@ -73,22 +73,26 @@ teardown() {
 
 # === 新プロトコルの contract (repo-research-protocol.md) ===
 
-@test "protocol leads with trend-explanation objective, not adversarial framing (ADR-0014)" {
-  grep -q '前提知識ゼロで読める解説レポート' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  grep -q 'この repo にどう使えるか' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  grep -q '事実と解釈を分けて書く' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  # ADR-0009 の禁止は承認要求・手順に絞って維持
-  grep -q '承認要求・「〜すべき」・手順の列挙（1. 2. 3.）は書かない' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  # 撤去した対立フレーミングが戻っていない
+@test "protocol selects a question-form theme and allows four content states (ADR-0017)" {
+  grep -q '問いの形' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  grep -q '記事 / 短報 / 更新なし / 保留' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  grep -q '文の形で分ける' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  grep -q '承認要求・「〜すべき」・手順の列挙は書かない' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  # 使い道は選定のゲートにしない / 対立フレーミングは戻っていない
+  grep -q 'ゲートにしない' "$PROJECT_DIR/prompts/repo-research-protocol.md"
   ! grep -q '前提挑戦パス' "$PROJECT_DIR/prompts/repo-research-protocol.md"
   ! grep -q '反証プレッシャー' "$PROJECT_DIR/prompts/repo-research-protocol.md"
   ! grep -q 'theme_rank' "$PROJECT_DIR/prompts/repo-research-protocol.md"
 }
 
-@test "protocol mandates diff-first, citation gate, self-signal guard" {
-  grep -q 'diff パス' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+@test "protocol mandates short context, citation gate, self-signal guard, evidence file and receipt" {
+  grep -q 'brief.md' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  grep -q 'last-attempt' "$PROJECT_DIR/prompts/repo-research-protocol.md"
   grep -q 'citation ゲート' "$PROJECT_DIR/prompts/repo-research-protocol.md"
   grep -q '自己汚染ガード' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  grep -q '根拠ファイル' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  grep -q 'reason_code' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  grep -q 'pending.md' "$PROJECT_DIR/prompts/repo-research-protocol.md"
 }
 
 @test "protocol declares repo read-only and forbids tactic quota" {
@@ -96,14 +100,18 @@ teardown() {
   grep -q '発見のノルマは無い' "$PROJECT_DIR/prompts/repo-research-protocol.md"
 }
 
-@test "template requires event-first lead, background, implication, and fixed tail sections" {
+@test "template has kind/question frontmatter, no fixed body headings, and fixed tail sections" {
   grep -q '冒頭は外部の出来事から' "$PROJECT_DIR/templates/report-template.md"
-  grep -q '初見の読者向けの背景' "$PROJECT_DIR/templates/report-template.md"
-  grep -q 'この repo への含意' "$PROJECT_DIR/templates/report-template.md"
+  grep -q '^kind: article' "$PROJECT_DIR/templates/report-template.md"
+  grep -q '^question:' "$PROJECT_DIR/templates/report-template.md"
+  grep -q '固定見出しは置かない' "$PROJECT_DIR/templates/report-template.md"
+  ! grep -q '^## 結論' "$PROJECT_DIR/templates/report-template.md"
+  ! grep -q '^## この repo への含意' "$PROJECT_DIR/templates/report-template.md"
   ! grep -q 'theme_rank' "$PROJECT_DIR/templates/report-template.md"
   grep -q '## 機会メモ' "$PROJECT_DIR/templates/report-template.md"
   grep -q '## ソース' "$PROJECT_DIR/templates/report-template.md"
   grep -q '失効日' "$PROJECT_DIR/templates/report-template.md"
+  grep -q '判定 source' "$PROJECT_DIR/templates/report-template.md"
 }
 
 @test "edge template is story-first with steal-section and fixed tail sections" {
