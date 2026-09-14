@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR-0017](0017-three-line-window-content-states-and-verification-pass.md)（2026-09-14、Decision 5 を supersede）。8 日運用（2026-09-07〜14）の結果、運用者は通読の印象として「無関係な話題ばかり」と評価し、Decision 5 で退役させた旧設計の適用範囲を復活させた。Decision 1〜4 の discovery 号は supersede ではなく実装ごと退役（記録 7877a11、削除 48c8908）。本記録は当時の判断として保存する。
 
 ## Date
 

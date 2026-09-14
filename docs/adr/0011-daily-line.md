@@ -4,6 +4,8 @@
 
 Accepted (ADR-0010 の決定 1 を一部 supersede)。決定 5 (初期構成: `desire` のみ daily) は [ADR-0012](0012-desire-back-to-rotation.md) で撤回 (2026-08-18) — daily 機構 (決定 1〜4) は残る
 
+> **注記 (2026-09-14, ADR-0017)**: 2026-09-06〜14 は ADR-0016 の discovery 号により新経路の対象外だった。ADR-0017 で本 ADR は再び有効。
+
 ## Date
 
 2026-08-14

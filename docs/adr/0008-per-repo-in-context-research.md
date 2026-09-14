@@ -3,6 +3,8 @@
 ## Status
 
 Accepted — Decision 2 (目的関数・レポート形式) と Decision 6 (承認ブリーフ) は
+
+> **注記 (2026-09-14, ADR-0017)**: 2026-09-06〜14 は ADR-0016 の discovery 号により新経路の対象外だった。ADR-0017 で本 ADR は再び有効。
 [ADR-0009](./0009-explanatory-report-and-brief-retirement.md) により修正
 
 注記 (2026-08-22): Decision 1 の実行形 (全 line 毎日・Sonnet 単一パス) は
