@@ -616,7 +616,9 @@ else
     log "=== Pass 3: wiki ingest ==="
     # Pass 3 の exit は握り潰さず distinct にログ (ctl-010)。非 fatal なので FINAL_EXIT は変えない。
     PASS3_EXIT=0
-    bash "$VAULT_INGEST" >> "$LOG_FILE" 2>&1 || PASS3_EXIT=$?
+    # run の DATE を渡す — 引数なしだと ingest 側が「今日」を探し、日付をまたいだ run (試走 2026-09-14 23:51→00:01) の
+    # レポートを skip する (scripts/daily-research.sh:619 producer、vault daily_wiki_ingest.sh:44 sink)
+    bash "$VAULT_INGEST" "$DATE" >> "$LOG_FILE" 2>&1 || PASS3_EXIT=$?
     if [ "$PASS3_EXIT" != "0" ]; then
       log "WARN: wiki ingest failed (non-fatal, exit $PASS3_EXIT)"
     fi
