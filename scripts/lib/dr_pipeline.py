@@ -10,9 +10,9 @@ subcommand に置き換える parser-of-record。test も本モジュールだ�
            config.toml 解析に python>=3.11 の tomllib を使う (tomli fallback あり)。
 """
 
-import sys
 import json
 import re
+import sys
 
 
 def _tomllib():
@@ -155,7 +155,7 @@ def cmd_error_fields(argv):
         code = d.get("api_error_status")
         code = "" if code is None else code
         print(f"{code}\t{str(bool(d.get('is_error'))).lower()}")
-    except Exception:
+    except Exception:  # noqa: BLE001 — 解析失敗は常に parse-fail 行で返す (auth 判定は non-fatal)
         print("\tparse-fail")
     return 0
 
@@ -176,7 +176,7 @@ def cmd_log_summary(argv):
         print(
             f"SUMMARY {label}: cost=${cost:.4f} turns={turns} duration={dur}s tokens_in={inp} tokens_out={out}{tool_str}"
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — ログ用サマリーは失敗しても 1 行を返す
         print(f"SUMMARY {label}: (parse error: {e})")
     return 0
 

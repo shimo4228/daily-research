@@ -1,5 +1,5 @@
 # daily-research は shell + stdlib python のプロジェクト (build 対象ではない)。
-# この pyproject.toml は test 層 (pytest) の設定だけを持つ。
+# この pyproject.toml は dev 層 (pytest / ruff) の設定だけを持つ。
 # ランタイム本体は launchd 上で stdlib python のみで動く (pytest は dev/test 専用)。
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -12,4 +12,25 @@ addopts = [
 ]
 markers = [
     "unit: unit tests for dr_pipeline subcommands",
+]
+
+# ruff は dev 専用の lint ゲート (.venv に導入。ランタイムには載らない)。
+# select はバグクラス検出と diff 安定 (import 順) に絞る — 見た目の規約 (format / 行長) は
+# ゲートにしない。実行: .venv/bin/ruff check scripts/lib tests
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E4", "E7", "E9", "F",  # pyflakes / pycodestyle の誤り系 (ruff 既定)
+    "B",                    # bugbear: 可変既定引数・ループ変数の捕捉など
+    "BLE",                  # 裸の except Exception (意図的な箇所は理由付き noqa)
+    "I",                    # import 順 (diff 安定)
+    "UP",                   # target-version より古い構文
+    "RUF",                  # ruff 固有の誤り系
+]
+ignore = [
+    # 日本語の全角括弧・句読点を曖昧文字として検出するため (文字列 / docstring / コメント)
+    "RUF001", "RUF002", "RUF003",
 ]

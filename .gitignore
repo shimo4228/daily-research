@@ -45,6 +45,7 @@ docs/archive/
 .venv/
 .pytest_cache/
 __pycache__/
+.ruff_cache/
 .coverage
 
 # Per-line research state (watched-sources / playbook / last-seen; operational, private)

@@ -859,7 +859,7 @@ def test_unknown_subcommand_usage(monkeypatch, capsys):
 
 @pytest.mark.unit
 def test_no_subcommand_usage(monkeypatch, capsys):
-    rc, _, err = run_cmd(monkeypatch, capsys, [])
+    rc, _, _ = run_cmd(monkeypatch, capsys, [])
     assert rc == 64
 
 
