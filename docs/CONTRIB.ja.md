@@ -17,21 +17,23 @@
 
 ```
 daily-research/
-├── config.example.toml                  # line → repo マッピング、context_files、daily フラグ（テンプレート）
-├── past_topics.json                     # テーマ履歴（重複防止用、gitignored）
+├── config.example.toml                  # line → repo マッピング、lines_per_day、context_files、daily フラグ（テンプレート）
+├── past_topics.json                     # 問い・テーマ履歴（重複防止用、gitignored）
 ├── prompts/
 │   ├── repo-research-protocol.md       # per-repo リサーチプロトコル、呼1（--append-system-prompt-file 用）
-│   └── clarity-review-protocol.md      # fresh-context clarity 改稿プロトコル、呼2（ADR-0010）
+│   └── verification-protocol.md        # fresh-context の検証 + clarity プロトコル、呼2（ADR-0017）
 ├── templates/
 │   └── report-template.md              # 解説レポートの記述規律 + 固定 2 節（frontmatter付き）
 ├── scripts/
-│   ├── daily-research.sh               # メインエントリポイント（rotation で当日 1 ライン: 呼1 研究 + 呼2 clarity）; lib/ を source
+│   ├── daily-research.sh               # メインエントリポイント（輪番 window で当日 lines_per_day 本: 呼1 研究 + 呼2 検証 + clarity）; lib/ を source
 │   ├── check-auth.sh                   # OAuth チェック（real_auth_probe()）+ macOS 通知
 │   ├── pre-commit.sh                   # secret / 構文ガード（git pre-commit hook）
 │   └── lib/                             # sourced shell ライブラリ + Python 解析モジュール
 │       ├── env.sh / log.sh / notify.sh / lock.sh / auth.sh / claude.sh
 │       └── dr_pipeline.py              # JSON/TOML 解析の単一 stdlib モジュール
-├── state/                               # ラインごとの watched-sources / playbook / last-seen（gitignored）
+├── state/                               # ラインごとの brief.md / pending.md / watched-sources.md /
+│                                        #   playbook.md / runs/{date}.md（根拠ファイル）/ runs/{date}.json
+│                                        #   （run receipt）/ runs/{date}.verify.json（gitignored）
 ├── graph.jsonld                         # 凍結アーカイブ（退役した concept-graph パイプライン）
 ├── com.example.daily-research.plist    # launchd スケジュール（AM 5:00、リサーチ）
 ├── tests/
@@ -52,7 +54,7 @@ daily-research/
 
 | スクリプト | 説明 | 使い方 |
 |-----------|------|--------|
-| `scripts/daily-research.sh` | メインエントリポイント。決定論輪番 (`rotation-pick`、ADR-0010) の 1 ライン + `daily = true` の全ライン (ADR-0011) を当日担当に選び、ラインごとに呼1 = `claude -p` を cwd = そのラインの `target_repo` で実行（Opus、25 分タイムアウト、transient 失敗時リトライ 1 回。401 は中止）、続けて呼2 = fresh-context clarity 改稿（Sonnet、15 分、fail-open）を実行する。`lib/` を source し、環境サニタイズ、認証 probe、config schema チェック、レポートゲート (ctl-015)、レポート lint (ctl-016)、metrics 追記（`clarity_pass` 含む）を含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
+| `scripts/daily-research.sh` | メインエントリポイント。決定論輪番 window (`rotation-pick`、ADR-0010 / ADR-0017) の `lines_per_day` 本 + `daily = true` の全ライン (ADR-0011) を当日担当に選び、ラインごとに呼1 = `claude -p` を cwd = そのラインの `target_repo` で実行（Opus、25 分タイムアウト、transient 失敗時リトライ 1 回。401 は中止）、続けて呼2 = fresh-context の検証 + clarity（既定 sonnet、20 分、fail-open）を実行する。`lib/` を source し、環境サニタイズ、認証 probe、config schema チェック、receipt 駆動のレポートゲート (ctl-015)、レポート lint (ctl-016)、metrics 追記（`clarity_pass` / `line_states` / `verification` 含む）を含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
 | `scripts/check-auth.sh` | `real_auth_probe()`（共有 `lib/auth.sh`; `claude --version` ではなく実 Haiku API probe。`--version` は期限切れトークンでも成功するため）で OAuth トークンの有効性を確認。失敗時に macOS 通知を表示。 | `./scripts/check-auth.sh` |
 | `scripts/pre-commit.sh` | git pre-commit hook として走る secret / 構文ガード。 | （git が自動実行） |
 
@@ -63,30 +65,32 @@ daily-research/
 | `PATH` | plist + スクリプト | `$HOME/.local/bin`（現行 Claude installer）、`$HOME/.claude/local`（旧配置）、`/opt/homebrew/bin`、`/usr/local/bin` を含む必要がある |
 | `HOME` | plist | Claude CLI が認証トークンを見つけるために必要 |
 | `ANTHROPIC_API_KEY` | **未設定であること** | 設定されていると Max プランではなく従量課金になる |
-| `CLAUDE_TIMEOUT` | スクリプト（内部） | `run_claude()` 経由の `claude -p` 呼び出しのタイムアウト（秒）。0 = 無制限（デフォルト）。呼1 (研究 run) は 1500秒 (25 分)、呼2 (clarity) は 900秒 (15 分) を設定 |
+| `CLAUDE_TIMEOUT` | スクリプト（内部） | `run_claude()` 経由の `claude -p` 呼び出しのタイムアウト（秒）。0 = 無制限（デフォルト）。呼1 (研究 run) は 1500秒 (25 分)、呼2 (検証 + clarity) は 1200秒 (20 分) を設定 |
 | `DEBUG` | ユーザー設定 | `1` に設定するとデバッグログ（PATH、CLAUDE_CMD）を出力 |
 | `DR_DATE` | ユーザー設定（テスト seam） | `YYYY-MM-DD` — rotation-pick とレポート名に使う日付を固定する（e2e テストが輪番を固定するために使う）。既定は当日 |
 | `DR_ONLY_TRACK` | ユーザー設定（テスト seam） | 当日担当ラインのうち指定ラインだけを実行する。当日担当でないラインを指定するとエラー |
-| `DR_FORCE_TRACK` | ユーザー設定（テスト seam） | 輪番に関係なく指定 1 ラインを今日の日付で実行する（プロンプト変更の試験用）。launchd 経路では使わない |
+| `DR_FORCE_TRACK` | ユーザー設定（テスト seam） | 当日の輪番 window に関係なく指定 1 ラインを今日の日付で実行する（プロンプト変更の試験用）。launchd 経路では使わない |
 
 ## 設定ファイル (`config.toml`)
 
 | セクション | 用途 |
 |-----------|------|
-| `[general]` | Obsidian vault パス（`vault_path`）、出力ディレクトリ（`output_dir`）、`self_signals`（自己汚染ガード: 運用者自身の成果物を外部シグナルとして数えない）。`language` / `date_format` は参考情報 — スクリプトは読まない |
+| `[general]` | Obsidian vault パス（`vault_path`）、出力ディレクトリ（`output_dir`）、`lines_per_day`（1 日に走らせる本数 = 輪番 window の幅。int ≥ 1、既定 1、違反は fail-fast）、`self_signals`（自己汚染ガード: 運用者自身の成果物を外部シグナルとして数えない）。`language` / `date_format` は参考情報 — スクリプトは読まない |
 | `[report]` | 最低出典数 |
-| `[tracks.<name>]` | ライン 1 つにつき 1 ブロック: `name`, `focus`, `aliases`, `context_files`（各 run の冒頭で Read する repo 相対パス — タスク台帳・open questions・実施履歴）, `sources`, `daily`（bool。`true` で輪番の外で毎朝実行、ADR-0011）+ `[[tracks.<name>.repos]]` エントリ 1 つ（`key`, `target_repo` — run の cwd になる。`target_doi` は参考情報でスクリプトは読まない） |
+| `[verification]` | `model` — 呼2（検証 + clarity）のモデル。既定 `sonnet` |
+| `[tracks.<name>]` | ライン 1 つにつき 1 ブロック: `name`, `focus`（そのラインが扱う主題の説明。選択条件ではない）, `aliases`, `context_files`（問いを選んだ後 = Step 3b に Read する repo 相対パス — タスク台帳・open questions・実施履歴）, `sources`, `template`（任意。節構成の上書き、ADR-0015）, `daily`（bool。`true` で輪番の外で毎朝実行、ADR-0011）+ `[[tracks.<name>.repos]]` エントリ 1 つ（`key`, `target_repo` — run の cwd になる。`target_doi` は参考情報でスクリプトは読まない） |
 | `[user_profile]` | 参考情報のみ — スクリプトは読まない |
 
 ## 開発ワークフロー
 
 ### リサーチ内容を変更する場合
 
-1. **ラインの focus / daily フラグ** -- `config.toml` の `focus` / `daily` を編集（テーマ選別はプロトコルの 3 問チェック、ADR-0014 — スコアリング重みは存在しない）
+1. **ラインの focus / 1 日の本数** -- `config.toml` の `focus`（主題の説明）/ `[general] lines_per_day` を編集（問いの選定はプロトコル Step 3、ADR-0017 — スコアリング重みは存在しない）
 2. **情報源** -- `config.toml` の line sources を編集
-3. **各 run が読む repo 文脈** -- `config.toml` の `context_files` を編集
+3. **問いを選んだ後に読む repo 文脈** -- `config.toml` の `context_files` を編集
 4. **レポートフォーマット** -- `templates/report-template.md` を編集（ctl-016 lint の必須節と同期を保つ）
 5. **リサーチのプロセス・目的関数** -- `prompts/repo-research-protocol.md` を編集
+6. **検証・clarity の規則** -- `prompts/verification-protocol.md` を編集、モデルは `[verification] model`
 
 ### 実行処理を変更する場合
 
@@ -125,19 +129,20 @@ bats tests/
 # - past_topics.json の妥当性
 # - セキュリティ（ハードコードされたキーなし、API キー未設定、ログ権限）
 # - 防御的プログラミング（set -euo pipefail, trap, max-turns）
-# - E2E モック: ライン単位フロー（cwd = repo、プロンプト注入）、リトライ、ライン単位レポートゲート
+# - E2E モック: ライン単位フロー（cwd = repo、プロンプト注入）、リトライ、receipt 駆動のレポートゲート
+#   （article / brief / quiet / hold / receipt 欠損 / 不一致）、呼2 の検証結果の取り込み
 # - lib/*.sh ユニット: env サニタイズ、アトミックロック、実 auth probe、exit 分類
 ```
 
 ## Claude Code CLI フラグ
 
-### 呼1 — リサーチ run (Opus、担当ラインごと: 輪番 1 本 + daily 全ライン)
+### 呼1 — リサーチ run (Opus、担当ラインごと: 輪番 window の `lines_per_day` 本 + daily 全ライン)
 
 run は `cd "$TARGET_REPO"` で起動されるため、repo 自身の CLAUDE.md が context として自動ロードされる。
 
 | フラグ | 値 | 用途 |
 |--------|---|------|
-| `-p` | ライン単位プロンプト（`dr_pipeline.py line-brief` の line brief + 許可された書き込み先パス + 過去テーマ dedup データ + レポートテンプレート） | 非対話モード |
+| `-p` | ライン単位プロンプト（`dr_pipeline.py line-brief` の line brief + 許可された書き込み先パス（vault のレポート / `state/<line>/` の brief・pending・watched-sources・playbook・根拠ファイル・run receipt / `past_topics.json`）+ 過去の問いの dedup データ + レポートテンプレート） | 非対話モード |
 | `--permission-mode` | `default` | デフォルトの権限処理を使用 |
 | `--append-system-prompt-file` | `prompts/repo-research-protocol.md` | デフォルト能力を保持しつつリサーチプロトコルを注入 |
 | `--allowedTools` | `WebSearch,WebFetch,Read,Glob,Grep` + 絶対パス制限付き `Write`/`Edit`（vault レポート dir、`state/<line>/`、`past_topics.json`） | permission 層でも repo を read-only に保つ。書き込みは宣言済み 3 箇所のみ |
@@ -145,6 +150,19 @@ run は `cd "$TARGET_REPO"` で起動されるため、repo 自身の CLAUDE.md 
 | `--model` | `opus` | rotation で浮いた日次予算を 1 本の品質に集中させる (ADR-0010) |
 | `--output-format` | `json` | メタデータ付き構造化出力（metrics に投入） |
 | `--no-session-persistence` | - | 毎回クリーンなコンテキストで実行 |
+
+### 呼2 — 検証 + clarity (既定 Sonnet、article / brief で終わったラインごと)
+
+| フラグ | 値 | 用途 |
+|--------|---|------|
+| `-p` | 原稿パス + 根拠ファイルのパス + `runs/{date}.verify.json` のパス（書き込みはこの 2 ファイルだけ） | 非対話モード |
+| `--append-system-prompt-file` | `prompts/verification-protocol.md` | clarity（Step A）と原典照合（Step B）の手順を注入 |
+| `--allowedTools` | `Read,WebFetch` + 当日ノートと `runs/{date}.verify.json` の `Edit` | 原稿と検証結果だけを書き換え可能にする |
+| `--disallowedTools` | `Bash,Task,NotebookEdit` + `WebSearch` | 照合は根拠ファイル・ソース節の URL の再取得だけで行う（新しい探索をさせない） |
+| `--max-turns` | `30` | 全 claim の WebFetch 照合に必要な深さ |
+| `--model` | `[verification] model`（既定 `sonnet`） | 見逃しが目立つなら opus へ上げる |
+
+呼2 は起動前に当日の `verify.json` を削除し、run スコープ（`$LOCK_DIR/pid` より新しい）で読み直す。
 
 **備考**: 全 `claude -p` 呼び出しは `run_claude()` ラッパー経由で `< /dev/null` stdin リダイレクトを使用する。これにより MCP の stdio 通信がターミナルの stdin と競合するのを防止する（過去 MCP ハングの根本原因だった）。
 
@@ -154,10 +172,12 @@ per-repo 単一パス設計は、2026-08-04 に旧中央 2 パス（Opus テー�
 
 リサーチ run は二重に制限される: `--max-turns 55` と 25 分の外部タイムアウト（`run_claude()` 経由の `CLAUDE_TIMEOUT=1500`。coreutils `timeout` が必要）。transient 失敗は 1 回だけリトライされ、401 は同じ認証がどこでも失敗するため即時中止となる。
 
-呼2（clarity 改稿、ADR-0010）はレポート存在ゲートの後に走る: fresh-context の Sonnet プロセス（`--max-turns 15`、`CLAUDE_TIMEOUT=900`、`--allowedTools` = Read + 当日ノートのみの Edit）が完成ノートを初見読者として読み、つまずき箇所を直す。失敗は fail-open — ログに `WARN: clarity pass failed` を記録し、未改稿（timeout 時は部分改稿）の版が残り、`FINAL_EXIT` には影響しない。
+レポート存在ゲート（ctl-015）は run receipt `state/<line>/runs/{date}.json` を読む: receipt 無し・不正は失敗、`article` / `brief` は run スコープのレポートを要求、`quiet` / `hold` はファイル無しで成功する。run スコープの判定は bash 3.2 の `-nt` が秒精度で信用できないため `find -newer "$LOCK_DIR/pid"` で行う。receipt が quiet/hold なのに記事がある場合は記事を優先し（file wins）`mismatch` を、`reason_code = fetch_failed` か web 検索 0 回の quiet/hold は `suspect` を計上する。
 
-`metrics.jsonl` は `expect-check` / `/dr-review` との互換のため ADR-0008 以前のレコード形を維持する: リサーチ run の JSON は `pass2` フィールドに合算され、`pass1` は常に `None`、`fallback_used` は「リトライが発生した」の意味（`pass2` は全 attempt の合算）、`source` は `live` / `test`（`DR_FORCE_TRACK` / `DR_ONLY_TRACK` の run は `test` で記録され `expect-check` / `/dr-review` の集計から除かれる）、`clarity_pass` は呼2 の `{ran, ok, cost, turns, ...}` を記録する（verdict 自体は保存しない — eval は in-loop 型、ADR-0010）。
+呼2（検証 + clarity、ADR-0017）はゲートの後に走る: fresh-context のプロセス（`--max-turns 30`、`CLAUDE_TIMEOUT=1200`、`--allowedTools` = Read + WebFetch + 当日ノートと `runs/{date}.verify.json` のみの Edit、`--disallowedTools` に WebSearch を追加）が、初見読者としてつまずき箇所を直したうえで根拠ファイルの全 claim を原典と突き合わせる。失敗は fail-open — ログに `WARN: clarity pass failed` を記録し、未検証（timeout 時は部分改稿）の版が残り、`FINAL_EXIT` には影響しない。ただしそのラインは `unverified` として metrics と通知に出る。
+
+`metrics.jsonl` は `expect-check` / `/dr-review` との互換のため ADR-0008 以前のレコード形を維持する: リサーチ run の JSON は `pass2` フィールドに合算され、`pass1` は常に `None`、`fallback_used` は「リトライが発生した」の意味（`pass2` は全 attempt の合算）、`source` は `live` / `test`（`DR_FORCE_TRACK` / `DR_ONLY_TRACK` の run は `test` で記録され `expect-check` / `/dr-review` の集計から除かれる）、`clarity_pass` は呼2 の `{ran, ok, cost, turns, ...}` を記録する（ラベルは互換のため据え置きで、中身は検証 + clarity パスの実測）。これに加えて `line_states {article, brief, quiet, hold, mismatch, suspect, unverified}`（零でも常に出す）と `verification {supported, partial, unsupported, unverifiable, edits, lines_verified}`（VERIFY 行が無い日は `None`）を持つ。判定そのものは保存しない — eval は in-loop 型（ADR-0010）で、残るのは照合結果の内訳だけ。
 
 ## 永続メモリ層
 
-2026-02-26 に Mem0 Cloud MCP を統合したが、`.mcp.json` 不在 + ヘルスチェック形骸化により 32 日間ゼロ稼働。2026-05-23 に撤去。後継のローカル JSON-LD concept cluster graph (`graph.jsonld`) も 2026-08-04 に凍結された（ADR-0008）— 増分は停止し、読み出し可能なアーカイブとして残る。永続的な作業状態は現在 `state/<line>/`（watched-sources、playbook）と `past_topics.json` にあり、いずれも失敗が顕在化するローカルファイルである。
+2026-02-26 に Mem0 Cloud MCP を統合したが、`.mcp.json` 不在 + ヘルスチェック形骸化により 32 日間ゼロ稼働。2026-05-23 に撤去。後継のローカル JSON-LD concept cluster graph (`graph.jsonld`) も 2026-08-04 に凍結された（ADR-0008）— 増分は停止し、読み出し可能なアーカイブとして残る。永続的な作業状態は現在 `state/<line>/`（brief、pending、watched-sources、playbook、runs の根拠ファイル / receipt / 検証結果）と `past_topics.json` にあり、いずれも失敗が顕在化するローカルファイルである。

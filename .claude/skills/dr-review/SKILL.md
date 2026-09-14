@@ -25,16 +25,27 @@ python3 scripts/lib/dr_pipeline.py metrics-backfill metrics.jsonl logs   # ロ�
 
 `metrics.jsonl` を読み、直近 30 日について以下を集計・提示する:
 
-- Pass2 (呼1 研究 run の per-line 合算) の turns 分布 (p50 / p90 / max) と **設定中の
-  `--max-turns` との余白** (daily-research.sh の `--max-turns 55` と比較。p90 が上限に
-  接近していたら警告)。**pass1 は ADR-0008 以降つねに `None`** (旧 Opus 選定パスの
+- Pass2 (呼1 研究 run の合算 — 1 日 3 line 分が 1 record に足し込まれている) の turns
+  分布 (p50 / p90 / max) と **設定中の `--max-turns` との余白** (daily-research.sh の
+  `--max-turns 55` と比較。p90 が上限に接近していたら警告。line 数で割って 1 line
+  あたりを見る)。**pass1 は ADR-0008 以降つねに `None`** (旧 Opus 選定パスの
   名残) — `pass1_*` の expect は恒久的に INSUFFICIENT_DATA になるので書かない
 - total_cost の推移 (mean / max、異常スパイク)
 - fallback 発動率と、`final_class != "OK"` の失敗一覧
-- `final_class` の内訳: 全 line 成功 = `OK`、一部 line 失敗 = `E_PARTIAL` (report_count >= 1、
-  ADR-0011)、全滅 = `E_NO_REPORT` (report_count = 0、silent fail の残骸)
-- **clarity_pass (呼2、ADR-0010)**: ran/ok 率と cost/turns。ok=false が続くなら
-  呼2 の timeout / max-turns / プロトコルの見直し候補
+- `final_class` の内訳: 全 line 成功 = `OK`、一部 line 失敗 = `E_PARTIAL` (ADR-0011)、
+  `E_NO_REPORT` = **ゲートを通った line が 1 本も無い日** (ADR-0017)。全 line が quiet で
+  終わった日は `OK` であって `E_NO_REPORT` ではない — 「レポート 0 本の日」と読まない
+- **line_states (ADR-0017)**: `article` / `brief` / `quiet` / `hold` / `mismatch` /
+  `suspect` / `unverified` の日次内訳。quiet + hold の比率が上がり続けたら、材料不足か
+  「隠れ蓑」化 (書けない日の逃げ道) のどちらかを問う。`suspect` (取得失敗の疑い) と
+  `mismatch` (receipt と実ファイルの不一致) は 0 が既定、続くなら実装 / プロンプト側の signal
+- **verification (ADR-0017)**: `supported` / `partial` / `unsupported` / `unverifiable` /
+  `edits` / `lines_verified`。`unsupported_rate` = (unsupported + partial) /
+  (supported + partial + unsupported)、`unverifiable_rate` は別建て (取得失敗は
+  照合失敗と別物)。`unverified` が続く line は呼2 の timeout / max-turns を疑う
+- **clarity_pass (呼2、ラベルは互換のため据え置き)**: ran/ok 率と cost/turns。中身は
+  **検証 + clarity パス** (ADR-0017) の実測。ok=false が続くなら呼2 の timeout /
+  max-turns / プロトコルの見直し候補
 
 ### 2. 品質 signal
 
@@ -46,9 +57,10 @@ python3 scripts/lib/dr_pipeline.py wiki-quality-scan "<vault>" 30 config.toml
 - lint: metrics.jsonl 内の蓄積分から hard / soft violation のトレンドを出す
 - wiki-quality-scan: line 別 FLAGGED 率 (一次未照合・推定扱い注記) を提示。
   特定 line に偏っていたら research-protocol.md の出典照合指示の弱点候補
-- **本文字数の推移 (ADR-0014)**: lint 出力の `results[].body_chars` (metrics.jsonl の
-  `lint` にも入る) を line 別に見る。目安は 3,000 字以内 — 超過が常態化したら
-  プロトコル Step 5 の長さ指示が効いていない signal (機械 lint は意図的に置かない)
+- **本文字数の推移 (ADR-0014 / ADR-0017)**: lint 出力の `results[].body_chars` (metrics.jsonl の
+  `lint` にも入る) を `kind` 別に見る。目安は article が 3,000 字以内 (材料に応じて
+  短く)、brief が 300〜600 字 — 超過が常態化したらプロトコル Step 5 の長さ指示が
+  効いていない signal (機械 lint は意図的に置かない)
 - **可読性の主観判定 (ADR-0014 Review-when)**: 2026-08-30 に 2026-08-23 以降の 7 日分を
   通読し「最後まで読めたか / repo に使えたものがあったか」を判定する。
   `theme_rank` 分布の集計は ADR-0014 で廃止した (frontmatter に無い)
@@ -100,7 +112,9 @@ DR-Expect: fallback_rate <= 0.05
 - metric 語彙 (expect-check が解釈する):
   `pass1_turns_p50|p90|max` / `pass2_turns_p50|p90|max` /
   `pass1_cost_mean|max` / `pass2_cost_mean|max` / `total_cost_mean|max` /
-  `fallback_rate` / `report_count_min` / `no_report_count` / `lint_hard_count`
+  `fallback_rate` / `report_count_min` / `receipt_count_min` / `no_report_count` /
+  `lint_hard_count` / `quiet_rate` / `unsupported_rate` / `unverifiable_rate` /
+  `clarity_ok_rate`
 - 評価窓は「commit 日より後の全 record」。次回 review で自動突合される
 - 期待が書けない変更 (doc 修正等) に無理に付けない。付けた期待が NOT_ACHIEVED でも
   それ自体は失敗ではない — 効果が出ていない事実が見えることが目的

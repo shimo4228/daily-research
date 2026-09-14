@@ -50,7 +50,7 @@ launchctl start com.daily-research
 
 # Direct execution — also works from inside a Claude Code session (lib/env.sh unsets CLAUDECODE)
 ./scripts/daily-research.sh
-# Test seams: DR_FORCE_TRACK=<line> (run one line outside the rotation, today's date),
+# Test seams: DR_FORCE_TRACK=<line> (run one line even when today's window does not include it, today's date),
 # DR_ONLY_TRACK=<line> (only that line among today's picks), DR_DATE=YYYY-MM-DD (fix the rotation date)
 ```
 
@@ -61,21 +61,28 @@ daily-research.sh (05:00)
 ├── Lock acquisition (atomic mkdir)
 ├── Auth probe (real OAuth check)
 ├── Config schema check (legacy pre-ADR-0008 schema fails fast)
-├── rotation-pick — deterministic selection of today's lines: one rotated line
-│   (date.toordinal() % non-daily line count — proleptic Gregorian ordinal, ADR-0010) + every `daily = true` line (ADR-0011)
+├── rotation-pick — deterministic selection of today's lines: a rotation window
+│   (start = date.toordinal() × K mod N, then K consecutive lines, K = [general]
+│   lines_per_day — proleptic Gregorian ordinal, ADR-0010 / ADR-0017) + every `daily = true` line (ADR-0011)
 ├── Call 1: claude -p, cwd = the picked line's target_repo (Opus, --max-turns 55,
 │   25-min timeout, one retry on transient failure; 401 aborts)
-│   ├── Read repo context (CLAUDE.md auto-loaded + context_files) + state/<line>/
-│   ├── Diff-first pass over watched sources · theme selection (2–3 candidates →
-│   │   3 yes/no questions, ADR-0014) · research with citation gate
-│   └── Write explanatory note (conclusion / what happened / background /
-│       implications for this repo, ~3,000 chars) → vault · update state + past_topics.json
-├── ctl-015 report-existence gate ({date}_{track}_*.md in vault)
-├── Call 2: fresh-context clarity revision (Sonnet, no research context, Edit limited
-│   to the day's note; failure is fail-open — unrevised note survives, ADR-0010)
-├── ctl-016 deterministic report lint (fixed sections 機会メモ / ソース, synced to report-template.md)
+│   ├── Read a short context (line brief + state/<line>/brief.md + question history + pending.md)
+│   ├── Diff-first pass over watched sources + wide search · pick one of 3–6 candidate
+│   │   questions (or quiet / hold) · read context_files after the pick · research with
+│   │   citation gate · evidence file runs/{date}.md
+│   ├── Write explanatory note (no fixed headings; article ≤ 3,000 chars / brief 300–600)
+│   │   → vault (nothing is written on a quiet / hold day)
+│   └── Write the run receipt runs/{date}.json right after the note · update state + past_topics.json
+├── ctl-015 report-existence gate (receipt-driven: missing / invalid receipt fails the line,
+│   article & brief require {date}_{track}_*.md in the vault, quiet & hold pass without a file)
+├── Call 2: fresh-context verification + clarity (Sonnet by default, --max-turns 30, 20-min
+│   timeout, no research context, Read + WebFetch, Edit limited to the day's note and
+│   runs/{date}.verify.json, WebSearch denied; failure is fail-open — the unverified note
+│   survives, ADR-0017)
+├── ctl-016 deterministic report lint (fixed sections 機会メモ / ソース, synced to
+│   report-template.md; kind: brief is exempt from the 機会メモ and length soft checks)
 ├── Pass 3: Obsidian wiki ingest (vault-side script, non-fatal)
-└── metrics.jsonl append (incl. clarity_pass record) + /dr-review age check
+└── metrics.jsonl append (incl. clarity_pass / line_states / verification) + /dr-review age check
 ```
 
 (The 07:00 morning-brief.sh was retired in ADR-0009 — notes are now reading
@@ -113,7 +120,10 @@ launchctl list | grep daily-research
 | Auth valid | `./scripts/check-auth.sh` | "OK: Claude authentication is valid" |
 | Today's log exists | `ls logs/$(date +%Y-%m-%d).log` | File exists |
 | Log shows success | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | Match found |
-| Reports generated | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | One file per *picked* line (typically 2/day: the rotated line + the daily line) |
+| Reports generated | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | One file per line that ended as article or brief (3 lines a day by default; quiet / hold lines write no file) |
+| Receipts present | `ls state/*/runs/$(date +%Y-%m-%d).json` | One file per *picked* line (what the gate reads) |
+| Verification ran | `grep "VERIFY " logs/$(date +%Y-%m-%d).log` | One line per article / brief line (`"ran": true`) |
+| Today's breakdown | `grep "Line states:" logs/$(date +%Y-%m-%d).log` | `article=N brief=N quiet=N hold=N` plus the published / quiet / unverified breakdown |
 
 ### Log Messages Reference
 
@@ -123,16 +133,32 @@ launchctl list | grep daily-research
 | `ERROR: Auth probe failed — OAuth likely expired` | Real OAuth probe failed; the run stops before any line (exit 1) |
 | `ERROR: Another instance is running. Skipping.` | Lock directory `.daily-research.lock/` is held by a live PID |
 | `Config schema check passed` | `config.toml` matches the current (ADR-0008) schema |
+| `Rotation pick: a, b, c (ADR-0010/0017)` | The rotation window picked for today |
+| `Today's lines: N` | How many lines run today (`lines_per_day` + any daily lines) |
 | `=== Line: <track> (<repo path>) ===` | Per-line run starting with that repo as cwd |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | Per-line run statistics (cost, turns, duration, tokens) |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | Transient failure; the single retry is starting |
 | `ERROR: Line <track> returned 401 — aborting remaining lines` | Auth expired mid-run; remaining lines are skipped, finished lines' results are kept |
-| `Line <track> report gate passed` | ctl-015: the line's `{date}_{track}_*.md` exists in the vault |
-| `WARN: report gate failed for line <track> — no <date>_<track>_*.md (ctl-015)` | The line ran but wrote no report — counted as failed |
+| `Line <track> state: <status>` | The content state the receipt declared (article / brief / quiet / hold) |
+| `Line <track> report gate passed` | ctl-015: the line delivered what its receipt declared (article / brief: `{date}_{track}_*.md` exists in the vault; quiet / hold: no file needed) |
+| `WARN: report gate failed for line <track> — no <date>_<track>_*.md (ctl-015)` | The receipt says article / brief but no report exists — counted as failed |
+| `WARN: report gate failed for line <track> — ... receipt ... (ctl-015)` | The run-scoped receipt is missing or invalid — counted as failed (a run that died before writing it) |
 | `Report existence gate passed: N report(s)` | Every picked line passed ctl-015 (partial failure logs `Failed (E_PARTIAL: ...)` instead) |
-| `WARN: clarity pass failed ...` | Call 2 clarity failed (fail-open — the run still succeeds) |
+| `Line states: article=N brief=N quiet=N hold=N (...)` | Today's breakdown; the published / quiet / unverified / suspected-fetch-failure segments appear only when non-empty |
+| `VERIFY <track>: {...}` | Call 2's verification tally (supported / partial / unsupported / unverifiable / edits / ran) |
+| `WARN: clarity pass failed ...` | Call 2 (verification + clarity) failed (fail-open — the run still succeeds and the line is counted `unverified`) |
 | `WARN: report lint hard fail (ctl-016): ...` | Deterministic lint found a missing sources section / zero citations |
-| `Completed successfully` | All of the day's picked lines completed and passed the report gate |
+| `Completed successfully` | All of the day's picked lines completed and passed the report gate (including an all-quiet day) |
+
+### Notifications
+
+| Notification | Meaning |
+|---------|------|
+| `今朝のリサーチレポートが完成しました (今朝: … / 更新なし: … / 未検証: …)` | All lines succeeded and at least one report was published |
+| `今朝は更新なし (更新なし: …)` | Every line ended quiet / hold (a success) |
+| `リサーチが一部失敗しました (今朝: … / 更新なし: … / failed: …)。ログを確認してください。` | E_PARTIAL — the failed lines are named |
+
+未検証 (unverified) lists lines whose call 2 failed or left no verify.json; their notes are published anyway. A quiet / hold flagged as a suspected fetch failure (zero web searches, or `reason_code = fetch_failed`) points at a network-side problem rather than a quiet day.
 
 ## Common Issues and Fixes
 
@@ -194,7 +220,7 @@ rm -rf .daily-research.lock
 - The 25-minute per-line timeout expiring on an unusually deep run
 - The line's `target_repo` path in `config.toml` missing or moved
 
-**Fix**: Check the specific exit class in the log (`E_TRANSIENT` / `E_FATAL`). One line failing does not stop the others — their reports still land and get ingested; the day's final class is then `E_PARTIAL` (exit 1, `=== Failed (E_PARTIAL:<lines>, exit code 1) ===`), while `E_NO_REPORT` is reserved for a day with zero reports (ADR-0011). Verify `target_repo` exists, then re-run the script manually. A 401 (`E_AUTH`) means the OAuth token expired: see issue 1.
+**Fix**: Check the specific exit class in the log (`E_TRANSIENT` / `E_FATAL`). One line failing does not stop the others — their reports still land and get ingested; the day's final class is then `E_PARTIAL` (exit 1, `=== Failed (E_PARTIAL:<lines>, exit code 1) ===`), while `E_NO_REPORT` is reserved for a day where no line passed the gate (ADR-0011 / ADR-0017 — a day where every line ended quiet is a success, not `E_NO_REPORT`). Verify `target_repo` exists, then re-run the script manually. A 401 (`E_AUTH`) means the OAuth token expired: see issue 1.
 
 ### 5. `ANTHROPIC_API_KEY` Set (Per-Token Billing)
 
@@ -246,11 +272,11 @@ ps aux | grep -E "pyright|sourcekit|claude-mem|sequential|japanese|ableton"
 
 **Note**: There is no blanket "disable all plugins" option yet. Each plugin must be listed explicitly. See [tracking issue](https://github.com/anthropics/claude-code/issues/20873).
 
-### 8. Duplicate Topics
+### 8. Duplicate Questions
 
-**Symptoms**: Reports cover the same theme as recent days.
+**Symptoms**: Reports answer the same question with the same answer as recent days (the same topic under a different question is fine).
 
-**Cause**: `past_topics.json` not updated properly (the run's theme-selection questions depend on the past-themes dedup list it feeds).
+**Cause**: `past_topics.json` not updated properly (the run's question selection depends on the past questions and their `answer_scope` it feeds), or `state/<line>/brief.md` not keeping its open questions current.
 
 **Fix**:
 ```bash
@@ -298,4 +324,4 @@ If Mac was asleep at the scheduled time, launchd runs the job on wake (behavior 
 
 ## Cost
 
-Each morning the rotation-picked line plus every `daily = true` line runs (ADR-0010 / ADR-0011) — with one daily line configured that is 2 lines per morning. Per line: Call 1 = one Opus research run (at most 2 invocations with its single retry, 25-min cap) plus Call 2 = one Sonnet clarity revision (15-min cap). With Claude Max plan, model usage is covered by the subscription with no per-token charges; cost and duration are recorded in `metrics.jsonl` for actual measurement.
+Each morning the `lines_per_day` lines of the rotation window (3 by default) plus every `daily = true` line run (ADR-0010 / ADR-0011 / ADR-0017). Per line: Call 1 = one Opus research run (at most 2 invocations with its single retry, 25-min cap) plus Call 2 = one verification + clarity pass (Sonnet by default, 20-min cap). Three lines run sequentially in 25–35 minutes typically, and about 195 minutes from 05:00 in the worst case; the cost runs about $12–15 a day (call 1 ≈ $4–5 per line, call 2 ≈ $0.5–1). With Claude Max plan, model usage is covered by the subscription with no per-token charges; cost and duration are recorded in `metrics.jsonl` for actual measurement.

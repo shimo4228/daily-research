@@ -50,7 +50,7 @@ launchctl start com.daily-research
 
 # 直接実行 — Claude Code セッション内からも実行できる（lib/env.sh が CLAUDECODE を unset する）
 ./scripts/daily-research.sh
-# テスト用 seam: DR_FORCE_TRACK=<line>（輪番外の 1 line を今日の日付で実行）、
+# テスト用 seam: DR_FORCE_TRACK=<line>（当日の輪番 window 外でも指定 1 line を今日の日付で実行）、
 # DR_ONLY_TRACK=<line>（当日担当のうち指定 line のみ）、DR_DATE=YYYY-MM-DD（輪番の日付を固定）
 ```
 
@@ -61,21 +61,27 @@ daily-research.sh (05:00)
 ├── ロック取得（アトミック mkdir）
 ├── 認証 probe（実 OAuth チェック）
 ├── config schema チェック（ADR-0008 以前の旧 schema は fail-fast）
-├── rotation-pick — 当日担当ラインを決定論選択: 輪番 1 ライン（date.toordinal() % 非 daily
-│   ライン数、ADR-0010）+ `daily = true` の全ライン（毎日実行、ADR-0011）
+├── rotation-pick — 当日担当ラインを決定論選択: 輪番 window（開始 = date.toordinal() × K
+│   mod N、そこから連続 K 本。K = [general] lines_per_day、ADR-0010 / ADR-0017）
+│   + `daily = true` の全ライン（毎日実行、ADR-0011）
 ├── 呼1: claude -p, cwd = 担当ラインの target_repo (Opus, --max-turns 55,
 │   25 分タイムアウト, transient 失敗時リトライ 1 回; 401 は中止)
-│   ├── repo 文脈 (CLAUDE.md 自動ロード + context_files) + state/<line>/ を Read
-│   ├── watched sources の diff-first 確認 · テーマ選択（候補 2〜3 → 3 問 Yes/No、
-│   │   ADR-0014）· citation ゲート付きリサーチ
-│   └── 解説ノート（結論 / 何が起きたか / 背景 / この repo への含意、約 3,000 字）を
-│       vault に Write · state + past_topics.json 更新
-├── ctl-015 レポート存在ゲート（vault の {date}_{track}_*.md）
-├── 呼2: fresh-context clarity 改稿 (Sonnet, 研究文脈なし, 対象ノートのみ Edit 可,
-│   失敗は fail-open — 改稿なし版が残り run は成功のまま, ADR-0010)
-├── ctl-016 決定論的レポート lint（固定節 = 機会メモ / ソース、report-template.md に同期）
+│   ├── 短い文脈（line brief + state/<line>/brief.md + 問いの履歴 + pending.md）を Read
+│   ├── watched sources の diff-first 確認 + 広い探索 · 問いの候補 3〜6 件から 1 つ選ぶ
+│   │   （または quiet / hold）· 選定後に context_files を Read · citation ゲート付き
+│   │   リサーチ · 根拠ファイル runs/{date}.md
+│   ├── 解説ノート（固定見出しなし。article ≤ 3,000 字 / brief 300〜600 字）を vault に
+│   │   Write（quiet / hold の日は書かない）
+│   └── run receipt runs/{date}.json を記事の直後に Write · state + past_topics.json 更新
+├── ctl-015 レポート存在ゲート（receipt 駆動: receipt 無し / 不正 → 失敗、article・brief は
+│   vault の {date}_{track}_*.md を要求、quiet・hold はファイル無しで成功）
+├── 呼2: fresh-context の検証 + clarity (既定 Sonnet, --max-turns 30, 20 分タイムアウト,
+│   研究文脈なし, Read + WebFetch, Edit は対象ノートと runs/{date}.verify.json のみ,
+│   WebSearch は disallow, 失敗は fail-open — 未検証版が残り run は成功のまま, ADR-0017)
+├── ctl-016 決定論的レポート lint（固定節 = 機会メモ / ソース、report-template.md に同期。
+│   kind: brief は機会メモと文字数の soft を免除）
 ├── Pass 3: Obsidian wiki ingest（vault 側スクリプト、non-fatal）
-└── metrics.jsonl 追記 (clarity_pass 発動記録含む) + /dr-review 経過日数チェック
+└── metrics.jsonl 追記 (clarity_pass / line_states / verification 含む) + /dr-review 経過日数チェック
 ```
 
 (07:00 の morning-brief.sh は ADR-0009 で廃止 — レポートは承認を求めない読み物になった)
@@ -112,7 +118,10 @@ launchctl list | grep daily-research
 | 認証有効 | `./scripts/check-auth.sh` | "OK: Claude authentication is valid" |
 | 今日のログが存在 | `ls logs/$(date +%Y-%m-%d).log` | ファイルが存在 |
 | ログに成功メッセージ | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | マッチあり |
-| レポートが生成済み | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | 当日*担当*ライン数のファイル（通常 2 本/日: 輪番 1 + daily 1） |
+| レポートが生成済み | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | article / brief で終わったライン数のファイル（既定は 1 日 3 ライン。quiet / hold のラインはファイルを作らない） |
+| receipt が揃っている | `ls state/*/runs/$(date +%Y-%m-%d).json` | 当日*担当*ライン数のファイル（ゲートの判定材料） |
+| 検証が走った | `grep "VERIFY " logs/$(date +%Y-%m-%d).log` | article / brief のラインごとに 1 行（`"ran": true`） |
+| 当日の内訳 | `grep "Line states:" logs/$(date +%Y-%m-%d).log` | `article=N brief=N quiet=N hold=N` と今朝 / 更新なし / 未検証の内訳 |
 
 ### ログメッセージ一覧
 
@@ -122,16 +131,32 @@ launchctl list | grep daily-research
 | `ERROR: Auth probe failed — OAuth likely expired` | 実 OAuth probe が失敗。ライン実行前に停止（exit 1） |
 | `ERROR: Another instance is running. Skipping.` | ロックディレクトリ `.daily-research.lock/` を生存中の PID が保持している |
 | `Config schema check passed` | `config.toml` が現行 (ADR-0008) schema に適合 |
+| `Rotation pick: a, b, c (ADR-0010/0017)` | 当日担当ラインの輪番 window 選択結果 |
+| `Today's lines: N` | 当日実行するライン数（`lines_per_day` + daily ライン） |
 | `=== Line: <track> (<repo パス>) ===` | その repo を cwd にしたライン run の開始 |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | ライン run の実行統計（コスト、ターン数、所要時間、トークン数） |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | transient 失敗。1 回きりのリトライを開始 |
 | `ERROR: Line <track> returned 401 — aborting remaining lines` | run 中に認証が期限切れ。残ラインは中断、完走済みラインの成果は保持 |
-| `Line <track> report gate passed` | ctl-015: そのラインの `{date}_{track}_*.md` が vault に存在 |
-| `WARN: report gate failed for line <track> — no <date>_<track>_*.md (ctl-015)` | run は走ったがレポートが無い — 失敗として計上 |
+| `Line <track> state: <status>` | receipt が申告した内容状態（article / brief / quiet / hold） |
+| `Line <track> report gate passed` | ctl-015: そのラインが receipt どおりの成果を残した（article / brief は `{date}_{track}_*.md` が vault に存在、quiet / hold はファイル無しで通過） |
+| `WARN: report gate failed for line <track> — no <date>_<track>_*.md (ctl-015)` | receipt が article / brief なのにレポートが無い — 失敗として計上 |
+| `WARN: report gate failed for line <track> — ... receipt ... (ctl-015)` | run スコープの receipt が無い・壊れている — 失敗として計上（timeout で receipt を書く前に落ちた run） |
 | `Report existence gate passed: N report(s)` | 当日担当ラインが全て ctl-015 を通過（一部失敗時は `Failed (E_PARTIAL: ...)` になる） |
+| `Line states: article=N brief=N quiet=N hold=N (...)` | 当日の内訳（今朝 / 更新なし / 未検証 / 取得失敗の疑い の各段は該当があるときだけ出る） |
+| `VERIFY <track>: {...}` | 呼2 の照合結果（supported / partial / unsupported / unverifiable / edits / ran） |
 | `WARN: report lint hard fail (ctl-016): ...` | 決定論 lint がソース節不在・出典 0 件を検出 |
-| `WARN: clarity pass failed ...` | 呼2 clarity の失敗 (fail-open — run 全体は成功のまま) |
-| `Completed successfully` | 当日担当ラインが全て完了・レポートゲート通過 |
+| `WARN: clarity pass failed ...` | 呼2（検証 + clarity）の失敗 (fail-open — run 全体は成功のまま、そのラインは `unverified` として計上) |
+| `Completed successfully` | 当日担当ラインが全て完了・レポートゲート通過（全ライン quiet の日も含む） |
+
+### 通知メッセージ
+
+| 通知 | 意味 |
+|---------|------|
+| `今朝のリサーチレポートが完成しました (今朝: … / 更新なし: … / 未検証: …)` | 全ライン成功し、公開されたレポートがある |
+| `今朝は更新なし (更新なし: …)` | 全ラインが quiet / hold で終わった（成功） |
+| `リサーチが一部失敗しました (今朝: … / 更新なし: … / failed: …)。ログを確認してください。` | E_PARTIAL — 失敗したラインを名指しする |
+
+「未検証」は呼2 が失敗した（または verify.json が無い）ラインで、レポート自体は公開されている。「取得失敗の疑い」が付く quiet / hold は、web 検索 0 回または `reason_code = fetch_failed` のラインで、ネットワーク側の問題を疑う材料になる。
 
 ## よくある問題と対処法
 
@@ -193,7 +218,7 @@ rm -rf .daily-research.lock
 - 深掘りしすぎた run がライン単位の 25 分タイムアウトを超過
 - `config.toml` の `target_repo` パスが存在しない・移動した
 
-**対処**: ログで exit 分類（`E_TRANSIENT` / `E_FATAL`）を確認する。1 ラインの失敗は他のラインを止めない — 他のレポートは生成・ingest され、その日の final class は `E_PARTIAL`（exit 1、`=== Failed (E_PARTIAL:<lines>, exit code 1) ===`）になる。`E_NO_REPORT` はレポート 0 本の日に限る（ADR-0011）。`target_repo` の存在を確認してから手動で再実行する。401（`E_AUTH`）は OAuth 期限切れ: 問題 1 を参照。
+**対処**: ログで exit 分類（`E_TRANSIENT` / `E_FATAL`）を確認する。1 ラインの失敗は他のラインを止めない — 他のレポートは生成・ingest され、その日の final class は `E_PARTIAL`（exit 1、`=== Failed (E_PARTIAL:<lines>, exit code 1) ===`）になる。`E_NO_REPORT` はゲートを通ったラインが 1 本も無い日に限る（ADR-0011 / ADR-0017 — 全ラインが quiet で終わった日は成功であって `E_NO_REPORT` ではない）。`target_repo` の存在を確認してから手動で再実行する。401（`E_AUTH`）は OAuth 期限切れ: 問題 1 を参照。
 
 ### 5. `ANTHROPIC_API_KEY` が設定されている（従量課金）
 
@@ -245,11 +270,11 @@ ps aux | grep -E "pyright|sourcekit|claude-mem|sequential|japanese|ableton"
 
 **備考**: 現時点では「全プラグイン一括無効化」の設定は存在しない。各プラグインを個別に列挙する必要がある。[追跡 Issue](https://github.com/anthropics/claude-code/issues/20873) 参照。
 
-### 8. テーマの重複
+### 8. 問いの重複
 
-**症状**: 最近と同じテーマのレポートが生成される。
+**症状**: 最近と同じ問いに同じ答えを返すレポートが生成される（同じ topic を別の問いで扱うのは正常）。
 
-**原因**: `past_topics.json` が正しく更新されていない（run のテーマ選別はここから渡される過去テーマの dedup リストに依存する）。
+**原因**: `past_topics.json` が正しく更新されていない（run の問い選定はここから渡される過去の問い・`answer_scope` の一覧に依存する）。または `state/<line>/brief.md` の「開いた問い」が更新されていない。
 
 **対処**:
 ```bash
@@ -297,4 +322,4 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 
 ## コスト
 
-毎朝、rotation で選ばれた 1 ライン + `daily = true` の全ラインが走る（ADR-0010 / ADR-0011。daily 1 本構成なら毎朝 2 ライン）。ラインごとに呼1 = Opus 研究 run が最大 2 回 = リトライ込み、呼2 = Sonnet clarity が 1 回。呼1 は 25 分、呼2 は 15 分でタイムアウトする。Claude Max プランではモデル使用はサブスクリプションでカバーされ、従量課金は発生しない。コスト・所要時間は `metrics.jsonl` に記録され、実測はそちらで確認する。
+毎朝、輪番 window で選ばれた `lines_per_day` 本のライン（既定 3 本）+ `daily = true` の全ラインが走る（ADR-0010 / ADR-0011 / ADR-0017）。ラインごとに呼1 = Opus 研究 run が最大 2 回 = リトライ込み、呼2 = 検証 + clarity（既定 sonnet）が 1 回。呼1 は 25 分、呼2 は 20 分でタイムアウトする。3 ラインを逐次実行して典型 25〜35 分、最悪ケースは 05:00 から約 195 分。コストの目安は 1 日 $12〜15（呼1 ≈ $4〜5/ライン、呼2 ≈ $0.5〜1/ライン）。Claude Max プランではモデル使用はサブスクリプションでカバーされ、従量課金は発生しない。コスト・所要時間は `metrics.jsonl` に記録され、実測はそちらで確認する。
