@@ -11,6 +11,9 @@ Sonnet 呼2 (clarity 改稿) へ置換。Decision 3 の前提挑戦パスと「�
 必須節は [ADR-0014](./0014-trend-explanation-report.md) により撤去 (残るのは diff-first /
 citation ゲート / 自己汚染ガード / playbook delta 更新と「事実と解釈の分離」)。
 
+> 2026-09-06: 日次リサーチの現在の目的・実行経路は [ADR-0016](0016-discovery-first-edition.md) を参照。本記録は当時の判断として保存する。
+
+
 ## Date
 
 2026-08-04

@@ -8,6 +8,8 @@ pythonpath = ["scripts/lib"]
 addopts = [
     "--strict-markers",
     "--cov=dr_pipeline",
+    "--cov=discovery",
+    "--cov-fail-under=80",
     "--cov-report=term-missing",
 ]
 markers = [

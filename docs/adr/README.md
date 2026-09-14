@@ -18,6 +18,8 @@
 | 0014 | レポートを「動向解説 + repo への含意」へ単純化し、対立的フレーミングを撤去する | Amended by 0015 | 2026-08-22 |
 | 0015 | レポートの読者契約を文体規律として共通化し、edge line を手筋収穫型へ改修する | Accepted | 2026-08-27 |
 
+| 0016 | 発見を中心に据えた日刊号へ再編する | Accepted | 2026-09-06 |
+
 ## Template
 
 ADRs in this repository use the 6-section template:

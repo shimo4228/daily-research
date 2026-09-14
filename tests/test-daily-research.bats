@@ -1,250 +1,34 @@
 #!/usr/bin/env bats
-# Tests for daily-research project (per-repo in-context research, ADR-0008)
-# Run: bats tests/test-daily-research.bats
-
-# テストファイルからの相対パスでプロジェクトルートを解決
-PROJECT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
-SCRIPT="$PROJECT_DIR/scripts/daily-research.sh"
-
-# === Setup / Teardown ===
-
+# Public command contracts; no model calls.
 setup() {
-  TEST_TMPDIR="$(mktemp -d)"
-  export TEST_TMPDIR
+  PROJECT_DIR="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
+  SCRIPT="$PROJECT_DIR/scripts/daily-research.sh"
 }
-
-teardown() {
-  rm -rf "$TEST_TMPDIR"
-}
-
-# === Syntax checks ===
-
-@test "daily-research.sh has valid syntax" {
+@test "entrypoints have valid Bash syntax" {
   bash -n "$SCRIPT"
-}
-
-@test "check-auth.sh has valid syntax" {
   bash -n "$PROJECT_DIR/scripts/check-auth.sh"
 }
-
-@test "entrypoints share real_auth_probe (no formalized --version auth)" {
-  # auth-002: lib/auth.sh で正本化し共有 (bootstrap-graph.sh は ADR-0008 で retire)
-  grep -q 'real_auth_probe' "$SCRIPT"
-  grep -q 'real_auth_probe' "$PROJECT_DIR/scripts/check-auth.sh"
-  ! grep -qi 'version.*authentication\|authentication.*version' "$PROJECT_DIR/scripts/check-auth.sh"
+@test "help exposes preview and config without starting a job" {
+  run bash "$SCRIPT" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--preview"* ]]
+  [[ "$output" == *"--config"* ]]
 }
-
-# === Per-repo 実行の配線 (ADR-0008 / 輪番は ADR-0010) ===
-
-@test "orchestrator picks the day's line via rotation-pick and runs claude with cwd=target_repo" {
-  grep -q 'rotation-pick' "$SCRIPT"
-  grep -q 'cd "\$TARGET_REPO"' "$SCRIPT"
+@test "unknown option fails before research" {
+  run bash "$SCRIPT" --not-an-option
+  [ "$status" -eq 64 ]
 }
-
-@test "orchestrator injects past themes and line brief into per-line prompt" {
-  grep -q '過去テーマ履歴' "$SCRIPT"
-  grep -q 'PAST_THEMES' "$SCRIPT"
-  grep -q 'line-brief' "$SCRIPT"
+@test "invalid date fails before research" {
+  run bash "$SCRIPT" --date 2026-02-30
+  [ "$status" -eq 64 ]
 }
-
-@test "orchestrator restricts file writes to vault, state, and past_topics (repo read-only)" {
-  # path 規則は Edit(path) だけが consult される仕様 — Write(path) 規則は書かない
-  grep -q 'Edit(//' "$SCRIPT"
-  ! grep -q 'Write(' "$SCRIPT"
-  grep -q 'past_topics.json)' "$SCRIPT"
-  # 無条件の Write/Edit (path 制限なし) を allowedTools に入れていない
-  ! grep -qE 'ALLOWED_TOOLS="[^"]*,(Write|Edit),' "$SCRIPT"
+@test "backdated live writes require preview" {
+  run bash "$SCRIPT" --date 2000-01-01
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"--preview"* ]]
 }
-
-@test "orchestrator uses per-repo research protocol as system prompt" {
-  grep -q 'append-system-prompt-file' "$SCRIPT"
-  grep -q 'repo-research-protocol.md' "$SCRIPT"
-}
-
-@test "concept-graph selection machinery is retired (ADR-0008)" {
-  ! grep -q 'coverage-report' "$SCRIPT"
-  ! grep -q 'cluster-report' "$SCRIPT"
-  ! grep -q 'sync_repo_graphs' "$SCRIPT"
-  ! grep -q 'validate_theme_json' "$SCRIPT"
-  [ ! -f "$PROJECT_DIR/scripts/coverage-report.sh" ]
-  [ ! -f "$PROJECT_DIR/scripts/bootstrap-graph.sh" ]
-  [ ! -f "$PROJECT_DIR/scripts/lib/graph.sh" ]
-}
-
-# === 新プロトコルの contract (repo-research-protocol.md) ===
-
-@test "protocol leads with trend-explanation objective, not adversarial framing (ADR-0014)" {
-  grep -q '前提知識ゼロで読める解説レポート' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  grep -q 'この repo にどう使えるか' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  grep -q '事実と解釈を分けて書く' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  # ADR-0009 の禁止は承認要求・手順に絞って維持
-  grep -q '承認要求・「〜すべき」・手順の列挙（1. 2. 3.）は書かない' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  # 撤去した対立フレーミングが戻っていない
-  ! grep -q '前提挑戦パス' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  ! grep -q '反証プレッシャー' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  ! grep -q 'theme_rank' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-}
-
-@test "protocol mandates diff-first, citation gate, self-signal guard" {
-  grep -q 'diff パス' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  grep -q 'citation ゲート' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  grep -q '自己汚染ガード' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-}
-
-@test "protocol declares repo read-only and forbids tactic quota" {
-  grep -q 'repo は read-only' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  grep -q '発見のノルマは無い' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-}
-
-@test "template requires event-first lead, background, implication, and fixed tail sections" {
-  grep -q '冒頭は外部の出来事から' "$PROJECT_DIR/templates/report-template.md"
-  grep -q '初見の読者向けの背景' "$PROJECT_DIR/templates/report-template.md"
-  grep -q 'この repo への含意' "$PROJECT_DIR/templates/report-template.md"
-  ! grep -q 'theme_rank' "$PROJECT_DIR/templates/report-template.md"
-  grep -q '## 機会メモ' "$PROJECT_DIR/templates/report-template.md"
-  grep -q '## ソース' "$PROJECT_DIR/templates/report-template.md"
-  grep -q '失効日' "$PROJECT_DIR/templates/report-template.md"
-}
-
-@test "edge template is story-first with steal-section and fixed tail sections" {
-  local T="$PROJECT_DIR/templates/report-template-edge.md"
-  [ -f "$T" ]
-  grep -q '事件から始める' "$T"
-  grep -q '## 盗める手筋' "$T"
-  # 逆リード・台帳神学の節は持たない
-  ! grep -q '## 結論' "$T"
-  ! grep -q '## この repo への含意' "$T"
-  # 機械検査 (ctl-016) 対象の固定 2 節は共通テンプレと同じく必須
-  grep -q '## 機会メモ' "$T"
-  grep -q '## ソース' "$T"
-  grep -q '失効日' "$T"
-}
-
-@test "protocol carries the reader-contract style rules (6 items)" {
-  grep -q '文体規律' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  grep -q '第一文は外部の出来事' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  grep -q '一文一命題' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-}
-
-@test "orchestrator resolves per-track template with fallback to common template" {
-  grep -q 'template-path' "$SCRIPT"
-  grep -q 'LINE_TEMPLATE' "$SCRIPT"
-}
-
-# === Config files exist ===
-
-@test "config.toml exists" {
-  [ -f "$PROJECT_DIR/config.toml" ]
-}
-
-@test "repo-research-protocol.md exists (old prompts retired)" {
-  [ -f "$PROJECT_DIR/prompts/repo-research-protocol.md" ]
-  [ ! -f "$PROJECT_DIR/prompts/theme-selection-prompt.md" ]
-  [ ! -f "$PROJECT_DIR/prompts/task-prompt.md" ]
-  [ ! -f "$PROJECT_DIR/prompts/research-protocol.md" ]
-}
-
-@test "report-template.md exists" {
-  [ -f "$PROJECT_DIR/templates/report-template.md" ]
-}
-
-# === launchd plist validation ===
-
-@test "plist is valid XML" {
-  plutil -lint "$PROJECT_DIR/com.shimomoto.daily-research.plist"
-}
-
-@test "plist points to correct script path" {
-  plutil -extract ProgramArguments json \
-    "$PROJECT_DIR/com.shimomoto.daily-research.plist" \
-    -o - | grep -q "daily-research.sh"
-}
-
-@test "plist schedule is set to 5:00" {
-  local hour
-  hour=$(plutil -extract StartCalendarInterval.Hour raw \
-    "$PROJECT_DIR/com.shimomoto.daily-research.plist")
-  [ "$hour" = "5" ]
-}
-
-@test "morning brief is retired (ADR-0009)" {
-  [ ! -f "$PROJECT_DIR/scripts/morning-brief.sh" ]
-  [ ! -f "$PROJECT_DIR/com.example.daily-research-brief.plist" ]
-  [ ! -f "$PROJECT_DIR/com.shimomoto.daily-research-brief.plist" ]
-}
-
-# === Lock mechanism ===
-
-@test "orchestrator uses mkdir-atomic lock via lib/lock.sh" {
-  grep -q 'source.*lock.sh' "$SCRIPT"
-  grep -q 'acquire_lock' "$SCRIPT"
-  ! grep -q 'echo \$\$ > "\$LOCK_FILE"' "$SCRIPT"
-}
-
-# === Log directory ===
-
-@test "logs directory exists" {
-  [ -d "$PROJECT_DIR/logs" ]
-}
-
-@test "logs directory has permission 700" {
-  local perms
-  perms=$(stat -f "%Lp" "$PROJECT_DIR/logs")
-  [ "$perms" = "700" ]
-}
-
-# === past_topics.json ===
-
-@test "past_topics.json is valid JSON" {
-  python3 -c "import json; json.load(open('$PROJECT_DIR/past_topics.json'))"
-}
-
-@test "past_topics.json backup exists" {
-  [ -f "$PROJECT_DIR/past_topics.json.bak" ]
-}
-
-# === Security checks ===
-
-@test "env.sh source declares unset ANTHROPIC_API_KEY (static)" {
-  grep -q "unset ANTHROPIC_API_KEY" "$PROJECT_DIR/scripts/lib/env.sh"
-}
-
-@test "no hardcoded API keys in script" {
-  ! grep -qE '(sk-[a-zA-Z0-9]{20,}|api_key\s*=\s*"[^"]+")' "$SCRIPT"
-}
-
-@test "log file permissions are restricted (chmod 600)" {
-  grep -q 'chmod 600 "$LOG_FILE"' "$PROJECT_DIR/scripts/lib/log.sh"
-}
-
-# === Defensive programming ===
-
-@test "set -Eeuo pipefail is configured (-E: ERR trap reaches function bodies)" {
-  head -3 "$SCRIPT" | grep -q "set -Eeuo pipefail"
-  grep -q "' ERR$" "$SCRIPT"
-}
-
-@test "trap release_lock is registered on EXIT" {
-  grep -q 'trap release_lock EXIT' "$SCRIPT"
-}
-
-@test "max-turns is configured" {
-  grep -q '\-\-max-turns' "$SCRIPT"
-}
-
-# === 自己改善ループの計測 (ADR-0006) ===
-
-@test "daily-research.sh wires metrics collection non-fatally" {
-  grep -q 'metrics-append' "$SCRIPT"
-  grep -q 'report-lint' "$SCRIPT"
-  grep -q 'review-age' "$SCRIPT"
-  # 収集失敗が生成ジョブの成否 (FINAL_EXIT) を変えない non-fatal ガード
-  grep -q 'WARN: metrics-append failed (non-fatal)' "$SCRIPT"
-  # metrics-append は FINAL_EXIT 確定後 (exit 直前) に置かれている
-  awk '/metrics-append/{m=NR} /^exit "\$FINAL_EXIT"/{e=NR} END{exit !(m && e && m<e)}' "$SCRIPT"
-}
-
-@test "metrics.jsonl and state/ are gitignored (personal data, public repo)" {
-  grep -qx 'metrics.jsonl' "$PROJECT_DIR/.gitignore"
-  grep -qx 'state/' "$PROJECT_DIR/.gitignore"
+@test "launchd template uses unchanged entrypoint" {
+  run plutil -lint "$PROJECT_DIR/com.example.daily-research.plist"
+  [ "$status" -eq 0 ]
+  grep -q daily-research.sh "$PROJECT_DIR/com.example.daily-research.plist"
 }

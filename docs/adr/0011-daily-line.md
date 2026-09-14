@@ -4,6 +4,9 @@
 
 Accepted (ADR-0010 の決定 1 を一部 supersede)。決定 5 (初期構成: `desire` のみ daily) は [ADR-0012](0012-desire-back-to-rotation.md) で撤回 (2026-08-18) — daily 機構 (決定 1〜4) は残る
 
+> 2026-09-06: 日次リサーチの現在の目的・実行経路は [ADR-0016](0016-discovery-first-edition.md) を参照。本記録は当時の判断として保存する。
+
+
 ## Date
 
 2026-08-14

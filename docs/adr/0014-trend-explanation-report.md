@@ -4,6 +4,9 @@
 
 Accepted (ADR-0008 の目的関数と ADR-0009 の提案禁止範囲を修正、ADR-0010 決定 3・6 と ADR-0013 失効条件 1 の `theme_rank` 観測を supersede)
 
+> 2026-09-06: 日次リサーチの現在の目的・実行経路は [ADR-0016](0016-discovery-first-edition.md) を参照。本記録は当時の判断として保存する。
+
+
 ## Date
 
 2026-08-22

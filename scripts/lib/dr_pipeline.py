@@ -650,14 +650,15 @@ def cmd_report_lint(argv):
             hard.append("ソース節がない")
         if n_sources == 0:
             hard.append("出典 URL が 0 件")
-        elif n_sources < min_sources:
+        elif n_sources < min_sources and not name.startswith(f"{date_s}_discovery_"):
             soft.append(f"出典 URL {n_sources} 件 (< {min_sources})")
 
-        missing = [s for s in ARTICLE_SECTIONS if f"## {s}" not in text]
+        discovery = name.startswith(f"{date_s}_discovery_")
+        missing = [] if discovery else [s for s in ARTICLE_SECTIONS if f"## {s}" not in text]
         if missing:
             soft.append(f"必須節欠落: {', '.join(missing)}")
 
-        if len(text) < MIN_BODY_CHARS:
+        if len(text) < MIN_BODY_CHARS and not discovery:
             soft.append(f"本文 {len(text)} 字 (< {MIN_BODY_CHARS})")
 
         results.append(
@@ -704,7 +705,7 @@ def cmd_wiki_quality_scan(argv):
     # line 逆引き用の既知 track 名 (現行 + aliases)。track 名はアンダースコアを
     # 含みうる (agent_systems) ため、既知名の最長一致で切る。config が読めない
     # 場合は「最初にハイフンを含むトークンの手前まで」の heuristic に落とす。
-    known_tracks = []
+    known_tracks = ["discovery"]
     try:
         _, tracks = _load_tracks(config_path)
         for name, v in tracks.items():

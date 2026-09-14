@@ -1,58 +1,18 @@
 [general]
 vault_path = "/path/to/your/obsidian/vault"
 output_dir = "daily-research"
-language = "ja"            # informational — not read by scripts (output language lives in prompts/)
-date_format = "%Y-%m-%d"   # informational — not read by scripts
-# Self-contamination guard (ADR-0008): artifacts matching these strings are never
-# counted as "external signals" (third-party mentions/adoptions of them are fine).
-self_signals = [
-  "github.com/YOUR_GITHUB_HANDLE",
-  "Your Name",
-]
+# Identify your own material; it is not independent external evidence.
+self_signals = ["github.com/YOUR_GITHUB_HANDLE", "Your Name"]
 
-[report]
-min_sources = 5
+[reader]
+profile = "reader-profile.md" # relative to the repository root
 
-# === Lines (tracks) — per-repo in-context research (ADR-0008 / ADR-0009 / ADR-0010) ===
-# Each track is a research LINE mapped 1:1 to a research repository via a
-# [[tracks.<line>.repos]] entry. Each morning the orchestrator picks ONE line by
-# rotation (date.toordinal() % non-daily line count — proleptic Gregorian ordinal,
-# not Unix epoch day; the cycle follows the order lines are written in this file,
-# ADR-0010; `daily = true` lines are excluded from the modulus, ADR-0011) and runs
-# `claude -p` with cwd = target_repo, so the run reads the repo's own operational context (CLAUDE.md auto-loads;
-# context_files are read explicitly) and produces a free-form explanatory
-# research note in the vault.
-#
-# context_files: repo-relative paths the run must Read in Step 1 (task ledger,
-# open questions, implementation log). Missing files are skipped.
-# aliases: former track names — keeps past_topics.json dedup working across
-# reorganizations.
-# daily: set `daily = true` on a line to run it EVERY morning in addition to the
-# rotation (the line is excluded from the rotation cycle; rotation-pick outputs
-# the rotated line first, then all daily lines).
-# template: optional project-relative path to a per-line report template
-# (section structure). Defaults to templates/report-template.md when omitted;
-# an unreadable path falls back to the default at runtime (ADR-0015).
+[research]
+model = "opus"
+timeout_seconds = 1500
+max_turns = 55
 
-[tracks.example_line]
-name = "Example Line 前進"
-# daily = true  # uncomment to run this line every day instead of in rotation
-# template = "templates/report-template-example.md"  # per-line section structure override
-focus = "example-repo line の外部動向の解説と repo への含意"
-aliases = []
-context_files = [".notes/TASKS.md", "docs/manifesto.md"]
-sources = [
-  "arXiv / Semantic Scholar (your domain keywords) — ただし文献は repo に使える場合のみ",
-  "関連 venue / registry / standard の新規開設・仕様変更",
-]
-
-[[tracks.example_line.repos]]
-key = "example"
-target_repo = "/Users/YOUR_USERNAME/path/to/example-repo"
-target_doi = "10.5281/zenodo.XXXXXXX"  # optional; informational — not read by scripts
-
-# [user_profile] is informational — not read by scripts.
-[user_profile]
-skills = ["Python"]
-interests = ["AI/ML"]
-goal = "研究 repo の外部環境を毎朝監視し、外部動向の解説と repo への含意を前提知識ゼロで読める解説レポートとして受け取る"
+[editorial]
+model = "opus"
+timeout_seconds = 1200
+max_turns = 45
