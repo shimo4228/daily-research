@@ -23,7 +23,7 @@ flowchart TD
     out --> clarity["call 2 · fresh-context clarity + source verification · Sonnet<br/>writes verify.json · fail-open"]
 ```
 
-The orchestrator (`scripts/daily-research.sh`) picks **`[general] lines_per_day` lines per morning as a rotation window** ([ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md)). The rotation is deterministic over the lines defined in `config.toml` `tracks`: the window starts at the proleptic Gregorian ordinal (`date.toordinal()`) × K mod N and takes K consecutive lines, so 7 lines with K=3 give each line three turns every 7 days ([ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md) / ADR-0017; K=1 is the one-line-a-day rotation). Lines marked `daily = true` still run every day outside the cycle, and the mechanism stays in the schema ([ADR-0011](docs/adr/0011-daily-line.md)). For each picked line, call 1 runs `claude -p` once — model Opus, 25-minute timeout, one retry on transient failure (a 401 aborts the remaining lines while keeping finished results) — with the line's `target_repo` as the working directory. The run:
+The orchestrator (`scripts/daily-research.sh`) picks **`[general] lines_per_day` lines per morning as a rotation window** ([ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md)). The rotation is deterministic over the lines defined in `config.toml` `tracks`: the window starts at the proleptic Gregorian ordinal (`date.toordinal()`) × K mod N and takes K consecutive lines, so 7 lines with K=3 give each line three turns every 7 days ([ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md) / ADR-0017; K=1 is the one-line-a-day rotation). Lines marked `daily = true` run every day outside the cycle ([ADR-0011](docs/adr/0011-daily-line.md)); `jev` is configured that way. For each picked line, call 1 runs `claude -p` once — model Opus, 25-minute timeout, one retry on transient failure (a 401 aborts the remaining lines while keeping finished results) — with the line's `target_repo` as the working directory. A line declared `mode = "ecosystem"` has no target repo: it observes an external ecosystem's own changes (new OSS, tools, releases, design trends) and runs from its own `state/<line>/` directory with `prompts/ecosystem-research-protocol.md` and `--safe-mode`, so the operator's `~/.claude` instructions, skills, plugins and hooks are not loaded (permissions are not part of safe mode — the boundary is still `--disallowedTools`, which for these lines also denies writing a `.claude/` config into the state directory and reading `~/.claude` / `~/.codex`); the write paths, the gate, the four content states, and call 2 are the same as for a repo line ([ADR-0018](docs/adr/0018-ecosystem-mode-and-daily-jev-line.md)). The run:
 
 1. reads a **short context** — `state/<line>/brief.md` (the line's subject, its open questions, what the reader already knows, where to look in the repo), the history of past questions, `pending.md` (the source of truth for held questions and opportunity memos), and the line brief. The repo's detail (the config's `context_files`) is read only after the question is chosen;
 2. makes a **diff-first pass** over the line's watched sources in `state/<line>/` (`watched-sources.md`, `playbook.md` — the playbook is delta-update only) and runs a short, wide search for what happened outside;
@@ -116,23 +116,32 @@ sources = ["arXiv / Semantic Scholar (your keywords)"]
 key = "repo_a"
 target_repo = "/path/to/your/research-repo-a"    # becomes the run's cwd (read-only)
 target_doi = "10.xxxx/zenodo.xxxxxxxx"           # optional
+
+[tracks.line_b]                                  # a line with no repo (ADR-0018)
+name = "Example Ecosystem 観測"
+mode = "ecosystem"                               # cwd = state/line_b, ecosystem protocol, --safe-mode
+daily = true
+template = "templates/report-template-ecosystem.md"
+focus = "The ecosystem to watch, and what to look at in it"
+sources = ["Official site / docs / GitHub org", "GitHub search, package registries"]
+# no repos and no context_files — the schema rejects both for mode = "ecosystem"
 ```
 
-Reports are generated in Japanese by default; change the language constraint in `prompts/repo-research-protocol.md`. See [CONTRIB](docs/CONTRIB.md) for CLI flags and environment variables.
+Reports are generated in Japanese by default; change the language constraint in `prompts/repo-research-protocol.md` (and `prompts/ecosystem-research-protocol.md`). See [CONTRIB](docs/CONTRIB.md) for CLI flags and environment variables.
 
 ## Project structure
 
 ```
 daily-research/
 ├── scripts/
-│   ├── daily-research.sh       # Orchestrator (rotation-pick → per line: call 1 research + call 2 verification/clarity, cwd = the line's repo)
+│   ├── daily-research.sh       # Orchestrator (rotation-pick → per line: call 1 research + call 2 verification/clarity, cwd = the line's repo, or state/<line> for an ecosystem line)
 │   ├── lib/                    # Sourced shell libraries + the Python parsing module
 │   │   ├── env.sh log.sh notify.sh lock.sh auth.sh claude.sh
 │   │   └── dr_pipeline.py      # Single stdlib-only JSON/TOML module (line-brief, past-themes, receipt-read, verify-read, report-lint, metrics)
 │   ├── check-auth.sh           # Real OAuth probe health check (shares lib/auth.sh)
 │   └── pre-commit.sh           # Secret / syntax guard
-├── prompts/                    # repo-research-protocol.md (call 1) + verification-protocol.md (call 2)
-├── templates/report-template.md       # Explanatory-report writing rules + fixed tail sections
+├── prompts/                    # repo-research-protocol.md + ecosystem-research-protocol.md (call 1) + verification-protocol.md (call 2)
+├── templates/report-template*.md      # Explanatory-report writing rules + fixed tail sections (per-line overrides: edge, ecosystem)
 ├── state/                      # Per-line brief / pending / watched-sources / playbook / runs (gitignored)
 ├── graph.jsonld                # FROZEN archive of the retired concept-graph pipeline (docs/graph-schema.md)
 ├── config.example.toml         # Line → repo mapping (config.toml is gitignored)
@@ -148,7 +157,8 @@ daily-research/
 | Objective = explain one external development and what it means for the repo, not concept reinforcement | Corroboration-as-theme is a benchmarked failure mode ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)); the proposal/approval framing turned every note into a pending to-do, so notes are now reading material with a deadline-only 機会メモ tail ([ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)); the adversarial refutation framing was later retired for readability ([ADR-0014](docs/adr/0014-trend-explanation-report.md)) |
 | Diff-first + citation gate baked into the run structure | Survey-per-run is a documented anti-pattern; sycophantic drift needs structural countermeasures, not prompt intent ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)) |
 | Repos are read-only at three layers (doctrine / execution / permissions) | Contributions flow through vault notes a human folds back in, avoiding cross-repo pollution |
-| Lines map to research repositories | Fixed topic domains caused structural saturation ([ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)); 1:1 repo lines since [ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md); 7 lines today (`akc` / `contemplative` / `aap` / `authorship` / `ans` / `desire` / `edge`), run three a morning as a rotation window ([ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md)) |
+| Lines map to research repositories | Fixed topic domains caused structural saturation ([ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)); 1:1 repo lines since [ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md); 7 repo lines today (`akc` / `contemplative` / `aap` / `authorship` / `ans` / `desire` / `edge`), run three a morning as a rotation window ([ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md)) |
+| A line may have no repo: `mode = "ecosystem"` | Some subjects are an outside ecosystem rather than a repo's surroundings, and forcing one into a repo line makes the repo's context the selection filter; an ecosystem line runs from its own state directory under its own call-1 protocol, with the shared receipt / gate / content-state contract unchanged. The daily `jev` line is the first one ([ADR-0018](docs/adr/0018-ecosystem-mode-and-daily-jev-line.md)) |
 | Four content states with a receipt-driven gate, and source verification in call 2 | "A fresh topic at full length every morning" forces an article out of a morning with no material; an honest quiet or hold is a normal result, and the line's success is decided from its run receipt. The claims are checked by a process other than the writer, re-fetching each source ([ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md)) |
 | Local state files, not external MCP memory | The previous Mem0 MCP integration ran zero times for 32 days due to silent failure; a local file fails loudly |
 | Shell orchestration + stdlib Python parser | No pip dependencies at runtime; JSON/TOML parsing lives in one testable `dr_pipeline.py` module |
@@ -168,7 +178,7 @@ Operational rationale (real auth probe vs `--version`, `--append-system-prompt-f
 - [RUNBOOK](docs/RUNBOOK.md) / [日本語](docs/RUNBOOK.ja.md) — operations: monitoring, troubleshooting
 - [CONTRIB](docs/CONTRIB.md) / [日本語](docs/CONTRIB.ja.md) — development: testing, CLI flags, environment variables
 - [graph-schema.md](docs/graph-schema.md) — schema of the frozen `graph.jsonld` archive (historical data)
-- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md) · [ADR-0002](docs/adr/0002-reports-as-frontier-diff.md) · [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) · [ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md) · [ADR-0005](docs/adr/0005-agent-systems-and-human-ai-publics-line-rebalance.md) · [ADR-0006](docs/adr/0006-self-improvement-loop-human-consumer.md) · [ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md) · [ADR-0008](docs/adr/0008-per-repo-in-context-research.md) · [ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md) · [ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md) · [ADR-0011](docs/adr/0011-daily-line.md) · [ADR-0012](docs/adr/0012-desire-back-to-rotation.md) · [ADR-0013](docs/adr/0013-edge-daily-line.md) · [ADR-0014](docs/adr/0014-trend-explanation-report.md) · [ADR-0015](docs/adr/0015-reader-contract-style-rules-and-edge-idea-harvest.md) · [ADR-0016](docs/adr/0016-discovery-first-edition.md) · [ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md) — architecture decisions
+- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md) · [ADR-0002](docs/adr/0002-reports-as-frontier-diff.md) · [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) · [ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md) · [ADR-0005](docs/adr/0005-agent-systems-and-human-ai-publics-line-rebalance.md) · [ADR-0006](docs/adr/0006-self-improvement-loop-human-consumer.md) · [ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md) · [ADR-0008](docs/adr/0008-per-repo-in-context-research.md) · [ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md) · [ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md) · [ADR-0011](docs/adr/0011-daily-line.md) · [ADR-0012](docs/adr/0012-desire-back-to-rotation.md) · [ADR-0013](docs/adr/0013-edge-daily-line.md) · [ADR-0014](docs/adr/0014-trend-explanation-report.md) · [ADR-0015](docs/adr/0015-reader-contract-style-rules-and-edge-idea-harvest.md) · [ADR-0016](docs/adr/0016-discovery-first-edition.md) · [ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md) · [ADR-0018](docs/adr/0018-ecosystem-mode-and-daily-jev-line.md) — architecture decisions
 
 ## License
 

@@ -20,10 +20,13 @@ daily-research/
 ├── config.example.toml                  # Line → repo mapping, lines_per_day, context_files, daily flag (template)
 ├── past_topics.json                     # Question / topic history (deduplication, gitignored)
 ├── prompts/
-│   ├── repo-research-protocol.md       # Per-repo research protocol, call 1 (--append-system-prompt-file)
+│   ├── repo-research-protocol.md       # Per-repo research protocol, call 1, mode = "repo" (--append-system-prompt-file)
+│   ├── ecosystem-research-protocol.md  # Ecosystem research protocol, call 1, mode = "ecosystem" (ADR-0018)
 │   └── verification-protocol.md        # Fresh-context verification + clarity protocol, call 2 (ADR-0017)
 ├── templates/
-│   └── report-template.md              # Explanatory-report writing rules + fixed tail sections (frontmatter)
+│   ├── report-template.md              # Explanatory-report writing rules + fixed tail sections (frontmatter)
+│   ├── report-template-edge.md         # Per-line section override for edge (ADR-0015)
+│   └── report-template-ecosystem.md    # Per-line section override for ecosystem lines (ADR-0018)
 ├── scripts/
 │   ├── daily-research.sh               # Main entry point (rotation window: lines_per_day lines/day; call 1 research + call 2 verification/clarity); sources lib/
 │   ├── check-auth.sh                   # OAuth check via real_auth_probe() + notification
@@ -54,7 +57,7 @@ daily-research/
 
 | Script | Description | Usage |
 |--------|-------------|-------|
-| `scripts/daily-research.sh` | Main entry point. Picks the `lines_per_day` lines of today's rotation window plus every `daily = true` line (`rotation-pick`, ADR-0010 / ADR-0011 / ADR-0017) and, per line, runs call 1 = `claude -p` with cwd = the line's `target_repo` (Opus, 25-min timeout, one retry on transient failure; 401 aborts), then call 2 = a fresh-context verification + clarity pass (Sonnet by default, 20-min timeout, fail-open). Sources `lib/`; includes env sanitization, auth probe, config schema check, receipt-driven report gate (ctl-015), report lint (ctl-016), and metrics append (incl. `clarity_pass` / `line_states` / `verification`). Called by launchd at AM 5:00. | `./scripts/daily-research.sh` |
+| `scripts/daily-research.sh` | Main entry point. Picks the `lines_per_day` lines of today's rotation window plus every `daily = true` line (`rotation-pick`, ADR-0010 / ADR-0011 / ADR-0017) and, per line, runs call 1 = `claude -p` with cwd = the line's `target_repo` (Opus, 25-min timeout, one retry on transient failure; 401 aborts) — or, when `[tracks.<name>].mode = "ecosystem"`, with cwd = `state/<line>`, the ecosystem protocol, and `--safe-mode` (ADR-0018; the branch is decided from `mode`, never from the line's name) — then call 2 = a fresh-context verification + clarity pass (Sonnet by default, 20-min timeout, fail-open). Sources `lib/`; includes env sanitization, auth probe, config schema check, receipt-driven report gate (ctl-015), report lint (ctl-016), and metrics append (incl. `clarity_pass` / `line_states` / `verification`). Called by launchd at AM 5:00. | `./scripts/daily-research.sh` |
 | `scripts/check-auth.sh` | Checks Claude OAuth token validity via `real_auth_probe()` (shared `lib/auth.sh`; a real Haiku API probe, not `claude --version`, which succeeds even with an expired token). Shows macOS notification on failure. | `./scripts/check-auth.sh` |
 | `scripts/pre-commit.sh` | Secret / syntax guard run as a git pre-commit hook. | (auto-run by git) |
 
@@ -78,7 +81,7 @@ daily-research/
 | `[general]` | Obsidian vault path (`vault_path`), output directory (`output_dir`), `lines_per_day` (how many lines run per morning = the width of the rotation window; int >= 1, default 1, anything else fails fast), `self_signals` (self-contamination guard: the operator's own artifacts never count as external signals). `language` / `date_format` are informational — not read by any script |
 | `[report]` | Minimum source count |
 | `[verification]` | `model` — the model for call 2 (verification + clarity). Default `sonnet` |
-| `[tracks.<name>]` | One block per line: `name`, `focus` (a description of the line's subject, not a selection criterion), `aliases`, `context_files` (repo-relative paths read after the question is chosen, Step 3b — task ledger, open questions, implementation log), `sources`, `template` (optional per-line section override, ADR-0015), `daily` (bool; `true` = run every morning outside the rotation, ADR-0011), plus one `[[tracks.<name>.repos]]` entry (`key`, `target_repo` — becomes the run's cwd; `target_doi` is informational, not read by scripts) |
+| `[tracks.<name>]` | One block per line: `name`, `focus` (a description of the line's subject, not a selection criterion), `aliases`, `context_files` (repo-relative paths read after the question is chosen, Step 3b — task ledger, open questions, implementation log), `sources`, `template` (optional per-line section override, ADR-0015), `daily` (bool; `true` = run every morning outside the rotation, ADR-0011), `mode` (`"repo"` by default and may be omitted, or `"ecosystem"`; an unknown value fails the schema check, ADR-0018), plus one `[[tracks.<name>.repos]]` entry for a repo line (`key`, `target_repo` — becomes the run's cwd; `target_doi` is informational, not read by scripts). A `mode = "ecosystem"` line must set neither `repos` nor `context_files` — the schema rejects both, since such a line has no repo context |
 | `[user_profile]` | Informational only — not read by any script |
 
 ## Development Workflow
@@ -88,8 +91,8 @@ daily-research/
 1. **Line focus / lines per day** -- Edit `config.toml` `focus` (the subject) / `[general] lines_per_day` (question selection is Step 3 of the protocol, ADR-0017 — there are no scoring weights)
 2. **Research sources** -- Edit `config.toml` line sources
 3. **Repo context read after the question is chosen** -- Edit `config.toml` `context_files`
-4. **Report format** -- Edit `templates/report-template.md` (keep ctl-016 lint sections in sync)
-5. **Research process / objective function** -- Edit `prompts/repo-research-protocol.md`
+4. **Report format** -- Edit `templates/report-template.md` (keep ctl-016 lint sections in sync; per-line overrides such as `templates/report-template-edge.md` and `templates/report-template-ecosystem.md` need the same two fixed tail sections)
+5. **Research process / objective function** -- Edit `prompts/repo-research-protocol.md`, or `prompts/ecosystem-research-protocol.md` for ecosystem lines. The two call-1 protocols share one contract — receipt format, evidence-file table, the four content states, the fixed tail sections — so a change to either side is made on both; `tests/test-daily-research.bats` applies the same assertions to each file
 6. **Verification and clarity rules** -- Edit `prompts/verification-protocol.md`; the model comes from `[verification] model`
 
 ### Making Changes to Execution
@@ -129,7 +132,8 @@ bats tests/
 # - past_topics.json validity
 # - Security (no hardcoded keys, API key unset, log permissions)
 # - Defensive programming (set -euo pipefail, trap, max-turns)
-# - E2E mock: per-line flow (cwd = repo, prompt injection), retry, receipt-driven report gate
+# - E2E mock: per-line flow (cwd = repo, prompt injection), the ecosystem execution form
+#   (cwd = state/<line>, ecosystem protocol, --safe-mode), retry, receipt-driven report gate
 #   (article / brief / quiet / hold / missing receipt / mismatch), call 2 verification tally
 # - lib/*.sh units: env sanitize, atomic lock, real auth probe, exit classify
 ```
@@ -138,13 +142,15 @@ bats tests/
 
 ### Call 1 — research run (Opus, per picked line: the rotation window's `lines_per_day` lines + every daily line)
 
-The run is invoked with `cd "$TARGET_REPO"` so the repo's own CLAUDE.md auto-loads as context.
+The run is invoked with `cd "$TARGET_REPO"` so the repo's own CLAUDE.md auto-loads as context. A `mode = "ecosystem"` line has no repo and is invoked with `cd "state/<line>"` instead (ADR-0018).
 
 | Flag | Value | Purpose |
 |------|-------|---------|
 | `-p` | Per-line prompt (line brief from `dr_pipeline.py line-brief` + allowed write paths — the vault report, `state/<line>/` brief / pending / watched-sources / playbook / evidence file / run receipt, and `past_topics.json` — + past-question dedup data + report template) | Non-interactive mode |
 | `--permission-mode` | `default` | Use default permission handling |
-| `--append-system-prompt-file` | `prompts/repo-research-protocol.md` | Inject the research protocol while preserving defaults |
+| `--append-system-prompt-file` | `prompts/repo-research-protocol.md`, or `prompts/ecosystem-research-protocol.md` when `mode = "ecosystem"` | Inject the research protocol while preserving defaults |
+| `--safe-mode` | ecosystem lines only | The line has no repo to ground it, so the operator's `~/.claude` CLAUDE.md / rules / skills / plugins / hooks / MCP are kept out of the run (`-p` and `--append-system-prompt-file` still apply under safe mode, verified 2026-09-21). Safe mode does not switch off permissions — the boundary is `--disallowedTools` |
+| `--disallowedTools` (ecosystem lines) | `Bash,Task,NotebookEdit` + `Edit(state/<line>/.claude/**)`, `Edit(state/<line>/CLAUDE.md)`, `Edit(state/<line>/.mcp.json)`, `Read(~/.claude/**)`, `Read(~/.codex/**)` (absolute paths) | The cwd is model-writable and a `.claude/settings.json` under the cwd is read as project settings on the next run; the operator's harness is kept unreadable at the permission layer (ADR-0018) |
 | `--allowedTools` | `WebSearch,WebFetch,Read,Glob,Grep` + `Write`/`Edit` scoped to absolute paths (vault report dir, `state/<line>/`, `past_topics.json`) | Repo stays read-only at the permission layer; writes go only to the three declared targets |
 | `--max-turns` | `55` | Guideline limit for research depth |
 | `--model` | `opus` | Rotation frees the daily budget for a single high-quality report (ADR-0010) |

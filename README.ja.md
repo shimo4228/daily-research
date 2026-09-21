@@ -23,7 +23,7 @@ flowchart TD
     out --> clarity["呼2 · fresh-context の clarity + 原典照合 · Sonnet<br/>verify.json を記録 · fail-open"]
 ```
 
-オーケストレータ (`scripts/daily-research.sh`) は毎朝 **`[general] lines_per_day` 本のラインを輪番 window で**選びます（[ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md)）。輪番は `config.toml` `tracks` のラインに対して決定論的です（開始位置 = proleptic Gregorian 序数 `date.toordinal()` × K mod N、そこから連続 K 本。7 ライン × K=3 なら 7 日で各ライン 3 回、[ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md) / ADR-0017。K=1 は 1 日 1 ラインの輪番と同じ）。`daily = true` のラインは周期の外で毎日走ります（機構は schema に残っています、[ADR-0011](docs/adr/0011-daily-line.md)）。選ばれた各ラインにつき、呼1 が `claude -p` を 1 回実行します — モデルは Opus、25 分タイムアウト、transient 失敗時のリトライ 1 回（401 は残ラインを中断しますが、完走済みラインの成果は保持）— 作業ディレクトリはラインの `target_repo` です。各 run は:
+オーケストレータ (`scripts/daily-research.sh`) は毎朝 **`[general] lines_per_day` 本のラインを輪番 window で**選びます（[ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md)）。輪番は `config.toml` `tracks` のラインに対して決定論的です（開始位置 = proleptic Gregorian 序数 `date.toordinal()` × K mod N、そこから連続 K 本。7 ライン × K=3 なら 7 日で各ライン 3 回、[ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md) / ADR-0017。K=1 は 1 日 1 ラインの輪番と同じ）。`daily = true` のラインは周期の外で毎日走ります（[ADR-0011](docs/adr/0011-daily-line.md)。現在は `jev` がこれにあたります）。選ばれた各ラインにつき、呼1 が `claude -p` を 1 回実行します — モデルは Opus、25 分タイムアウト、transient 失敗時のリトライ 1 回（401 は残ラインを中断しますが、完走済みラインの成果は保持）— 作業ディレクトリはラインの `target_repo` です。`mode = "ecosystem"` を宣言したラインには接地 repo がありません。外部エコシステムの変化そのもの（新しい OSS・ツール・release・設計潮流）を観測し、作業ディレクトリは自分の `state/<line>/`、プロトコルは `prompts/ecosystem-research-protocol.md`、`--safe-mode` 付きで走るので運用者の `~/.claude` の指示・skill・plugin・hook は読み込まれません（permissions は safe mode の対象外です。境界は従来どおり `--disallowedTools` で、ecosystem ラインでは state ディレクトリへの `.claude/` 設定の書き込みと `~/.claude` / `~/.codex` の読み取りも deny します）。書き込み先・ゲート・4 つの内容状態・呼2 は repo ラインと同一です（[ADR-0018](docs/adr/0018-ecosystem-mode-and-daily-jev-line.md)）。各 run は:
 
 1. **短い文脈**を読む — `state/<line>/brief.md`（このラインの主題 / 開いた問い / 読者に既知の前提 / repo の参照箇所）、過去の問いの履歴、`pending.md`（保留中の問いと機会メモの正本）、line brief。repo の詳細（config の `context_files`）は問いを選んだ後に読む;
 2. `state/<line>/` の監視ソース（`watched-sources.md`、`playbook.md` — playbook は delta 更新のみ）を **diff-first** で確認し、短く広い検索で外部の出来事を見る;
@@ -116,23 +116,32 @@ sources = ["arXiv / Semantic Scholar (your keywords)"]
 key = "repo_a"
 target_repo = "/path/to/your/research-repo-a"    # run の cwd になる (read-only)
 target_doi = "10.xxxx/zenodo.xxxxxxxx"           # 任意
+
+[tracks.line_b]                                  # 接地 repo を持たないライン (ADR-0018)
+name = "Example Ecosystem 観測"
+mode = "ecosystem"                               # cwd = state/line_b、ecosystem プロトコル、--safe-mode
+daily = true
+template = "templates/report-template-ecosystem.md"
+focus = "観測対象のエコシステムと、そこで見るべき点"
+sources = ["公式サイト / 公式ドキュメント / 公式 GitHub organization", "GitHub 検索・パッケージレジストリ"]
+# repos と context_files は書けない — mode = "ecosystem" では schema が拒否する
 ```
 
-レポートはデフォルトで日本語生成です。出力言語は `prompts/repo-research-protocol.md` の言語制約を変更します。CLI フラグ・環境変数は [CONTRIB](docs/CONTRIB.md) を参照。
+レポートはデフォルトで日本語生成です。出力言語は `prompts/repo-research-protocol.md`（および `prompts/ecosystem-research-protocol.md`）の言語制約を変更します。CLI フラグ・環境変数は [CONTRIB](docs/CONTRIB.md) を参照。
 
 ## プロジェクト構成
 
 ```
 daily-research/
 ├── scripts/
-│   ├── daily-research.sh       # オーケストレータ (rotation-pick → ラインごとに呼1 研究 + 呼2 検証 + clarity、cwd = ラインの repo)
+│   ├── daily-research.sh       # オーケストレータ (rotation-pick → ラインごとに呼1 研究 + 呼2 検証 + clarity、cwd = ラインの repo、ecosystem ラインは state/<line>)
 │   ├── lib/                    # sourced shell ライブラリ + Python 解析モジュール
 │   │   ├── env.sh log.sh notify.sh lock.sh auth.sh claude.sh
 │   │   └── dr_pipeline.py      # JSON/TOML の単一 stdlib モジュール (line-brief, past-themes, receipt-read, verify-read, report-lint, metrics)
 │   ├── check-auth.sh           # 実 OAuth probe ヘルスチェック (lib/auth.sh を共有)
 │   └── pre-commit.sh           # secret / 構文ガード
-├── prompts/                    # repo-research-protocol.md (呼1) + verification-protocol.md (呼2)
-├── templates/report-template.md       # 解説レポートの記述規律 + 固定 2 節
+├── prompts/                    # repo-research-protocol.md + ecosystem-research-protocol.md (呼1) + verification-protocol.md (呼2)
+├── templates/report-template*.md      # 解説レポートの記述規律 + 固定 2 節 (ライン別: edge / ecosystem)
 ├── state/                      # ラインごとの brief / pending / watched-sources / playbook / runs (gitignored)
 ├── graph.jsonld                # 退役 concept-graph パイプラインの凍結アーカイブ (docs/graph-schema.md)
 ├── config.example.toml         # line → repo マッピング (config.toml は gitignore)
@@ -148,7 +157,8 @@ daily-research/
 | 目的関数 = 外部動向 1 つの解説と repo への含意（概念補強ではなく） | 裏付け収束はベンチマーク実証済みの failure mode（[ADR-0008](docs/adr/0008-per-repo-in-context-research.md)）。提案・承認という枠組みは全ノートを「返答待ち todo」にしたため、ノートは読み物 + 期限付き機会だけの機会メモに転換（[ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)）。対立的な反証フレーミングは後に可読性のため撤去（[ADR-0014](docs/adr/0014-trend-explanation-report.md)） |
 | diff-first + citation ゲートを run 構造に組み込む | survey-per-run は文書化された anti-pattern。追従 drift はプロンプトの意図でなく構造で防ぐ（[ADR-0008](docs/adr/0008-per-repo-in-context-research.md)） |
 | repo は三層 (doctrine / 実行 / permission) で read-only | 寄与は人間が取り込む Vault ノート経由で流れ、repo 間汚染を回避 |
-| ラインを研究 repo にマッピング | 固定トピックドメインが構造的飽和を招いた（[ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)）。[ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md) 以降は repo 1:1。現在は 7 ライン（`akc` / `contemplative` / `aap` / `authorship` / `ans` / `desire` / `edge`）を 1 日 3 本の輪番 window で回す（[ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md)） |
+| ラインを研究 repo にマッピング | 固定トピックドメインが構造的飽和を招いた（[ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)）。[ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md) 以降は repo 1:1。現在は 7 本の repo ライン（`akc` / `contemplative` / `aap` / `authorship` / `ans` / `desire` / `edge`）を 1 日 3 本の輪番 window で回す（[ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md)） |
+| 接地 repo を持たないライン: `mode = "ecosystem"` | 主題が「ある repo の周辺」ではなく外部エコシステムそのものである場合、repo ラインに押し込むと repo の文脈が選定フィルターになる。ecosystem ラインは自分の state ディレクトリで専用の呼1 プロトコルに従って走り、receipt・ゲート・内容状態の共通契約は変わらない。最初の 1 本が daily の `jev`（[ADR-0018](docs/adr/0018-ecosystem-mode-and-daily-jev-line.md)） |
 | 4 つの内容状態 + receipt 駆動のゲート、呼2 で原典照合 | 「毎回新テーマを十分な長さで完結」は材料の無い朝に無理な記事を書かせる。正直な quiet / hold を正常な結果にし、成否は run receipt で決定論判定する。主張の裏取りは書き手と別プロセスが原典を取り直して行う（[ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md)） |
 | 外部 MCP メモリではなくローカル state ファイル | 旧 Mem0 MCP 統合は静かな失敗で 32 日間ゼロ稼働した; ローカルファイルは失敗が顕在化する |
 | Shell オーケストレーション + stdlib Python 解析 | ランタイムに pip 依存なし; JSON/TOML 解析を単一のテスト可能な `dr_pipeline.py` に集約 |
@@ -168,7 +178,7 @@ daily-research/
 - [RUNBOOK](docs/RUNBOOK.md) / [日本語](docs/RUNBOOK.ja.md) — 運用: モニタリング、トラブルシューティング
 - [CONTRIB](docs/CONTRIB.md) / [日本語](docs/CONTRIB.ja.md) — 開発: テスト、CLI フラグ、環境変数
 - [graph-schema.md](docs/graph-schema.md) — 凍結アーカイブ `graph.jsonld` のスキーマ（過去データ用）
-- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md) · [ADR-0002](docs/adr/0002-reports-as-frontier-diff.md) · [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) · [ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md) · [ADR-0005](docs/adr/0005-agent-systems-and-human-ai-publics-line-rebalance.md) · [ADR-0006](docs/adr/0006-self-improvement-loop-human-consumer.md) · [ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md) · [ADR-0008](docs/adr/0008-per-repo-in-context-research.md) · [ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md) · [ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md) · [ADR-0011](docs/adr/0011-daily-line.md) · [ADR-0012](docs/adr/0012-desire-back-to-rotation.md) · [ADR-0013](docs/adr/0013-edge-daily-line.md) · [ADR-0014](docs/adr/0014-trend-explanation-report.md) · [ADR-0015](docs/adr/0015-reader-contract-style-rules-and-edge-idea-harvest.md) · [ADR-0016](docs/adr/0016-discovery-first-edition.md) · [ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md) — アーキテクチャ決定記録
+- [ADR-0001](docs/adr/0001-research-repo-feedback-engine.md) · [ADR-0002](docs/adr/0002-reports-as-frontier-diff.md) · [ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md) · [ADR-0004](docs/adr/0004-line-restructuring-and-frontier-mode.md) · [ADR-0005](docs/adr/0005-agent-systems-and-human-ai-publics-line-rebalance.md) · [ADR-0006](docs/adr/0006-self-improvement-loop-human-consumer.md) · [ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md) · [ADR-0008](docs/adr/0008-per-repo-in-context-research.md) · [ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md) · [ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md) · [ADR-0011](docs/adr/0011-daily-line.md) · [ADR-0012](docs/adr/0012-desire-back-to-rotation.md) · [ADR-0013](docs/adr/0013-edge-daily-line.md) · [ADR-0014](docs/adr/0014-trend-explanation-report.md) · [ADR-0015](docs/adr/0015-reader-contract-style-rules-and-edge-idea-harvest.md) · [ADR-0016](docs/adr/0016-discovery-first-edition.md) · [ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md) · [ADR-0018](docs/adr/0018-ecosystem-mode-and-daily-jev-line.md) — アーキテクチャ決定記録
 
 ## ライセンス
 

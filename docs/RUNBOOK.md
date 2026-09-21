@@ -66,6 +66,8 @@ daily-research.sh (05:00)
 │   lines_per_day — proleptic Gregorian ordinal, ADR-0010 / ADR-0017) + every `daily = true` line (ADR-0011)
 ├── Call 1: claude -p, cwd = the picked line's target_repo (Opus, --max-turns 55,
 │   25-min timeout, one retry on transient failure; 401 aborts)
+│   [mode = "ecosystem" lines have no target_repo: cwd = state/<line>,
+│    prompts/ecosystem-research-protocol.md, plus --safe-mode — ADR-0018]
 │   ├── Read a short context (line brief + state/<line>/brief.md + question history + pending.md)
 │   ├── Diff-first pass over watched sources + wide search · pick one of 3–6 candidate
 │   │   questions (or quiet / hold) · read context_files after the pick · research with
@@ -135,7 +137,8 @@ launchctl list | grep daily-research
 | `Config schema check passed` | `config.toml` matches the current (ADR-0008) schema |
 | `Rotation pick: a, b, c (ADR-0010/0017)` | The rotation window picked for today |
 | `Today's lines: N` | How many lines run today (`lines_per_day` + any daily lines) |
-| `=== Line: <track> (<repo path>) ===` | Per-line run starting with that repo as cwd |
+| `=== Line: <track> (<repo path>) ===` | Per-line run starting with that repo as cwd (an ecosystem line has no repo and logs `no target repo`) |
+| `Line <track> mode: ecosystem (cwd = state/<track>, safe mode)` | The line is `mode = "ecosystem"`: it runs from its state directory under the ecosystem protocol with `--safe-mode` (ADR-0018) |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | Per-line run statistics (cost, turns, duration, tokens) |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | Transient failure; the single retry is starting |
 | `ERROR: Line <track> returned 401 — aborting remaining lines` | Auth expired mid-run; remaining lines are skipped, finished lines' results are kept |
@@ -218,7 +221,7 @@ rm -rf .daily-research.lock
 **Causes**:
 - Rate limit hit (Claude Max plan quota) or network issues during WebSearch
 - The 25-minute per-line timeout expiring on an unusually deep run
-- The line's `target_repo` path in `config.toml` missing or moved
+- The line's `target_repo` path in `config.toml` missing or moved (a `mode = "ecosystem"` line has no `target_repo` — it runs from `state/<line>`, which the script creates, and logs `Line <track> mode: ecosystem (cwd = state/<track>, safe mode)`)
 
 **Fix**: Check the specific exit class in the log (`E_TRANSIENT` / `E_FATAL`). One line failing does not stop the others — their reports still land and get ingested; the day's final class is then `E_PARTIAL` (exit 1, `=== Failed (E_PARTIAL:<lines>, exit code 1) ===`), while `E_NO_REPORT` is reserved for a day where no line passed the gate (ADR-0011 / ADR-0017 — a day where every line ended quiet is a success, not `E_NO_REPORT`). Verify `target_repo` exists, then re-run the script manually. A 401 (`E_AUTH`) means the OAuth token expired: see issue 1.
 
@@ -324,4 +327,4 @@ If Mac was asleep at the scheduled time, launchd runs the job on wake (behavior 
 
 ## Cost
 
-Each morning the `lines_per_day` lines of the rotation window (3 by default) plus every `daily = true` line run (ADR-0010 / ADR-0011 / ADR-0017). Per line: Call 1 = one Opus research run (at most 2 invocations with its single retry, 25-min cap) plus Call 2 = one verification + clarity pass (Sonnet by default, 20-min cap). Three lines run sequentially in 25–35 minutes typically, and about 195 minutes from 05:00 in the worst case; the cost runs about $12–15 a day (call 1 ≈ $4–5 per line, call 2 ≈ $0.5–1). With Claude Max plan, model usage is covered by the subscription with no per-token charges; cost and duration are recorded in `metrics.jsonl` for actual measurement.
+Each morning the `lines_per_day` lines of the rotation window (3 by default) plus every `daily = true` line run (ADR-0010 / ADR-0011 / ADR-0017) — four lines in the current configuration, the three rotating repo lines plus the daily ecosystem line `jev` (ADR-0018). Per line: Call 1 = one Opus research run (at most 2 invocations with its single retry, 25-min cap) plus Call 2 = one verification + clarity pass (Sonnet by default, 20-min cap). Four lines run sequentially in 35–45 minutes typically, and about 260 minutes from 05:00 in the worst case; the cost runs about $16–20 a day (call 1 ≈ $4–5 per line, call 2 ≈ $0.5–1, and a line that ends quiet or hold costs less because call 2 is skipped). These figures are derived from the per-line numbers, not yet measured over a full four-line morning. With Claude Max plan, model usage is covered by the subscription with no per-token charges; cost and duration are recorded in `metrics.jsonl` for actual measurement.

@@ -37,6 +37,20 @@ def _result_dict(raw):
 # --- config helpers: 1 line = N repos schema の解析 + 旧 schema 検出 guard ---
 _TRACK_NAME_RE = re.compile(r"[A-Za-z0-9_-]+")
 
+# [tracks.<x>].mode (ADR-0018)。"repo" (既定) = cwd を target_repo にして repo の運用文脈の
+# 中で走る line (ADR-0008)。"ecosystem" = 接地 repo を持たず、外部エコシステムの変化そのものを
+# 観測する line — cwd は state/<line>、プロトコルは prompts/ecosystem-research-protocol.md。
+# invariant: ecosystem line は repo 文脈を要求できない (repos / context_files は schema で拒否)。
+MODE_REPO = "repo"
+MODE_ECOSYSTEM = "ecosystem"
+_TRACK_MODES = (MODE_REPO, MODE_ECOSYSTEM)
+_ECOSYSTEM_FORBIDDEN_KEYS = ("repos", "context_files")
+
+
+def _track_mode(track_cfg):
+    """line の mode を返す。_load_tracks が enum 検証済みの値だけを通す。"""
+    return track_cfg.get("mode", MODE_REPO)
+
 
 def _lines_per_day(cfg):
     """[general].lines_per_day (1 日に走らせる輪番 line 数、ADR-0017)。既定 1。
@@ -78,11 +92,26 @@ def _load_tracks(config_path):
             raise ValueError(
                 f"[tracks.{name}].template must be a string path, got {v['template']!r}"
             )
+        # mode は enum 限定 (bool / int / 未知の語は fail-fast)。ecosystem line に repo 文脈の
+        # key を書いた config は、どちらの実行形か曖昧なまま朝を迎えるので起動時に落とす。
+        if isinstance(v, dict) and "mode" in v:
+            if not isinstance(v["mode"], str) or v["mode"] not in _TRACK_MODES:
+                raise ValueError(
+                    f"[tracks.{name}].mode must be one of {_TRACK_MODES}, got {v['mode']!r}"
+                )
+            if v["mode"] == MODE_ECOSYSTEM:
+                for key in _ECOSYSTEM_FORBIDDEN_KEYS:
+                    if key in v:
+                        raise ValueError(
+                            f'[tracks.{name}] has mode = "ecosystem" and must not set '
+                            f"{key} (an ecosystem line has no target repo context)"
+                        )
     return cfg, tracks
 
 
 def _track_repos(track_cfg):
-    """line 定義の repos 配列を返す。無ければ [] (= 自由探索ライン)。"""
+    """line 定義の repos 配列を返す。無ければ []。repo mode で repos が空の line は
+    行を出さない (実行されない)。repo を持たない line は mode = "ecosystem" で宣言する。"""
     repos = track_cfg.get("repos", [])
     return repos if isinstance(repos, list) else []
 
@@ -91,10 +120,15 @@ def _track_rows(tracks):
     """全 line の (track, key, target_repo, daily) 行を config 記述順で返す。
     tracks / rotation-pick が共有する行構築の正本 — 輪番の単位・順序は
     この関数が定義する (二重実装で周期が黙って乖離するのを防ぐ)。
-    daily = true の line は毎日実行され、輪番の周期には入らない。"""
+    daily = true の line は毎日実行され、輪番の周期には入らない。
+    ecosystem line (ADR-0018) は key = track 名、target_repo = "" の 1 行 — 3 列の形を保ち、
+    実行形 (cwd / プロトコル) は呼び出し側が [tracks.<x>].mode から決める。"""
     rows = []
     for track, v in tracks.items():
         daily = bool(v.get("daily"))
+        if _track_mode(v) == MODE_ECOSYSTEM:
+            rows.append((track, track, "", daily))
+            continue
         for r in _track_repos(v):
             key = r.get("key")
             repo = r.get("target_repo")
@@ -355,6 +389,8 @@ def cmd_line_brief(argv):
 
     print("## Line 定義 (config)")
     print()
+    if _track_mode(v) == MODE_ECOSYSTEM:
+        print("- mode: ecosystem (接地 repo なし — 観測対象は外部エコシステムの変化そのもの)")
     if v.get("name"):
         print(f"- name: {v['name']}")
     if v.get("focus"):

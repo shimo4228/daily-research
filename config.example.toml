@@ -23,7 +23,8 @@ model = "sonnet"
 
 # === Lines (tracks) — per-repo in-context research (ADR-0008 / ADR-0010 / ADR-0017) ===
 # Each track is a research LINE mapped 1:1 to a research repository via a
-# [[tracks.<line>.repos]] entry. Track names must match [A-Za-z0-9_-]+.
+# [[tracks.<line>.repos]] entry (lines with mode = "ecosystem" have no repo — see the
+# ecosystem example below). Track names must match [A-Za-z0-9_-]+.
 # Each morning the orchestrator picks a WINDOW of [general].lines_per_day lines:
 # k = lines_per_day, n = non-daily line count, day = date.toordinal() (proleptic
 # Gregorian ordinal, not Unix epoch day), start = (day * k) % n, lines
@@ -61,6 +62,34 @@ sources = [
 key = "example"
 target_repo = "/Users/YOUR_USERNAME/path/to/example-repo"
 target_doi = "10.5281/zenodo.XXXXXXX"  # optional; informational — not read by scripts
+
+# === Ecosystem line (mode = "ecosystem", ADR-0018) ===
+# mode: "repo" (default, may be omitted) or "ecosystem". An ecosystem line has NO target
+# repository: it observes an external ecosystem itself (new OSS, tools, releases, design
+# trends), not "external developments relevant to a repo". It runs `claude -p` with
+# cwd = state/<line>/ (line-local state is the only local context), uses
+# prompts/ecosystem-research-protocol.md, and passes --safe-mode so the operator's
+# ~/.claude instructions / skills / plugins / hooks are not loaded. Safe mode does NOT
+# switch off permissions, so the boundary stays --disallowedTools; ecosystem lines add
+# denies for writing .claude/ / CLAUDE.md / .mcp.json into state/<line>/ (the cwd is
+# model-writable) and for reading ~/.claude and ~/.codex. Write permissions, the receipt
+# gate, the four content states, and the verification call are identical to repo lines. `repos` and `context_files` are rejected by the schema for this mode.
+# The watchlist lives in state/<line>/watched-sources.md (format: see the protocol);
+# duplicates are judged by "what changed since the last report", not by topic name.
+# Combine with `daily = true` to observe every morning outside the rotation window.
+
+[tracks.example_ecosystem_line]
+name = "Example Ecosystem 観測"
+mode = "ecosystem"
+daily = true
+template = "templates/report-template-ecosystem.md"
+focus = "観測対象のエコシステム (例: ある新しいモデル / プロトコル / ランタイムの周辺) で、前回報告以降に起きた変化。対象の範囲と、見るべき点 (実装の実在・実測・いま試せるか) を書く"
+aliases = []
+sources = [
+  "公式サイト / 公式ドキュメント / 公式 GitHub organization",
+  "GitHub 検索・パッケージレジストリ (新規 repository・release)",
+  "まとめ list (未知候補の入口としてのみ。掲載は採用根拠にしない)",
+]
 
 # [user_profile] is informational — not read by scripts.
 [user_profile]

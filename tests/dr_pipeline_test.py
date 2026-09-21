@@ -1428,3 +1428,145 @@ def test_report_lint_brief_still_hard_fails_without_sources(monkeypatch, capsys,
     r = json.loads(out)["results"][0]
     assert r["kind"] == "brief"
     assert any("ソース節" in h for h in r["hard"])
+
+
+# =============================================================================
+# ADR-0018: ecosystem-mode line (mode = "ecosystem" — 接地 repo なし、daily で毎日)
+# =============================================================================
+
+CONFIG_ECO = str(FIXTURES / "config-ecosystem.toml")
+
+
+def _eco_cfg(tmp_path, eco_extra=""):
+    cfg = tmp_path / "eco.toml"
+    cfg.write_text(
+        '[tracks.a]\nname = "A"\n'
+        '[[tracks.a.repos]]\nkey = "a"\ntarget_repo = "/nonexistent/a"\n'
+        f'[tracks.eco]\nname = "Eco"\nmode = "ecosystem"\n{eco_extra}'
+    )
+    return str(cfg)
+
+
+@pytest.mark.unit
+def test_ecosystem_daily_line_runs_every_day_after_unchanged_window(monkeypatch, capsys):
+    import datetime
+
+    base = datetime.date(2026, 9, 15)
+    for i in range(14):
+        d = (base + datetime.timedelta(days=i)).isoformat()
+        with_eco = _pick(monkeypatch, capsys, CONFIG_ECO, d)
+        # 輪番 window (本数・順序・位相) は daily line の追加で変わらない
+        assert with_eco[:-1] == _pick(monkeypatch, capsys, CONFIG_K3, d)
+        assert len(with_eco) == 3 + 1  # lines_per_day = 3 の意味は不変、daily は window の外
+        assert with_eco[-1] == "eco"
+
+
+@pytest.mark.unit
+def test_ecosystem_row_has_empty_target_repo(monkeypatch, capsys):
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["tracks", CONFIG_ECO])
+    assert rc == 0
+    rows = [r.split("\t") for r in out.splitlines()]
+    assert [r[0] for r in rows] == [*K3_ORDER, "eco"]
+    assert rows[-1] == ["eco", "eco", ""]
+    assert all(len(r) == 3 and r[2] for r in rows[:-1])
+
+
+@pytest.mark.unit
+def test_ecosystem_non_daily_line_joins_rotation(monkeypatch, capsys, tmp_path):
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["tracks", _eco_cfg(tmp_path)])
+    assert rc == 0
+    assert out.splitlines() == ["a\ta\t/nonexistent/a", "eco\teco\t"]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "eco_extra,needle",
+    [
+        ('[[tracks.eco.repos]]\nkey = "e"\ntarget_repo = "/nonexistent/e"\n', "repos"),
+        ('context_files = ["CLAUDE.md"]\n', "context_files"),
+    ],
+)
+def test_ecosystem_line_cannot_request_repo_context(
+    monkeypatch, capsys, tmp_path, eco_extra, needle
+):
+    rc, _, err = run_cmd(monkeypatch, capsys, ["tracks", _eco_cfg(tmp_path, eco_extra)])
+    assert rc == 1
+    assert "ecosystem" in err and needle in err
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("value", ['"explore"', "true", "1"])
+def test_mode_must_be_known_enum(monkeypatch, capsys, tmp_path, value):
+    cfg = tmp_path / "bad-mode.toml"
+    cfg.write_text(
+        f'[tracks.a]\nname = "A"\nmode = {value}\n'
+        '[[tracks.a.repos]]\nkey = "a"\ntarget_repo = "/nonexistent/a"\n'
+    )
+    rc, _, err = run_cmd(monkeypatch, capsys, ["tracks", str(cfg)])
+    assert rc == 1
+    assert "mode must be" in err
+
+
+@pytest.mark.unit
+def test_explicit_repo_mode_equals_default(monkeypatch, capsys, tmp_path):
+    cfg = tmp_path / "repo-mode.toml"
+    cfg.write_text(
+        '[tracks.a]\nname = "A"\nmode = "repo"\n'
+        '[[tracks.a.repos]]\nkey = "a"\ntarget_repo = "/nonexistent/a"\n'
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["tracks", str(cfg)])
+    assert rc == 0
+    assert out.splitlines() == ["a\ta\t/nonexistent/a"]
+
+
+@pytest.mark.unit
+def test_line_brief_ecosystem_has_mode_and_no_repo_context(monkeypatch, capsys):
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["line-brief", CONFIG_ECO, "eco"])
+    assert rc == 0
+    assert "- mode: ecosystem" in out
+    assert "focus: Ecosystem line focus" in out
+    assert "fixture-eco-source" in out
+    assert "github.com/example-author" in out  # 自己汚染ガードは mode に依らず注入
+    assert "選定後に読む候補" not in out
+    assert "Step 3b" not in out
+
+
+@pytest.mark.unit
+def test_line_brief_repo_line_unchanged_by_mode_key(monkeypatch, capsys):
+    rc, eco_cfg_out, _ = run_cmd(monkeypatch, capsys, ["line-brief", CONFIG_ECO, "akc"])
+    assert rc == 0
+    rc, k3_out, _ = run_cmd(monkeypatch, capsys, ["line-brief", CONFIG_K3, "akc"])
+    assert rc == 0
+    assert eco_cfg_out == k3_out
+    assert "mode:" not in k3_out
+
+
+@pytest.mark.unit
+def test_template_path_ecosystem_line(monkeypatch, capsys):
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["template-path", CONFIG_ECO, "eco"])
+    assert rc == 0
+    assert out.strip() == "templates/report-template-ecosystem.md"
+
+
+@pytest.mark.unit
+def test_past_themes_groups_ecosystem_line(monkeypatch, capsys, tmp_path):
+    past = tmp_path / "past.json"
+    past.write_text(
+        json.dumps(
+            {
+                "topics": [
+                    {
+                        "date": "2026-09-20",
+                        "track": "eco",
+                        "title": "",
+                        "question": "X は初めて動くコードを公開したか",
+                        "answer_scope": "v0.1.0 の release と依存関係まで",
+                    }
+                ]
+            }
+        )
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["past-themes", str(past), CONFIG_ECO])
+    assert rc == 0
+    assert "Track: eco" in out
+    assert "X は初めて動くコードを公開したか — v0.1.0 の release と依存関係まで" in out

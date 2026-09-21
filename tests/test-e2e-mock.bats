@@ -24,9 +24,11 @@ setup() {
   cp "$REAL_PROJECT_DIR/scripts/daily-research.sh" "$MOCK_PROJECT/scripts/"
   cp -R "$REAL_PROJECT_DIR/scripts/lib" "$MOCK_PROJECT/scripts/"
   cp "$REAL_PROJECT_DIR/prompts/repo-research-protocol.md" "$MOCK_PROJECT/prompts/"
+  cp "$REAL_PROJECT_DIR/prompts/ecosystem-research-protocol.md" "$MOCK_PROJECT/prompts/"
   # 呼2 protocol は mock が名前で識別するだけなので stub で足りる (ADR-0017)
   cp "$REAL_PROJECT_DIR/tests/fixtures/verification-protocol.stub.md" "$MOCK_PROJECT/prompts/verification-protocol.md"
   cp "$REAL_PROJECT_DIR/templates/report-template.md" "$MOCK_PROJECT/templates/"
+  cp "$REAL_PROJECT_DIR/templates/report-template-ecosystem.md" "$MOCK_PROJECT/templates/"
 
   # 対象 repo (cwd になる) を作る。akc / authorship の 2 line 構成
   mkdir -p "$MOCK_HOME/mock-repos/agent-knowledge-cycle"
@@ -132,8 +134,9 @@ if [[ -z "$PROTOCOL" ]]; then
   esac
 fi
 
-# --- 呼1: per-line research run (repo-research-protocol.md) ---
-if [[ "$PROTOCOL" == *repo-research-protocol.md ]]; then
+# --- 呼1: per-line research run (repo-research-protocol.md、ecosystem line は
+#     ecosystem-research-protocol.md — ADR-0018) ---
+if [[ "$PROTOCOL" == *repo-research-protocol.md || "$PROTOCOL" == *ecosystem-research-protocol.md ]]; then
   # プロンプトから track を抽出 (per-line プロンプトの "- line (track): X" 行)
   TRACK=$(printf '%s\n' "$PROMPT" | sed -n 's/^- line (track): //p' | head -1)
   TRACK=${TRACK:-unknown}
@@ -142,6 +145,10 @@ if [[ "$PROTOCOL" == *repo-research-protocol.md ]]; then
   printf '%s' "$PROMPT" > "$MOCK_HOME_DIR/.prompt_$TRACK"
   printf '%s' "$ALLOWED" > "$MOCK_HOME_DIR/.allowed_$TRACK"
   printf '%s' "$DISALLOWED" > "$MOCK_HOME_DIR/.disallowed_$TRACK"
+  # 実行形の検証用 (ADR-0018): cwd / protocol / 全引数を track 別に記録
+  pwd -P > "$MOCK_HOME_DIR/.cwd_$TRACK"
+  printf '%s' "$PROTOCOL" > "$MOCK_HOME_DIR/.protocol_$TRACK"
+  printf '%s\n' "$@" > "$MOCK_HOME_DIR/.args_$TRACK"
   # 呼び出し回数カウンタ (retry テスト用)
   COUNT_FILE="$MOCK_HOME_DIR/.calls_$TRACK"
   COUNT=$(( $(cat "$COUNT_FILE" 2>/dev/null || echo 0) + 1 ))
@@ -338,6 +345,21 @@ daily = true
 [[tracks.desire.repos]]
 key = "desire"
 target_repo = "$MOCK_HOME/mock-repos/desire-frontier"
+EOF
+}
+
+# mode = "ecosystem" の daily line を config に追記する (ADR-0018)。接地 repo を持たない —
+# mock-repos 配下に dir を作らないこと自体が「repo 文脈を要求しない」の検証になる
+add_ecosystem_daily_line() {
+  cat >> "$MOCK_PROJECT/config.toml" << EOF
+
+[tracks.eco]
+name = "Ecosystem Line"
+mode = "ecosystem"
+daily = true
+template = "templates/report-template-ecosystem.md"
+focus = "Ecosystem line focus"
+sources = ["fixture-eco-source"]
 EOF
 }
 
@@ -1208,4 +1230,120 @@ assert rec["line_states"]["article"] == 2, rec
 assert rec["verification"]["lines_verified"] == 2, rec
 assert rec["verification"]["supported"] == 6, rec
 PY
+}
+
+
+# =============================================================================
+# ADR-0018: ecosystem-mode daily line (接地 repo なし)
+# =============================================================================
+
+# 否定 assertion。bats は test 本体を set -e で走らせるが、`! cmd` は errexit の対象外で、
+# test の最終行でない限り失敗しても検出されない。否定は必ずこの helper で書く。
+refute_grep() {
+  if grep "$@"; then
+    echo "refute_grep: unexpected match: grep $*" >&2
+    return 1
+  fi
+}
+
+@test "E2E ecosystem: the daily ecosystem line runs after the rotation pick with no target repo" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  add_ecosystem_daily_line
+
+  run run_script
+  [ "$status" -eq 0 ]
+  local log_content
+  log_content=$(get_log)
+
+  echo "$log_content" | grep -q "Rotation pick: $PICKED, eco"
+  echo "$log_content" | grep -q "Today's lines: 2"
+  echo "$log_content" | grep -q "Line eco report gate passed"
+  refute_grep -q "target_repo が存在しない" <<< "$log_content"
+  [ ! -f "$MOCK_HOME/.calls_$OTHER" ]   # 輪番の本数は daily line の追加で変わらない
+  [ -f "$MOCK_HOME/mock-vault/daily-research/${DR_DATE}_eco_mock-report.md" ]
+  [ -f "$MOCK_PROJECT/state/eco/runs/${DR_DATE}.json" ]
+}
+
+@test "E2E ecosystem: execution form — cwd is the line state dir, ecosystem protocol, safe mode" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  add_ecosystem_daily_line
+
+  run run_script
+  [ "$status" -eq 0 ]
+
+  [ "$(cat "$MOCK_HOME/.cwd_eco")" = "$(cd "$MOCK_PROJECT/state/eco" && pwd -P)" ]
+  [[ "$(cat "$MOCK_HOME/.protocol_eco")" == */prompts/ecosystem-research-protocol.md ]]
+  grep -qx -- "--safe-mode" "$MOCK_HOME/.args_eco"
+  # 境界は repo line と同じ: deny に Bash、書き込みは vault / state / past_topics のみ
+  grep -q "Bash" "$MOCK_HOME/.disallowed_eco"
+  # cwd が model-writable なので、cwd の設定面 (.claude/ / CLAUDE.md / .mcp.json) を deny する
+  grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/.claude/**)" "$MOCK_HOME/.disallowed_eco"
+  grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/CLAUDE.md)" "$MOCK_HOME/.disallowed_eco"
+  grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/.mcp.json)" "$MOCK_HOME/.disallowed_eco"
+  # 運用者の harness は permission 層でも読ませない
+  grep -qF "Read(//${MOCK_HOME#/}/.claude/**)" "$MOCK_HOME/.disallowed_eco"
+  grep -qF "Read(//${MOCK_HOME#/}/.codex/**)" "$MOCK_HOME/.disallowed_eco"
+  grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/**)" "$MOCK_HOME/.allowed_eco"
+
+  # repo line の実行形は不変
+  [ "$(cat "$MOCK_HOME/.cwd_$PICKED")" = "$(cd "$MOCK_HOME/mock-repos/authorship-strategy" && pwd -P)" ]
+  [[ "$(cat "$MOCK_HOME/.protocol_$PICKED")" == */prompts/repo-research-protocol.md ]]
+  refute_grep -qx -- "--safe-mode" "$MOCK_HOME/.args_$PICKED"
+  [ "$(cat "$MOCK_HOME/.disallowed_$PICKED")" = "Bash,Task,NotebookEdit" ]
+}
+
+@test "E2E ecosystem: the prompt carries no repo wording; the repo line's prompt is unchanged" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  add_ecosystem_daily_line
+
+  run run_script
+  [ "$status" -eq 0 ]
+
+  grep -q "^- line (track): eco$" "$MOCK_HOME/.prompt_eco"
+  grep -q "^- mode: ecosystem" "$MOCK_HOME/.prompt_eco"
+  grep -q "focus: Ecosystem line focus" "$MOCK_HOME/.prompt_eco"
+  grep -q "エコシステム観測プロトコル" "$MOCK_HOME/.prompt_eco"
+  refute_grep -q "research repo" "$MOCK_HOME/.prompt_eco"
+  refute_grep -q "per-repo" "$MOCK_HOME/.prompt_eco"
+  refute_grep -q "選定後に読む候補" "$MOCK_HOME/.prompt_eco"
+  refute_grep -q "この repo" "$MOCK_HOME/.prompt_eco"   # ecosystem テンプレートが注入されている
+
+  grep -q "作業ディレクトリ = この line の research repo" "$MOCK_HOME/.prompt_$PICKED"
+  grep -q "per-repo リサーチ・プロトコル" "$MOCK_HOME/.prompt_$PICKED"
+  refute_grep -q "エコシステム" "$MOCK_HOME/.prompt_$PICKED"
+}
+
+@test "E2E ecosystem: article / brief / quiet / hold all pass the existing receipt gate" {
+  add_ecosystem_daily_line
+  mkdir -p "$MOCK_PROJECT/state/eco"
+  echo "resume condition" > "$MOCK_PROJECT/state/eco/pending.md"
+  local st
+  for st in article brief quiet hold; do
+    echo "normal" > "$MOCK_HOME/.mock_scenario"
+    echo "$st" > "$MOCK_HOME/.state_eco"
+    rm -rf "$MOCK_HOME/mock-vault/daily-research" "$MOCK_PROJECT/state/eco/runs" "$MOCK_PROJECT/logs"
+    mkdir -p "$MOCK_PROJECT/logs"
+
+    run run_script
+    [ "$status" -eq 0 ]
+    local log_content
+    log_content=$(get_log)
+    echo "$log_content" | grep -q "Line eco state: $st"
+    echo "$log_content" | grep -q "Line eco report gate passed"
+    case "$st" in
+      article|brief) [ -f "$MOCK_PROJECT/state/eco/runs/${DR_DATE}.verify.json" ] ;;
+      quiet|hold)    [ ! -f "$MOCK_HOME/mock-vault/daily-research/${DR_DATE}_eco_mock-report.md" ] ;;
+    esac
+  done
+}
+
+@test "E2E ecosystem: DR_FORCE_TRACK can run the ecosystem line alone" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  add_ecosystem_daily_line
+
+  DR_FORCE_TRACK=eco run run_script
+  [ "$status" -eq 0 ]
+  [ -f "$MOCK_HOME/.calls_eco" ]
+  [ ! -f "$MOCK_HOME/.calls_$PICKED" ]
+  get_log | grep -q "Line eco report gate passed"
 }

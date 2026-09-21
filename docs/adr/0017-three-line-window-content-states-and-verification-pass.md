@@ -93,6 +93,7 @@ Codex（gpt-6-astra）に premise challenge させ、8 件の反証・欠落を�
 - `receipt_count_min` < 3 の日が続く、E_PARTIAL が週 2 回以上 → gate か timeout の設計を見直す。
 - `total_cost_mean` > 18（導出は design 文書: 呼1 $4.1〜4.7 × 3 + 呼2 $0.7〜1.0 × 3 = $14.4〜17.1 の天井）、または
   完了が 07:00 を越える日が続く（典型 25〜35 分、最悪 210 分 = 08:30） → claim 数・探索枝を減らす。検証を形だけ残さない。
+  > **注記（2026-09-21, ADR-0018）**: daily の ecosystem line `jev` の追加で 1 日 4 line になった。この項の閾値は 4 line 前提で `total_cost_mean` > 24、最悪完了 280 分 = 09:40 と読む（導出は [ADR-0018](0018-ecosystem-mode-and-daily-jev-line.md) Decision 6）。上の `receipt_count_min` < 3 は < 4 と読み、`quiet_rate` は jev の quiet 日数を引いてから見る（同 Decision 6）。「07:00 を越える日が続く」の条件と対処はそのまま有効。
 - 運用者が「無関係な記事が増えた」と述べる → 選定前に渡す repo 文脈（brief.md の内容）を増やす。多様性のために
   関連性を後回しにしたことを成功と扱わない。
 - モデルまたは Claude Code の更新で、単一 pass で同等の原典照合ができるようになる → 呼2 の分離を再比較する。

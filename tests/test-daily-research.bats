@@ -38,7 +38,21 @@ teardown() {
 
 @test "orchestrator picks the day's line via rotation-pick and runs claude with cwd=target_repo" {
   grep -q 'rotation-pick' "$SCRIPT"
-  grep -q 'cd "\$TARGET_REPO"' "$SCRIPT"
+  # cwd は mode が決める (ADR-0018): repo mode は target_repo、ecosystem mode は line の state dir
+  grep -q 'LINE_CWD="\$TARGET_REPO"' "$SCRIPT"
+  grep -q 'LINE_CWD="\$STATE_DIR"' "$SCRIPT"
+  grep -q 'cd "\$LINE_CWD"' "$SCRIPT"
+}
+
+@test "orchestrator derives the execution form from [tracks.<x>].mode, never from a line name (ADR-0018)" {
+  grep -q 'config-get "\$PROJECT_DIR/config.toml" "tracks.\$TRACK.mode" repo' "$SCRIPT"
+  grep -q 'prompts/ecosystem-research-protocol.md' "$SCRIPT"
+  grep -q -- '--safe-mode' "$SCRIPT"
+  # line 名での特殊分岐が無い (config の line 名はコードに現れない)
+  # 否定は `! grep` で書かない (set -e の対象外で、最終行以外は検出されない)
+  if grep -qE '"\$TRACK" *=+ *"?(jev|edge|akc|desire|ans|aap|authorship|contemplative)"?' "$SCRIPT"; then false; fi
+  if grep -qw 'jev' "$SCRIPT"; then false; fi
+  if grep -qw 'jev' "$PROJECT_DIR/scripts/lib/dr_pipeline.py"; then false; fi
 }
 
 @test "orchestrator injects past themes and line brief into per-line prompt" {
@@ -310,4 +324,111 @@ t = json.load(open(sys.argv[1]))["topics"][0]
 for k in ("date", "track", "title", "slug", "question", "answer_scope", "keywords", "summary", "opportunities"):
     assert k in t, k
 PY
+}
+
+
+# === ecosystem line (mode = "ecosystem"、ADR-0018) の contract ===
+
+# 否定 assertion。bats は test 本体を set -e で走らせるが、`! cmd` は errexit の対象外で、
+# test の最終行でない限り失敗しても検出されない。否定は必ずこの helper で書く。
+refute_grep() {
+  if grep "$@"; then
+    echo "refute_grep: unexpected match: grep $*" >&2
+    return 1
+  fi
+}
+
+ECO_PROTOCOL="$PROJECT_DIR/prompts/ecosystem-research-protocol.md"
+ECO_TEMPLATE="$PROJECT_DIR/templates/report-template-ecosystem.md"
+
+@test "both call-1 protocols carry the shared contract (states, receipt, evidence file, citation gate)" {
+  local P
+  for P in "$PROJECT_DIR/prompts/repo-research-protocol.md" "$ECO_PROTOCOL"; do
+    grep -q '問いの形' "$P"
+    grep -q '記事 / 短報 / 更新なし / 保留' "$P"
+    grep -q '発見のノルマは無い' "$P"
+    grep -q '文の形で分ける' "$P"
+    grep -q '承認要求・「〜すべき」・手順の列挙は書かない' "$P"
+    grep -q 'citation ゲート' "$P"
+    grep -q '自己汚染ガード' "$P"
+    grep -q 'last-attempt' "$P"
+    grep -q '根拠ファイル' "$P"
+    grep -q 'fetch_status' "$P"
+    grep -qF '"status": "article|brief|quiet|hold"' "$P"
+    grep -qF '"reason_code": "no_new_evidence|thin_material|fetch_failed|carry_over|unspecified"' "$P"
+    grep -qF '{"date", "track", "title", "slug", "question", "answer_scope", "keywords": [], "summary", "opportunities"}' "$P"
+    grep -q 'pending.md' "$P"
+    grep -q '一文一命題' "$P"
+    grep -q '## Line Research Complete' "$P"
+    grep -q 'Bash は許可されていない' "$P"
+  done
+}
+
+@test "ecosystem protocol: two exploration paths, change-based dedup, watchlist table, no repo context" {
+  grep -q '経路 A' "$ECO_PROTOCOL"
+  grep -q '経路 B' "$ECO_PROTOCOL"
+  grep -q '両方実行する' "$ECO_PROTOCOL"
+  grep -q '新発見に数えない' "$ECO_PROTOCOL"
+  grep -q '前回報告後の変化' "$ECO_PROTOCOL"
+  grep -q '初めて動くコードが公開された' "$ECO_PROTOCOL"
+  grep -q '言い換えは再掲載しない' "$ECO_PROTOCOL"
+  grep -qF '| 名前 | canonical URL | 種別 | 初出日 | last-attempt | last-seen | 最後に報告した意味のある変化 | 状態 |' "$ECO_PROTOCOL"
+  grep -q 'active' "$ECO_PROTOCOL" && grep -q 'stalled' "$ECO_PROTOCOL" && grep -q 'archived' "$ECO_PROTOCOL"
+  grep -q '掲載されていることを採用の根拠にしない' "$ECO_PROTOCOL"
+  grep -q '公開日と出来事の日付を区別する' "$ECO_PROTOCOL"
+  # repo 文脈・個人 harness を要求しない / 適用可能性を選定条件にしない
+  refute_grep -q 'Step 3b' "$ECO_PROTOCOL"
+  refute_grep -q 'repo の doctrine' "$ECO_PROTOCOL"
+  refute_grep -q '選定後に読む候補' "$ECO_PROTOCOL"
+  refute_grep -q 'この repo' "$ECO_PROTOCOL"
+  grep -q '選定の条件にも本文の着地にも使わない' "$ECO_PROTOCOL"
+  # プロトコルは mode の汎用品 — 特定エコシステムの固有名は config と state に置く
+  refute_grep -qi 'jev' "$ECO_PROTOCOL"
+  refute_grep -qi 'typesafe' "$ECO_PROTOCOL"
+}
+
+@test "repo protocol and default templates carry no ecosystem-line wording" {
+  local F
+  for F in "$PROJECT_DIR/prompts/repo-research-protocol.md" \
+           "$PROJECT_DIR/templates/report-template.md" \
+           "$PROJECT_DIR/templates/report-template-edge.md" \
+           "$PROJECT_DIR/prompts/verification-protocol.md"; do
+    refute_grep -qi 'jev' "$F"
+    refute_grep -q 'watchlist' "$F"
+    refute_grep -q 'エコシステム' "$F"
+  done
+}
+
+@test "ecosystem template has kind/question frontmatter, no fixed body headings, fixed tail sections, no repo wording" {
+  [ -f "$ECO_TEMPLATE" ]
+  grep -q '^kind: article' "$ECO_TEMPLATE"
+  grep -q '^question:' "$ECO_TEMPLATE"
+  grep -q '固定見出しは置かない' "$ECO_TEMPLATE"
+  grep -q '## 機会メモ' "$ECO_TEMPLATE"
+  grep -q '## ソース' "$ECO_TEMPLATE"
+  grep -q '失効日' "$ECO_TEMPLATE"
+  grep -q '判定 source' "$ECO_TEMPLATE"
+  # 固定見出しは末尾 2 節だけ (line 固有の固定節を足さない)
+  [ "$(grep -c '^## ' "$ECO_TEMPLATE")" -eq 2 ]
+  refute_grep -q 'この repo' "$ECO_TEMPLATE"
+  refute_grep -qi 'jev' "$ECO_TEMPLATE"
+}
+
+@test "config.example.toml: the ecosystem example line matches the implemented schema" {
+  local EX="$PROJECT_DIR/config.example.toml" PY="$PROJECT_DIR/scripts/lib/dr_pipeline.py"
+  local rows brief
+  rows=$(python3 "$PY" tracks "$EX")
+  # repo line は 3 列目に target_repo、ecosystem line は 3 列目が空の 1 行
+  printf '%s\n' "$rows" | grep -q "^example_line	example	/"
+  printf '%s\n' "$rows" | grep -qx "example_ecosystem_line	example_ecosystem_line	"
+  # daily = true の ecosystem 例は毎日、輪番 window の後ろに出る
+  [ "$(python3 "$PY" rotation-pick "$EX" 2026-09-21 | tail -1 | cut -f1)" = "example_ecosystem_line" ]
+  [ "$(python3 "$PY" rotation-pick "$EX" 2026-09-22 | tail -1 | cut -f1)" = "example_ecosystem_line" ]
+  brief=$(python3 "$PY" line-brief "$EX" example_ecosystem_line)
+  printf '%s\n' "$brief" | grep -q '^- mode: ecosystem'
+  refute_grep -q '選定後に読む候補' <<< "$brief"
+  [ "$(python3 "$PY" template-path "$EX" example_ecosystem_line)" = "templates/report-template-ecosystem.md" ]
+  [ -f "$PROJECT_DIR/$(python3 "$PY" template-path "$EX" example_ecosystem_line)" ]
+  # 公開テンプレートに個人パス・個人名を混ぜない
+  refute_grep -q 'shimomoto' "$EX"
 }

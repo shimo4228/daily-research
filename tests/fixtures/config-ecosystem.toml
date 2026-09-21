@@ -1,0 +1,73 @@
+# Test fixture config — the 7 rotating lines of config-lines-per-day.toml plus one
+# ecosystem-mode daily line (mode = "ecosystem": no target repo, ADR-0018).
+[general]
+vault_path = "/nonexistent/fixture-vault"
+output_dir = "daily-research"
+lines_per_day = 3
+self_signals = ["github.com/example-author"]
+
+[report]
+min_sources = 5
+
+[verification]
+model = "sonnet"
+
+[tracks.akc]
+name = "AKC Line"
+focus = "AKC line focus"
+context_files = [".notes/TASKS.md"]
+
+[[tracks.akc.repos]]
+key = "akc"
+target_repo = "/nonexistent/fixture-repos/agent-knowledge-cycle"
+
+[tracks.contemplative]
+name = "Contemplative Line"
+
+[[tracks.contemplative.repos]]
+key = "contemplative"
+target_repo = "/nonexistent/fixture-repos/contemplative-agent"
+
+[tracks.aap]
+name = "AAP Line"
+
+[[tracks.aap.repos]]
+key = "aap"
+target_repo = "/nonexistent/fixture-repos/agent-attribution-practice"
+
+[tracks.authorship]
+name = "Authorship Line"
+
+[[tracks.authorship.repos]]
+key = "authorship"
+target_repo = "/nonexistent/fixture-repos/authorship-strategy"
+
+[tracks.ans]
+name = "ANS Line"
+
+[[tracks.ans.repos]]
+key = "ans"
+target_repo = "/nonexistent/fixture-repos/attention-not-self"
+
+[tracks.desire]
+name = "Desire Line"
+
+[[tracks.desire.repos]]
+key = "desire"
+target_repo = "/nonexistent/fixture-repos/desire-frontier"
+
+[tracks.edge]
+name = "Edge Line"
+template = "templates/report-template-edge.md"
+
+[[tracks.edge.repos]]
+key = "edge"
+target_repo = "/nonexistent/fixture-repos/edge-frontier"
+
+[tracks.eco]
+name = "Ecosystem Line"
+mode = "ecosystem"
+daily = true
+template = "templates/report-template-ecosystem.md"
+focus = "Ecosystem line focus"
+sources = ["fixture-eco-source"]

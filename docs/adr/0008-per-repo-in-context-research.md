@@ -60,5 +60,6 @@ ADR-0007 の 4 line = 4 repo コンセプト補強構成は、運用 4 日で運
 - 中央 graph.jsonld の Article 蓄積が止まり、cluster 統計・coverage 集計は将来データが増えない（凍結アーカイブ）。「既出 concept への言及履歴」による dedup は失われ、past_topics + repo 参照リスト + state の watched-sources が代替する。
 - 1 晩の claude 実行が 2 回（Opus+Sonnet）から line 数（現行 4 回、リトライ込み最大 8 回）になる。タイムアウトは line あたり 25 分に短縮し、7:00 のブリーフまでに完了する設計だが、コスト・所要は初週の metrics で実測確認する。
 - 自由探索 line（repos なし）と `report_variant`（maker / platform_digest）は完全に機能しなくなった（ADR-0007 は「コード残置で復活可能」だったが、本 ADR で担い手の Pass 1 ごと削除）。復活させる場合は per-repo 機構とは別の実行形を設計し直す必要がある。
+  > **注記（2026-09-21, ADR-0018）**: repo を持たない line の「別の実行形」は [ADR-0018](0018-ecosystem-mode-and-daily-jev-line.md) が `mode = "ecosystem"` として追加した（cwd = `state/<line>/`、専用プロトコル、`--safe-mode`）。旧来の自由探索 line・`report_variant`・Pass 1 は復活していない。repo line の実行形（cwd = target_repo、repo read-only の三層）はそのまま有効。
 - metrics.jsonl の `pass1` は今後 None、`fallback_used` はリトライ発生の意味に変わる（フィールド名は互換のため維持）。`expect-check` の pass1 系 metric は新レコードに対して常に INSUFFICIENT_DATA になる。
 - 外部照合の知見（diff-first / 前提挑戦 / citation ゲート / 失効条件）はプロンプトとテンプレートに正本化され、ctl-016 が節の存在を機械検査する。ただし節の**中身**の質は従来どおり人間 consumer（/dr-review と朝のブリーフ読者）が判断する — LLM judge は復活させない（ADR-0006）。

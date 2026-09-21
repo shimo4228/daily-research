@@ -1,6 +1,6 @@
 # daily-research
 
-Claude Code 非対話モード (`claude -p`) + macOS launchd で毎朝 AM 5:00 に自律リサーチを実行するシステム。7 つの研究ライン (line) が 7 つの研究 repo に 1:1 でマッピングされる (`akc` = agent-knowledge-cycle / `contemplative` = contemplative-agent / `aap` = agent-attribution-practice / `authorship` = authorship-strategy / `ans` = attention-not-self / `desire` = desire-frontier / `edge` = edge-frontier。desire / edge 以外は DOI 登録済み)。**輪番 window + 二層 eval (ADR-0010 / ADR-0017)**: 毎朝、`[general] lines_per_day = 3` に従って 7 line から連続 3 本を輪番 window で選び、各 line が `claude -p` を **cwd = 対象 repo** で実行し (per-repo in-context research, ADR-0008)、repo 自身の運用文脈 (CLAUDE.md / タスク台帳 / open questions / 実施履歴) から「repo に関係する外部の動向」を 1 つ**問いの形で**選んで解説し、repo への含意を添える (ADR-0014)。run は短い line brief から始めて問いの候補を並べ、**通常記事 / 短報 / 更新なし / 保留**の 4 状態のどれかで正直に終える (run receipt に記録)。執筆後に fresh-context の呼2 が clarity を直し、根拠ファイルの主張を原典で再取得して照合する。出力は**前提知識ゼロで読める自由形式の解説レポート** (ADR-0009) を Obsidian vault へ — 提案・承認要求は書かず、日付付き締切を持つ機会だけを末尾「機会メモ」に記録する。7:00 の Slack 承認ブリーフは廃止済み (ADR-0009)。
+Claude Code 非対話モード (`claude -p`) + macOS launchd で毎朝 AM 5:00 に自律リサーチを実行するシステム。7 つの研究ライン (line) が 7 つの研究 repo に 1:1 でマッピングされる (`akc` = agent-knowledge-cycle / `contemplative` = contemplative-agent / `aap` = agent-attribution-practice / `authorship` = authorship-strategy / `ans` = attention-not-self / `desire` = desire-frontier / `edge` = edge-frontier。desire / edge 以外は DOI 登録済み)。これに加えて、接地 repo を持たない ecosystem line `jev` (Jev エコシステムの毎日観測、`mode = "ecosystem"` + `daily = true`、ADR-0018) が輪番の外で毎朝 1 本走る。**輪番 window + 二層 eval (ADR-0010 / ADR-0017)**: 毎朝、`[general] lines_per_day = 3` に従って 7 line から連続 3 本を輪番 window で選び、各 line が `claude -p` を **cwd = 対象 repo** で実行し (per-repo in-context research, ADR-0008)、repo 自身の運用文脈 (CLAUDE.md / タスク台帳 / open questions / 実施履歴) から「repo に関係する外部の動向」を 1 つ**問いの形で**選んで解説し、repo への含意を添える (ADR-0014)。run は短い line brief から始めて問いの候補を並べ、**通常記事 / 短報 / 更新なし / 保留**の 4 状態のどれかで正直に終える (run receipt に記録)。執筆後に fresh-context の呼2 が clarity を直し、根拠ファイルの主張を原典で再取得して照合する。出力は**前提知識ゼロで読める自由形式の解説レポート** (ADR-0009) を Obsidian vault へ — 提案・承認要求は書かず、日付付き締切を持つ機会だけを末尾「機会メモ」に記録する。7:00 の Slack 承認ブリーフは廃止済み (ADR-0009)。
 
 ## Tech Stack
 
@@ -36,10 +36,13 @@ daily-research/
 ├── prompts/
 │   ├── repo-research-protocol.md # per-repo リサーチ・プロトコル（品質の中核、ADR-0008。
 │   │                             #   Step 3 問いの選定と 4 内容状態 = ADR-0017）
+│   ├── ecosystem-research-protocol.md # ecosystem line の呼1（接地 repo なし。watchlist 差分 + 未知探索の
+│   │                             #   二経路、変化単位の dedup。共有契約は repo 版と同じ、ADR-0018）
 │   └── verification-protocol.md  # 呼2 fresh-context の clarity + 原典照合プロトコル（ADR-0017）
 ├── templates/
 │   ├── report-template.md      # 解説レポートの記述規律 + 固定 2 節（YAML frontmatter 付き）
-│   └── report-template-edge.md # edge line 専用の節構成（手筋収穫型、ADR-0015）
+│   ├── report-template-edge.md # edge line 専用の節構成（手筋収穫型、ADR-0015）
+│   └── report-template-ecosystem.md # ecosystem line 用（repo 前提の文言なし、固定 2 節は共通、ADR-0018）
 ├── state/                      # line 別の状態（brief.md / pending.md / watched-sources.md /
 │                               #   playbook.md / runs/{date}.md 根拠ファイル / runs/{date}.json receipt /
 │                               #   runs/{date}.verify.json、.gitignore）
@@ -53,7 +56,7 @@ daily-research/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md   # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md   # 開発ガイド
 │   ├── graph-schema.md              # 凍結アーカイブ graph.jsonld のスキーマ（参照用）
-│   └── adr/                         # アーキテクチャ決定記録（0001-0017 + README）
+│   └── adr/                         # アーキテクチャ決定記録（0001-0018 + README）
 ├── llms.txt / llms-full.txt    # AI 向けナビゲータ / 自己完結リファレンス
 ├── SKILL.md                    # Claude Code skill マニフェスト（~/.claude/skills/daily-research として clone 可）
 ├── metrics.example.jsonl       # metrics.jsonl のレコード形の例（Git 管理）
@@ -132,6 +135,22 @@ tail -f logs/$(date +%Y-%m-%d).log
   source / locator / provenance / fetch_status 付きの表で) → vault へ note (固定見出しなし +
   末尾固定 2 節) → receipt `runs/{date}.json` → state 更新 (playbook は日付付き delta
   のみ) → 呼2 検証 + clarity。スコアの保存・蓄積はしない (ADR-0006)
+- **ecosystem mode (ADR-0018)**: `[tracks.<x>].mode = "ecosystem"` の line は接地 repo を持たず、
+  **外部エコシステムの変化そのもの**を観測する (「repo に関係する外部の動向」という目的関数を課さない。
+  運用者の harness・研究 repo への適用可能性は選定条件にしない)。実行形は mode から決まり、line 名では
+  分岐しない: 呼1 の cwd = `state/<line>/` (手元の文脈は line-local state だけ)、プロトコル =
+  `prompts/ecosystem-research-protocol.md`、`--safe-mode` で `~/.claude` の CLAUDE.md / rules / skills /
+  plugins / hooks / MCP を外す (2026-09-21 probe: `-p` と `--append-system-prompt-file` は safe mode でも
+  有効)。**safe mode は permissions を外さない** — user settings の `defaultMode: auto` も project settings も
+  効くので、境界は repo line と同じく deny で書く。ecosystem line は deny に
+  `Edit(state/<line>/.claude/**)` / `CLAUDE.md` / `.mcp.json` (cwd が model-writable で、cwd 直下の
+  `.claude/settings.json` は project settings として翌朝読まれる) と `Read(~/.claude/**)` / `Read(~/.codex/**)` を
+  足す。schema は ecosystem line の `repos` / `context_files` を拒否する。書き込み許可・receipt
+  gate・4 内容状態・lint・呼2・metrics は repo line と同一コード。run は毎回 2 経路 — A = watchlist
+  (`state/<line>/watched-sources.md` の 8 列表: 名前 / canonical URL / 種別 / 初出日 / last-attempt /
+  last-seen / 最後に報告した意味のある変化 / 状態) の差分確認、B = watchlist に無い候補の広い探索 — を
+  両方実行し、重複は topic 名でなく「前回報告後の変化」で判定する (問い単位の履歴は共通)。watchlist は
+  model が保守する markdown で parser を持たない
 - **問い粒度の履歴 (ADR-0017)**: 過去テーマの dedup は topic でなく問いで判定する —
   同じ問い + 同じ答え = 再選定しない / 同じ問い + 新しい証拠 = 更新してよい /
   同じ topic + 別の問い = 可。`past_topics.json` の entry は `question` と
@@ -216,6 +235,11 @@ tail -f logs/$(date +%Y-%m-%d).log
 - `prompts/repo-research-protocol.md` がリサーチの質を決める中核ファイル
   (目的関数・step 構成・問いの選定と 4 内容状態・receipt と根拠ファイルの書式・
   失効規律の正本)
+- `prompts/ecosystem-research-protocol.md` は ecosystem line の呼1 の正本 (ADR-0018)。repo 版の姉妹版で、
+  **共有契約 (receipt 形式・根拠ファイルの表・4 内容状態・末尾固定 2 節・完了報告) は両方を同時に直す** —
+  `tests/test-daily-research.bats` が両ファイルに同じ assertion を当てる。プロトコルは mode の汎用品として
+  書き、特定エコシステムの固有名 (Jev 等) は config の `focus` / `sources` と `state/<line>/` に置く。
+  既存 line 用のプロトコル・テンプレートに ecosystem 向けの文言を入れない
 - `prompts/verification-protocol.md` は呼2 の正本 — Step A の clarity (欠陥検出限定)
   が先、Step B の原典照合が最後。照合では根拠ファイルの全 claim を WebFetch で
   取り直し、数値・範囲・比較対象・話者を原典に合わせて訂正する (合わせられなければ文を
@@ -250,14 +274,16 @@ tail -f logs/$(date +%Y-%m-%d).log
 - 本番稼働中。毎朝 AM 5:00 に launchd で自動実行 (7:00 Slack ブリーフは ADR-0009 で廃止)
 - **輪番 window + 4 内容状態 + 検証パス (ADR-0017)**: 毎朝、`akc` / `contemplative` /
   `aap` / `authorship` / `ans` / `desire` / `edge` の 7 line から連続 3 本を選んで実行する
-  (7 日で各 line が 3 回)。`edge` も輪番の中にある。呼1 = Opus 研究 (問いの選定込み)、
+  (7 日で各 line が 3 回)。`edge` も輪番の中にある。その後に daily の ecosystem line `jev` が 1 本走り、
+  1 日 4 本になる (ADR-0018。輪番の本数・順序・位相と `lines_per_day` の意味は不変)。呼1 = Opus 研究 (問いの選定込み)、
   呼2 = 検証 + clarity (既定 sonnet)。ライン数・repo マッピング・輪番順・本数は
   config.toml から動的取得。ADR-0017 は ADR-0016 による per-repo 設計の退役を取り消し、
   ADR-0013 の daily edge 枠を終える — ADR-0008 / 0009 / 0010 / 0014 / 0015 は再び有効。
   **2026-08-22 にレポートを「動向解説 + repo への含意」へ単純化 (ADR-0014)**: 対立的
   フレーミング (裏付け禁止 / 反証義務 / 前提挑戦パス / theme_rank / scoring_criteria) を
   プロトコル・テンプレート・config の 3 層から撤去
-- **所要時間とコストの目安**: 3 line を逐次実行して典型 25〜35 分、最悪ケースは 05:00 から
-  約 195 分。コストは 1 日 $12〜15 (呼1 ≈ $4〜5/line、呼2 ≈ $0.5〜1/line)
+- **所要時間とコストの目安** (4 line の見積もり。3 line 時代の実績値を 4/3 倍したもので未実測): 逐次実行して
+  典型 35〜45 分、最悪ケースは 05:00 から約 260 分。コストは 1 日 $16〜20 (呼1 ≈ $4〜5/line、
+  呼2 ≈ $0.5〜1/line。quiet / hold の line は呼2 が走らない)
 - 蓄積層: Obsidian vault の LLM-wiki (ingest は Pass 3 で継続) + line 別 state
   (brief / pending / watched-sources / playbook / runs)。中央 graph.jsonld は凍結アーカイブ

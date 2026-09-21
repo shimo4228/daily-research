@@ -20,10 +20,13 @@ daily-research/
 ├── config.example.toml                  # line → repo マッピング、lines_per_day、context_files、daily フラグ（テンプレート）
 ├── past_topics.json                     # 問い・テーマ履歴（重複防止用、gitignored）
 ├── prompts/
-│   ├── repo-research-protocol.md       # per-repo リサーチプロトコル、呼1（--append-system-prompt-file 用）
+│   ├── repo-research-protocol.md       # per-repo リサーチプロトコル、呼1、mode = "repo"（--append-system-prompt-file 用）
+│   ├── ecosystem-research-protocol.md  # エコシステム観測プロトコル、呼1、mode = "ecosystem"（ADR-0018）
 │   └── verification-protocol.md        # fresh-context の検証 + clarity プロトコル、呼2（ADR-0017）
 ├── templates/
-│   └── report-template.md              # 解説レポートの記述規律 + 固定 2 節（frontmatter付き）
+│   ├── report-template.md              # 解説レポートの記述規律 + 固定 2 節（frontmatter付き）
+│   ├── report-template-edge.md         # edge ライン専用の節構成（ADR-0015）
+│   └── report-template-ecosystem.md    # ecosystem ライン専用の節構成（ADR-0018）
 ├── scripts/
 │   ├── daily-research.sh               # メインエントリポイント（輪番 window で当日 lines_per_day 本: 呼1 研究 + 呼2 検証 + clarity）; lib/ を source
 │   ├── check-auth.sh                   # OAuth チェック（real_auth_probe()）+ macOS 通知
@@ -54,7 +57,7 @@ daily-research/
 
 | スクリプト | 説明 | 使い方 |
 |-----------|------|--------|
-| `scripts/daily-research.sh` | メインエントリポイント。決定論輪番 window (`rotation-pick`、ADR-0010 / ADR-0017) の `lines_per_day` 本 + `daily = true` の全ライン (ADR-0011) を当日担当に選び、ラインごとに呼1 = `claude -p` を cwd = そのラインの `target_repo` で実行（Opus、25 分タイムアウト、transient 失敗時リトライ 1 回。401 は中止）、続けて呼2 = fresh-context の検証 + clarity（既定 sonnet、20 分、fail-open）を実行する。`lib/` を source し、環境サニタイズ、認証 probe、config schema チェック、receipt 駆動のレポートゲート (ctl-015)、レポート lint (ctl-016)、metrics 追記（`clarity_pass` / `line_states` / `verification` 含む）を含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
+| `scripts/daily-research.sh` | メインエントリポイント。決定論輪番 window (`rotation-pick`、ADR-0010 / ADR-0017) の `lines_per_day` 本 + `daily = true` の全ライン (ADR-0011) を当日担当に選び、ラインごとに呼1 = `claude -p` を cwd = そのラインの `target_repo` で実行（Opus、25 分タイムアウト、transient 失敗時リトライ 1 回。401 は中止）。`[tracks.<name>].mode = "ecosystem"` のラインは cwd = `state/<line>`、ecosystem プロトコル、`--safe-mode` 付きで実行する（ADR-0018。分岐はライン名ではなく `mode` が決める）。続けて呼2 = fresh-context の検証 + clarity（既定 sonnet、20 分、fail-open）を実行する。`lib/` を source し、環境サニタイズ、認証 probe、config schema チェック、receipt 駆動のレポートゲート (ctl-015)、レポート lint (ctl-016)、metrics 追記（`clarity_pass` / `line_states` / `verification` 含む）を含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
 | `scripts/check-auth.sh` | `real_auth_probe()`（共有 `lib/auth.sh`; `claude --version` ではなく実 Haiku API probe。`--version` は期限切れトークンでも成功するため）で OAuth トークンの有効性を確認。失敗時に macOS 通知を表示。 | `./scripts/check-auth.sh` |
 | `scripts/pre-commit.sh` | git pre-commit hook として走る secret / 構文ガード。 | （git が自動実行） |
 
@@ -78,7 +81,7 @@ daily-research/
 | `[general]` | Obsidian vault パス（`vault_path`）、出力ディレクトリ（`output_dir`）、`lines_per_day`（1 日に走らせる本数 = 輪番 window の幅。int ≥ 1、既定 1、違反は fail-fast）、`self_signals`（自己汚染ガード: 運用者自身の成果物を外部シグナルとして数えない）。`language` / `date_format` は参考情報 — スクリプトは読まない |
 | `[report]` | 最低出典数 |
 | `[verification]` | `model` — 呼2（検証 + clarity）のモデル。既定 `sonnet` |
-| `[tracks.<name>]` | ライン 1 つにつき 1 ブロック: `name`, `focus`（そのラインが扱う主題の説明。選択条件ではない）, `aliases`, `context_files`（問いを選んだ後 = Step 3b に Read する repo 相対パス — タスク台帳・open questions・実施履歴）, `sources`, `template`（任意。節構成の上書き、ADR-0015）, `daily`（bool。`true` で輪番の外で毎朝実行、ADR-0011）+ `[[tracks.<name>.repos]]` エントリ 1 つ（`key`, `target_repo` — run の cwd になる。`target_doi` は参考情報でスクリプトは読まない） |
+| `[tracks.<name>]` | ライン 1 つにつき 1 ブロック: `name`, `focus`（そのラインが扱う主題の説明。選択条件ではない）, `aliases`, `context_files`（問いを選んだ後 = Step 3b に Read する repo 相対パス — タスク台帳・open questions・実施履歴）, `sources`, `template`（任意。節構成の上書き、ADR-0015）, `daily`（bool。`true` で輪番の外で毎朝実行、ADR-0011）, `mode`（既定 `"repo"` で省略可、または `"ecosystem"`。未知の値は schema チェックで fail-fast、ADR-0018）+ repo ラインでは `[[tracks.<name>.repos]]` エントリ 1 つ（`key`, `target_repo` — run の cwd になる。`target_doi` は参考情報でスクリプトは読まない）。`mode = "ecosystem"` のラインは `repos` も `context_files` も書けない — repo 文脈を持たないため schema が拒否する |
 | `[user_profile]` | 参考情報のみ — スクリプトは読まない |
 
 ## 開発ワークフロー
@@ -88,8 +91,8 @@ daily-research/
 1. **ラインの focus / 1 日の本数** -- `config.toml` の `focus`（主題の説明）/ `[general] lines_per_day` を編集（問いの選定はプロトコル Step 3、ADR-0017 — スコアリング重みは存在しない）
 2. **情報源** -- `config.toml` の line sources を編集
 3. **問いを選んだ後に読む repo 文脈** -- `config.toml` の `context_files` を編集
-4. **レポートフォーマット** -- `templates/report-template.md` を編集（ctl-016 lint の必須節と同期を保つ）
-5. **リサーチのプロセス・目的関数** -- `prompts/repo-research-protocol.md` を編集
+4. **レポートフォーマット** -- `templates/report-template.md` を編集（ctl-016 lint の必須節と同期を保つ。`templates/report-template-edge.md` や `templates/report-template-ecosystem.md` などライン別テンプレートにも固定 2 節が同じ形で必要）
+5. **リサーチのプロセス・目的関数** -- `prompts/repo-research-protocol.md` を編集、ecosystem ラインは `prompts/ecosystem-research-protocol.md`。2 つの呼1 プロトコルは receipt の形式・根拠ファイルの表・4 つの内容状態・末尾固定 2 節を同じ契約として共有するので、片方を変えたらもう片方も直す（`tests/test-daily-research.bats` が両ファイルに同じ検査を当てる）
 6. **検証・clarity の規則** -- `prompts/verification-protocol.md` を編集、モデルは `[verification] model`
 
 ### 実行処理を変更する場合
@@ -129,7 +132,8 @@ bats tests/
 # - past_topics.json の妥当性
 # - セキュリティ（ハードコードされたキーなし、API キー未設定、ログ権限）
 # - 防御的プログラミング（set -euo pipefail, trap, max-turns）
-# - E2E モック: ライン単位フロー（cwd = repo、プロンプト注入）、リトライ、receipt 駆動のレポートゲート
+# - E2E モック: ライン単位フロー（cwd = repo、プロンプト注入）、ecosystem ラインの実行形
+#   （cwd = state/<line>、ecosystem プロトコル、--safe-mode）、リトライ、receipt 駆動のレポートゲート
 #   （article / brief / quiet / hold / receipt 欠損 / 不一致）、呼2 の検証結果の取り込み
 # - lib/*.sh ユニット: env サニタイズ、アトミックロック、実 auth probe、exit 分類
 ```
@@ -138,13 +142,15 @@ bats tests/
 
 ### 呼1 — リサーチ run (Opus、担当ラインごと: 輪番 window の `lines_per_day` 本 + daily 全ライン)
 
-run は `cd "$TARGET_REPO"` で起動されるため、repo 自身の CLAUDE.md が context として自動ロードされる。
+run は `cd "$TARGET_REPO"` で起動されるため、repo 自身の CLAUDE.md が context として自動ロードされる。`mode = "ecosystem"` のラインは接地 repo を持たず、代わりに `cd "state/<line>"` で起動される（ADR-0018）。
 
 | フラグ | 値 | 用途 |
 |--------|---|------|
 | `-p` | ライン単位プロンプト（`dr_pipeline.py line-brief` の line brief + 許可された書き込み先パス（vault のレポート / `state/<line>/` の brief・pending・watched-sources・playbook・根拠ファイル・run receipt / `past_topics.json`）+ 過去の問いの dedup データ + レポートテンプレート） | 非対話モード |
 | `--permission-mode` | `default` | デフォルトの権限処理を使用 |
-| `--append-system-prompt-file` | `prompts/repo-research-protocol.md` | デフォルト能力を保持しつつリサーチプロトコルを注入 |
+| `--append-system-prompt-file` | `prompts/repo-research-protocol.md`、`mode = "ecosystem"` では `prompts/ecosystem-research-protocol.md` | デフォルト能力を保持しつつリサーチプロトコルを注入 |
+| `--safe-mode` | ecosystem ラインのみ | 接地 repo が無いため、運用者の `~/.claude` の CLAUDE.md / rules / skills / plugins / hooks / MCP を run に持ち込まない（safe mode でも `-p` と `--append-system-prompt-file` は有効。2026-09-21 確認）。safe mode は permissions を外さない — 境界は `--disallowedTools` |
+| `--disallowedTools`（ecosystem ライン） | `Bash,Task,NotebookEdit` + `Edit(state/<line>/.claude/**)`、`Edit(state/<line>/CLAUDE.md)`、`Edit(state/<line>/.mcp.json)`、`Read(~/.claude/**)`、`Read(~/.codex/**)`（絶対パスで渡す） | cwd が model から書ける場所で、cwd 直下の `.claude/settings.json` は次の run で project settings として読まれる。運用者の harness は permission 層でも読ませない（ADR-0018） |
 | `--allowedTools` | `WebSearch,WebFetch,Read,Glob,Grep` + 絶対パス制限付き `Write`/`Edit`（vault レポート dir、`state/<line>/`、`past_topics.json`） | permission 層でも repo を read-only に保つ。書き込みは宣言済み 3 箇所のみ |
 | `--max-turns` | `55` | リサーチ深度の目安 |
 | `--model` | `opus` | rotation で浮いた日次予算を 1 本の品質に集中させる (ADR-0010) |
