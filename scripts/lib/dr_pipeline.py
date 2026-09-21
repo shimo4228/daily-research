@@ -30,9 +30,7 @@ def _result_dict(raw):
     """claude -p の出力が array (stream/json) なら result イベントを、
     dict ならそのまま返す。result が無ければ {}。"""
     if isinstance(raw, list):
-        return next(
-            (e for e in raw if isinstance(e, dict) and e.get("type") == "result"), {}
-        )
+        return next((e for e in raw if isinstance(e, dict) and e.get("type") == "result"), {})
     return raw
 
 
@@ -46,9 +44,7 @@ def _lines_per_day(cfg):
     (lines_per_day = true が 1 として黙って通る事故を防ぐ)。"""
     k = cfg.get("general", {}).get("lines_per_day", 1)
     if isinstance(k, bool) or not isinstance(k, int) or k < 1:
-        raise ValueError(
-            f"[general].lines_per_day must be an integer >= 1, got {k!r}"
-        )
+        raise ValueError(f"[general].lines_per_day must be an integer >= 1, got {k!r}")
     return k
 
 
@@ -65,9 +61,7 @@ def _load_tracks(config_path):
         # track 名は state/<track> のパス、receipt の report 名検証、呼2 の
         # --allowedTools に入る。区切り文字 (カンマ・スラッシュ等) を持たせない。
         if not _TRACK_NAME_RE.fullmatch(name):
-            raise ValueError(
-                f"track name must match [A-Za-z0-9_-]+, got {name!r}"
-            )
+            raise ValueError(f"track name must match [A-Za-z0-9_-]+, got {name!r}")
         if isinstance(v, dict) and "target_repo" in v:
             raise ValueError(
                 f"config uses the legacy schema: target_repo directly under [tracks.{name}]. "
@@ -77,8 +71,7 @@ def _load_tracks(config_path):
         # 毎日実行が黙って有効になる事故を、起動時の schema check で fail-fast に落とす。
         if isinstance(v, dict) and "daily" in v and not isinstance(v["daily"], bool):
             raise ValueError(
-                f"[tracks.{name}].daily must be a boolean (true/false), "
-                f"got {v['daily']!r}"
+                f"[tracks.{name}].daily must be a boolean (true/false), got {v['daily']!r}"
             )
         # template は project 相対パスの文字列限定 (per-track テンプレート上書き)。
         if isinstance(v, dict) and "template" in v and not isinstance(v["template"], str):
@@ -128,9 +121,7 @@ def _searches(d):
         return _int(tc.get("WebSearch", 0)) + _int(tc.get("WebFetch", 0))
     mu = d.get("modelUsage")
     if isinstance(mu, dict):
-        total = sum(
-            _int(m.get("webSearchRequests", 0)) for m in mu.values() if isinstance(m, dict)
-        )
+        total = sum(_int(m.get("webSearchRequests", 0)) for m in mu.values() if isinstance(m, dict))
         if total:
             return total
     stu = (d.get("usage") or {}).get("server_tool_use") or {}
@@ -375,9 +366,7 @@ def cmd_line_brief(argv):
             print(f"  - {s}")
     signals = cfg.get("general", {}).get("self_signals") or []
     if signals:
-        print(
-            "- 自己シグナル (自己汚染ガード — これらに合致する成果物を「外部シグナル」"
-        )
+        print("- 自己シグナル (自己汚染ガード — これらに合致する成果物を「外部シグナル」")
         print("  として数えない。第三者による言及・採用の観測は正当):")
         for s in signals:
             print(f"  - {s}")
@@ -550,10 +539,7 @@ def _sum_pass_metrics(dicts):
     """複数 run の _pass_metrics dict を合算する (per-repo 実行の pass2 集約)。"""
     if not dicts:
         return None
-    total = {
-        k: 0
-        for k in ("cost", "turns", "duration_s", "tokens_in", "tokens_out", "searches")
-    }
+    total = {k: 0 for k in ("cost", "turns", "duration_s", "tokens_in", "tokens_out", "searches")}
     for d in dicts:
         for k in total:
             total[k] += d.get(k, 0)
@@ -671,9 +657,7 @@ def cmd_metrics_append(argv):
     elif len(clarities) == 1:
         clarity = clarities[0]
     else:
-        metric_dicts = [
-            {k: v for k, v in c.items() if k not in ("ran", "ok")} for c in clarities
-        ]
+        metric_dicts = [{k: v for k, v in c.items() if k not in ("ran", "ok")} for c in clarities]
         summed = _sum_pass_metrics([m for m in metric_dicts if m])
         clarity = {
             "ran": True,
@@ -698,9 +682,7 @@ def cmd_metrics_append(argv):
     record["total_cost"] = _total_cost(record)
     with open(metrics_path, "a") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    print(
-        f"metrics: appended {date_s} ({final_class}, {report_count} reports, {len(runs)} runs)"
-    )
+    print(f"metrics: appended {date_s} ({final_class}, {report_count} reports, {len(runs)} runs)")
     return 0
 
 
@@ -725,8 +707,7 @@ def cmd_metrics_backfill(argv):
     metrics_path, logs_dir = argv[:2]
 
     existing = {
-        (r.get("date"), r.get("ts"))
-        for r in _load_metrics(metrics_path, include_test=True)
+        (r.get("date"), r.get("ts")) for r in _load_metrics(metrics_path, include_test=True)
     }
     appended = 0
 
@@ -850,9 +831,7 @@ def cmd_report_lint(argv):
     try:
         tomllib = _tomllib()
         with open(config_path, "rb") as f:
-            min_sources = int(
-                tomllib.load(f).get("report", {}).get("min_sources", min_sources)
-            )
+            min_sources = int(tomllib.load(f).get("report", {}).get("min_sources", min_sources))
     except (FileNotFoundError, ValueError, OSError):
         pass
     MIN_BODY_CHARS = 1500
@@ -863,9 +842,7 @@ def cmd_report_lint(argv):
     results = []
     try:
         files = sorted(
-            f
-            for f in os.listdir(report_dir)
-            if f.startswith(f"{date_s}_") and f.endswith(".md")
+            f for f in os.listdir(report_dir) if f.startswith(f"{date_s}_") and f.endswith(".md")
         )
     except FileNotFoundError:
         files = []
@@ -1004,9 +981,7 @@ def cmd_wiki_quality_scan(argv):
                 "days": days,
                 "flagged_reports": len(flagged),
                 "by_line": dict(sorted(by_line.items())),
-                "reports": {
-                    stem: sorted(set(pages)) for stem, pages in sorted(flagged.items())
-                },
+                "reports": {stem: sorted(set(pages)) for stem, pages in sorted(flagged.items())},
             },
             ensure_ascii=False,
         )
@@ -1059,20 +1034,12 @@ def cmd_expect_check(argv):
             vals = [r[m.group(1)]["turns"] for r in recs if r.get(m.group(1))]
             if not vals:
                 return None
-            return (
-                max(vals)
-                if m.group(2) == "max"
-                else percentile(vals, int(m.group(2)[1:]))
-            )
+            return max(vals) if m.group(2) == "max" else percentile(vals, int(m.group(2)[1:]))
         m = re.fullmatch(r"(pass1|pass2|total)_cost_(mean|max)", name)
         if m:
             key = m.group(1)
             vals = [
-                (
-                    r.get("total_cost")
-                    if key == "total"
-                    else (r.get(key) or {}).get("cost")
-                )
+                (r.get("total_cost") if key == "total" else (r.get(key) or {}).get("cost"))
                 for r in recs
             ]
             vals = [v for v in vals if v is not None]
@@ -1080,11 +1047,7 @@ def cmd_expect_check(argv):
                 return None
             return max(vals) if m.group(2) == "max" else sum(vals) / len(vals)
         if name == "fallback_rate":
-            return (
-                sum(1 for r in recs if r.get("fallback_used")) / len(recs)
-                if recs
-                else None
-            )
+            return sum(1 for r in recs if r.get("fallback_used")) / len(recs) if recs else None
         if name == "report_count_min":
             vals = [r.get("report_count", 0) for r in recs]
             return min(vals) if vals else None

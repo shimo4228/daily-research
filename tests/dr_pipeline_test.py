@@ -148,9 +148,7 @@ def test_vault_path_reads_general(monkeypatch, capsys):
 def test_vault_path_missing_is_empty(monkeypatch, capsys):
     rc, out, _ = run_cmd(monkeypatch, capsys, ["vault-path", CONFIG_NO_TRACKS])
     assert rc == 0
-    assert (
-        out.strip() == "/nonexistent/fixture-vault"
-    )  # no-tracks config も general は持つ
+    assert out.strip() == "/nonexistent/fixture-vault"  # no-tracks config も general は持つ
 
 
 # === report-dir ===
@@ -182,22 +180,14 @@ def test_tracks_emits_line_repo_tsv(monkeypatch, capsys):
     lines = [ln for ln in out.splitlines() if ln]
     assert len(lines) == 4
     assert "akc\takc\t/nonexistent/fixture-repos/agent-knowledge-cycle" in lines
-    assert (
-        "contemplative\tcontemplative\t/nonexistent/fixture-repos/contemplative-agent"
-        in lines
-    )
+    assert "contemplative\tcontemplative\t/nonexistent/fixture-repos/contemplative-agent" in lines
     assert "aap\taap\t/nonexistent/fixture-repos/agent-attribution-practice" in lines
-    assert (
-        "authorship\tauthorship\t/nonexistent/fixture-repos/authorship-strategy"
-        in lines
-    )
+    assert "authorship\tauthorship\t/nonexistent/fixture-repos/authorship-strategy" in lines
 
 
 @pytest.mark.unit
 def test_tracks_old_schema_config_errors(monkeypatch, capsys):
-    rc, _, err = run_cmd(
-        monkeypatch, capsys, ["tracks", str(FIXTURES / "config-old-schema.toml")]
-    )
+    rc, _, err = run_cmd(monkeypatch, capsys, ["tracks", str(FIXTURES / "config-old-schema.toml")])
     assert rc == 1
     assert "legacy schema" in err
 
@@ -253,9 +243,7 @@ def test_past_themes_groups_aliases_into_line(monkeypatch, capsys, tmp_path):
 
 @pytest.mark.unit
 def test_past_themes_missing_file_is_empty(monkeypatch, capsys, tmp_path):
-    rc, out, _ = run_cmd(
-        monkeypatch, capsys, ["past-themes", str(tmp_path / "nope.json"), CONFIG]
-    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["past-themes", str(tmp_path / "nope.json"), CONFIG])
     assert rc == 0
     assert "過去テーマ履歴" in out
 
@@ -340,12 +328,8 @@ def test_rotation_pick_is_deterministic_and_cycles(monkeypatch, capsys):
 
     base = datetime.date(2026, 8, 13)
     # 同日は何度呼んでも同じ (冪等)
-    rc, out_a, _ = run_cmd(
-        monkeypatch, capsys, ["rotation-pick", CONFIG, base.isoformat()]
-    )
-    rc2, out_b, _ = run_cmd(
-        monkeypatch, capsys, ["rotation-pick", CONFIG, base.isoformat()]
-    )
+    rc, out_a, _ = run_cmd(monkeypatch, capsys, ["rotation-pick", CONFIG, base.isoformat()])
+    rc2, out_b, _ = run_cmd(monkeypatch, capsys, ["rotation-pick", CONFIG, base.isoformat()])
     assert rc == 0 and rc2 == 0
     assert out_a == out_b
     assert out_a.strip() in all_rows
@@ -398,9 +382,7 @@ def test_rotation_pick_daily_line_runs_every_day(monkeypatch, capsys):
     assert out.strip().splitlines()[0] == rotated[0]
 
     # 同日は何度呼んでも同じ (冪等)
-    rc, out2, _ = run_cmd(
-        monkeypatch, capsys, ["rotation-pick", config_daily, base.isoformat()]
-    )
+    rc, out2, _ = run_cmd(monkeypatch, capsys, ["rotation-pick", config_daily, base.isoformat()])
     assert out2.strip().splitlines()[0] == rotated[0]
 
 
@@ -442,9 +424,7 @@ def test_rotation_pick_invalid_date_errors(monkeypatch, capsys):
 
 @pytest.mark.unit
 def test_rotation_pick_no_lines_errors(monkeypatch, capsys):
-    rc, _, err = run_cmd(
-        monkeypatch, capsys, ["rotation-pick", CONFIG_NO_TRACKS, "2026-08-13"]
-    )
+    rc, _, err = run_cmd(monkeypatch, capsys, ["rotation-pick", CONFIG_NO_TRACKS, "2026-08-13"])
     assert rc == 1
     assert "no lines" in err
 
@@ -483,9 +463,7 @@ def test_metrics_append_aggregates_runs_into_pass2(monkeypatch, capsys, tmp_path
 
 
 @pytest.mark.unit
-def test_metrics_append_tolerates_empty_and_unknown_lines(
-    monkeypatch, capsys, tmp_path
-):
+def test_metrics_append_tolerates_empty_and_unknown_lines(monkeypatch, capsys, tmp_path):
     # 空行・ラベル無し行・payload 空の行は skip (収集は non-fatal)
     metrics = tmp_path / "metrics.jsonl"
     rc, _, _ = run_cmd(
@@ -527,9 +505,7 @@ def test_metrics_append_records_clarity_line(monkeypatch, capsys, tmp_path):
 
 
 @pytest.mark.unit
-def test_metrics_append_aggregates_multiple_clarity_lines(
-    monkeypatch, capsys, tmp_path
-):
+def test_metrics_append_aggregates_multiple_clarity_lines(monkeypatch, capsys, tmp_path):
     # daily line 追加後は 1 日複数 line が走り CLARITY 行も複数届く。
     # 合算して 1 dict へ写像し、ok は全行 ok のときだけ true。
     metrics = tmp_path / "metrics.jsonl"
@@ -602,9 +578,7 @@ def test_metrics_backfill_parses_runs_and_dedupes(monkeypatch, capsys, tmp_path)
     (logs / "launchd-stderr.log").write_text("noise")  # 日付形式でないログは無視
     metrics = tmp_path / "metrics.jsonl"
 
-    rc, out, _ = run_cmd(
-        monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)]
-    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)])
     assert rc == 0
     assert "backfilled 2 run(s)" in out
     recs = [json.loads(x) for x in metrics.read_text().splitlines()]
@@ -617,9 +591,7 @@ def test_metrics_backfill_parses_runs_and_dedupes(monkeypatch, capsys, tmp_path)
     assert recs[1]["total_cost"] == pytest.approx(9.7207)
 
     # 再実行しても重複しない (冪等)
-    rc, out, _ = run_cmd(
-        monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)]
-    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)])
     assert "backfilled 0 run(s)" in out
     assert len(metrics.read_text().splitlines()) == 2
 
@@ -632,9 +604,7 @@ def test_metrics_backfill_aggregates_per_repo_run_lines(monkeypatch, capsys, tmp
     (logs / "2026-08-05.log").write_text(BACKFILL_LOG_PER_REPO)
     metrics = tmp_path / "metrics.jsonl"
 
-    rc, out, _ = run_cmd(
-        monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)]
-    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)])
     assert rc == 0
     assert "backfilled 1 run(s)" in out
     rec = json.loads(metrics.read_text())
@@ -666,9 +636,7 @@ def test_metrics_backfill_parses_clarity_summary(monkeypatch, capsys, tmp_path):
     (logs / "2026-08-14.log").write_text(BACKFILL_LOG_ROTATION)
     metrics = tmp_path / "metrics.jsonl"
 
-    rc, out, _ = run_cmd(
-        monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)]
-    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)])
     assert rc == 0
     assert "backfilled 1 run(s)" in out
     rec = json.loads(metrics.read_text())
@@ -697,9 +665,7 @@ def test_metrics_backfill_clarity_warn_without_summary(monkeypatch, capsys, tmp_
     (logs / "2026-08-15.log").write_text(BACKFILL_LOG_CLARITY_NO_OUTPUT)
     metrics = tmp_path / "metrics.jsonl"
 
-    rc, _, _ = run_cmd(
-        monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)]
-    )
+    rc, _, _ = run_cmd(monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)])
     assert rc == 0
     rec = json.loads(metrics.read_text())
     assert rec["clarity_pass"] == {"ran": True, "ok": False}
@@ -775,9 +741,7 @@ def test_wiki_quality_scan_attributes_lines(monkeypatch, capsys, tmp_path):
         f"- 本ページの数値は一次未照合のため推定として扱う（出典: [[{today}_tech_topic-b]]）。\n\n"
         f"古い注記 FLAGGED [[2020-01-01_tech_ancient-topic]]\n"
     )
-    rc, out, _ = run_cmd(
-        monkeypatch, capsys, ["wiki-quality-scan", str(tmp_path), "30", CONFIG]
-    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["wiki-quality-scan", str(tmp_path), "30", CONFIG])
     assert rc == 0
     d = json.loads(out)
     assert d["flagged_reports"] == 2  # 30 日 cutoff で 2020 年分は除外
@@ -868,11 +832,20 @@ def test_no_subcommand_usage(monkeypatch, capsys):
 
 def test_metrics_append_source_arg_and_load_filter(monkeypatch, capsys, tmp_path):
     metrics = tmp_path / "metrics.jsonl"
-    run = json.dumps({"total_cost_usd": 1.0, "num_turns": 3, "duration_ms": 1000,
-                      "usage": {"input_tokens": 1, "output_tokens": 1}})
+    run = json.dumps(
+        {
+            "total_cost_usd": 1.0,
+            "num_turns": 3,
+            "duration_ms": 1000,
+            "usage": {"input_tokens": 1, "output_tokens": 1},
+        }
+    )
     for src in ("live", "test"):
         monkeypatch.setattr("sys.stdin", io.StringIO(f"RUN\t{run}\n"))
-        assert dr_pipeline.main(["metrics-append", str(metrics), "2026-08-22", "OK", "2", "0", src]) == 0
+        assert (
+            dr_pipeline.main(["metrics-append", str(metrics), "2026-08-22", "OK", "2", "0", src])
+            == 0
+        )
     recs = [json.loads(line) for line in metrics.read_text().splitlines()]
     assert [r["source"] for r in recs] == ["live", "test"]
     assert [r["source"] for r in dr_pipeline._load_metrics(str(metrics))] == ["live"]
@@ -966,9 +939,7 @@ def test_rotation_window_k1_keeps_legacy_phase(monkeypatch, capsys, tmp_path):
 
 @pytest.mark.unit
 def test_rotation_window_with_daily_line_appended(monkeypatch, capsys, tmp_path):
-    cfg = _write_cfg(
-        tmp_path, "lines_per_day = 2", tracks=("a", "b", "c", "d"), daily=("d",)
-    )
+    cfg = _write_cfg(tmp_path, "lines_per_day = 2", tracks=("a", "b", "c", "d"), daily=("d",))
     lines = _pick(monkeypatch, capsys, cfg, "2026-09-15")
     assert len(lines) == 3
     assert lines[-1] == "d"
@@ -1257,13 +1228,19 @@ def test_success_fixture_searches_come_from_model_usage(monkeypatch, capsys):
 
 @pytest.mark.unit
 def test_config_get_reads_value_and_default(monkeypatch, capsys, tmp_path):
-    rc, out, _ = run_cmd(monkeypatch, capsys, ["config-get", CONFIG_K3, "verification.model", "opus"])
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["config-get", CONFIG_K3, "verification.model", "opus"]
+    )
     assert rc == 0 and out.strip() == "sonnet"
     rc, out, _ = run_cmd(monkeypatch, capsys, ["config-get", CONFIG_K3, "general.lines_per_day"])
     assert rc == 0 and out.strip() == "3"
-    rc, out, _ = run_cmd(monkeypatch, capsys, ["config-get", CONFIG, "verification.model", "sonnet"])
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["config-get", CONFIG, "verification.model", "sonnet"]
+    )
     assert rc == 0 and out.strip() == "sonnet"
-    rc, out, _ = run_cmd(monkeypatch, capsys, ["config-get", str(tmp_path / "no.toml"), "a.b", "dflt"])
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["config-get", str(tmp_path / "no.toml"), "a.b", "dflt"]
+    )
     assert rc == 0 and out.strip() == "dflt"
     rc, out, _ = run_cmd(monkeypatch, capsys, ["config-get", CONFIG, "verification.model"])
     assert rc == 0 and out == "\n"
@@ -1324,7 +1301,10 @@ def test_metrics_append_counts_line_states_and_verification(monkeypatch, capsys,
 def test_metrics_append_without_state_or_verify(monkeypatch, capsys, tmp_path):
     metrics = tmp_path / "metrics.jsonl"
     rc, _, _ = run_cmd(
-        monkeypatch, capsys, ["metrics-append", str(metrics), "2026-09-15", "E_NO_REPORT", "0", "0"], ""
+        monkeypatch,
+        capsys,
+        ["metrics-append", str(metrics), "2026-09-15", "E_NO_REPORT", "0", "0"],
+        "",
     )
     assert rc == 0
     rec = json.loads(metrics.read_text())
@@ -1353,32 +1333,54 @@ def test_metrics_backfill_new_fields_are_none(monkeypatch, capsys, tmp_path):
 @pytest.mark.unit
 def test_expect_check_content_state_and_verification_metrics(monkeypatch, capsys, tmp_path):
     metrics = tmp_path / "metrics.jsonl"
-    zero = {k: 0 for k in ("article", "brief", "quiet", "hold", "mismatch", "suspect", "unverified")}
+    zero = {
+        k: 0 for k in ("article", "brief", "quiet", "hold", "mismatch", "suspect", "unverified")
+    }
     recs = [
         {
             "date": "2026-09-15",
             "final_class": "OK",
             "line_states": {**zero, "article": 2, "quiet": 1},
-            "verification": {"supported": 6, "partial": 1, "unsupported": 1, "unverifiable": 2, "edits": 1, "lines_verified": 2},
+            "verification": {
+                "supported": 6,
+                "partial": 1,
+                "unsupported": 1,
+                "unverifiable": 2,
+                "edits": 1,
+                "lines_verified": 2,
+            },
             "clarity_pass": {"ran": True, "ok": True},
         },
         {
             "date": "2026-09-16",
             "final_class": "OK",
             "line_states": {**zero, "brief": 1, "hold": 1},
-            "verification": {"supported": 2, "partial": 0, "unsupported": 0, "unverifiable": 0, "edits": 0, "lines_verified": 1},
+            "verification": {
+                "supported": 2,
+                "partial": 0,
+                "unsupported": 0,
+                "unverifiable": 0,
+                "edits": 0,
+                "lines_verified": 1,
+            },
             "clarity_pass": {"ran": True, "ok": False},
         },
         # backfill 相当: 新 field None は集計から除く
-        {"date": "2026-09-17", "final_class": "OK", "line_states": None, "verification": None, "clarity_pass": None},
+        {
+            "date": "2026-09-17",
+            "final_class": "OK",
+            "line_states": None,
+            "verification": None,
+            "clarity_pass": None,
+        },
     ]
     metrics.write_text("\n".join(json.dumps(r) for r in recs) + "\n")
     stdin = (
-        "2026-09-14\tquiet_rate <= 0.5\n"        # (1+1)/5 = 0.4
-        "2026-09-14\treceipt_count_min >= 3\n"   # min(3, 2) = 2
+        "2026-09-14\tquiet_rate <= 0.5\n"  # (1+1)/5 = 0.4
+        "2026-09-14\treceipt_count_min >= 3\n"  # min(3, 2) = 2
         "2026-09-14\tunsupported_rate <= 0.2\n"  # (1+1)/(6+1+1+2+0+0) = 0.2
-        "2026-09-14\tunverifiable_rate <= 0.1\n" # 2/12
-        "2026-09-14\tclarity_ok_rate >= 0.5\n"   # 1/2
+        "2026-09-14\tunverifiable_rate <= 0.1\n"  # 2/12
+        "2026-09-14\tclarity_ok_rate >= 0.5\n"  # 1/2
         "2026-09-20\tquiet_rate <= 0.5\n"
     )
     rc, out, _ = run_cmd(monkeypatch, capsys, ["expect-check", str(metrics)], stdin)
