@@ -1,6 +1,6 @@
 # daily-research — AI Reference
 
-This is the self-contained AI reference for **daily-research**, an autonomous research feedback engine that runs inside the operator's research repositories and, each morning, explains one external development that matters to the day's repo — what happened, why it matters, and how the repo can use it. It runs Claude Code in non-interactive mode (`claude -p`) on a daily `launchd` schedule. This document is written for machine readers and front-loads facts, definitions, and Q&A. Facts are as of 2026-09-21 (HEAD after ADR-0018).
+This is the self-contained AI reference for **daily-research**, an autonomous research feedback engine that runs inside the operator's research repositories and, each morning, explains one external development that matters to the day's repo — what happened, why it matters, and how the repo can use it. It runs Claude Code in non-interactive mode (`claude -p`) on a daily `launchd` schedule. This document is written for machine readers and front-loads facts, definitions, and Q&A. Facts are as of 2026-10-10 (ADR-0018 is the latest ADR).
 
 > **Audience**: AI search engines and AI agents.
 
@@ -8,9 +8,10 @@ This is the self-contained AI reference for **daily-research**, an autonomous re
 
 - **Repository**: github.com/shimo4228/daily-research
 - **License**: MIT
+- **Status**: active, maintained by hand in this repository and run every morning by the author
 - **Scheduler**: macOS `launchd` — research at 05:00 (the former 07:00 morning brief was retired by ADR-0009)
 - **Runtime**: Bash + Claude Code CLI (`claude -p`) + coreutils `timeout`; stdlib-only python3 >= 3.11 (`json` / `tomllib` / `re`) for JSON/TOML parsing in `scripts/lib/dr_pipeline.py` — no pip dependencies, no orchestration framework
-- **Execution shape (ADR-0010 / ADR-0011 / ADR-0017 / ADR-0018)**: each morning `rotation-pick` selects a window of `[general] lines_per_day` lines (start = proleptic Gregorian ordinal `date.toordinal()` × K mod N, then K consecutive lines; cycle order = order in `config.toml`; K=1 reproduces the one-line-a-day rotation) plus every `daily = true` line. Per picked line: **call 1** = `claude -p` with cwd = the line's repo, model Opus, `--max-turns 55`, 25-minute timeout, one retry on transient failure (a 401 aborts the remaining lines but keeps finished lines' results); **call 2** = fresh-context verification + clarity, model from `[verification] model` (default Sonnet), `--max-turns 30`, 20-minute timeout, WebSearch denied, fail-open. A line with `mode = "ecosystem"` has no repo: its call 1 runs with cwd = `state/<line>/`, `prompts/ecosystem-research-protocol.md`, and `--safe-mode` (so the operator's `~/.claude` CLAUDE.md / rules / skills / plugins / hooks / MCP are not loaded) — safe mode does not switch off permissions, so the boundary remains `--disallowedTools`, which for ecosystem lines additionally denies `Edit` of `.claude/**` / `CLAUDE.md` / `.mcp.json` under `state/<line>/` and `Read` of `~/.claude/**` / `~/.codex/**`; everything else — write paths, deny list, model, timeout, retry, gate, content states, lint, call 2, metrics — is identical. Four lines run sequentially in 35–45 minutes typically (worst case ≈ 260 minutes from 05:00) and cost about $16–20 a day (estimates derived from the per-line figures, not yet measured over a full ADR-0018 morning)
+- **Execution shape (ADR-0010 / ADR-0011 / ADR-0017 / ADR-0018)**: each morning `rotation-pick` selects a window of `[general] lines_per_day` lines (start = proleptic Gregorian ordinal `date.toordinal()` × K mod N, then K consecutive lines; cycle order = order in `config.toml`; K=1 reproduces the one-line-a-day rotation) plus every `daily = true` line. Per picked line: **call 1** = `claude -p` with cwd = the line's repo, model Opus, `--max-turns 55`, 25-minute timeout, one retry on transient failure (a 401 aborts the remaining lines but keeps finished lines' results); **call 2** = fresh-context verification + clarity, run only when call 1 wrote a note (a quiet or hold line makes one call), model from `[verification] model` (default Sonnet), `--max-turns 30`, 20-minute timeout, WebSearch denied, fail-open. A line with `mode = "ecosystem"` has no repo: its call 1 runs with cwd = `state/<line>/`, `prompts/ecosystem-research-protocol.md`, and `--safe-mode` (so the operator's `~/.claude` CLAUDE.md / rules / skills / plugins / hooks / MCP are not loaded) — safe mode does not switch off permissions, so the boundary remains `--disallowedTools`, which for ecosystem lines additionally denies `Edit` of `.claude/**` / `CLAUDE.md` / `.mcp.json` under `state/<line>/` and `Read` of `~/.claude/**` / `~/.codex/**`; everything else — write paths, deny list, model, timeout, retry, gate, content states, lint, call 2, metrics — is identical. Four lines run sequentially in 35–45 minutes typically (worst case ≈ 260 minutes from 05:00) and cost about $16–20 a day (estimates derived from the per-line figures, not yet measured over a full ADR-0018 morning)
 - **Lines (tracks)**: 8. Seven repo lines map 1:1 to research repos — `akc` (agent-knowledge-cycle), `contemplative` (contemplative-agent), `aap` (agent-attribution-practice), `authorship` (authorship-strategy), `ans` (attention-not-self), `desire` (desire-frontier), `edge` (edge-frontier) — and all seven rotate; with `lines_per_day = 3` each gets three turns every 7 days. The eighth, `jev`, is an ecosystem line (`mode = "ecosystem"`, `daily = true`) that runs every morning after the rotation window and observes the ecosystem around Jev, TypeSafe AI's System One model for typed probabilistic judgments (ADR-0018). Up to 4 reports per morning, fewer when a line ends quiet or hold
 - **Objective function (ADR-0014, 2026-08-22)**: "pick one external development relevant to this repo and explain what happened, why it matters, and how this repo can use it, readable with zero prior context". The subject is the external event, not a verdict on the repo's position; no discovery quota; no proposals or approval requests
 - **Question selection (ADR-0017)**: 3–6 candidates listed in question form with no fixed template (one from a changed vantage point, one from an unused observation); the candidate whose answer is least already known wins, and "where it can be used" is a secondary consideration, never a gate. Dedup is per question — same question + same answer is out, same question + new evidence may be updated, same topic + a different question is allowed. Thin material legitimately ends the run as quiet or hold. No verdict is stored
@@ -99,7 +100,7 @@ No LLM judge. An LLM-as-Judge framework once scored each report on 6 dimensions;
 
 ## Who is shimo4228?
 
-shimo4228 (shimomoto-tatsuya) is the author of daily-research and its related research ecosystem — several DOI-registered, idea-rescue research lines including the Agent Knowledge Cycle (AKC, 10.5281/zenodo.19200726), the Contemplative Agent (10.5281/zenodo.19212118), Agent Attribution Practice (AAP, 10.5281/zenodo.19652013), authorship-strategy (10.5281/zenodo.20263316), and attention-not-self (10.5281/zenodo.20262112). daily-research maps them as lines. It is a companion engine rather than part of any single research line, and it is the *write* side of a human-mediated knowledge cycle: notes land in a shared vault wiki, and each research line folds findings back into its own repo by hand (ADR-0003).
+shimo4228 (shimomoto-tatsuya) is the author of daily-research. The author's hub, https://github.com/shimo4228/shimo4228, lists the author's practice lines (long-running, independently citable projects) with their concept DOIs; daily-research maps five DOI-registered repos as lines — the Agent Knowledge Cycle (AKC, 10.5281/zenodo.19200726), the Contemplative Agent (10.5281/zenodo.19212118), Agent Attribution Practice (AAP, 10.5281/zenodo.19652013), authorship-strategy (10.5281/zenodo.20263316), and attention-not-self (10.5281/zenodo.20262112) — plus the observation repos desire-frontier and edge-frontier. It is a companion engine rather than part of any single research line, and it is the *write* side of a human-mediated knowledge cycle: notes land in a shared vault wiki, and each research line folds findings back into its own repo by hand (ADR-0003).
 
 ## Glossary: what do the core terms mean?
 
@@ -120,3 +121,87 @@ shimo4228 (shimomoto-tatsuya) is the author of daily-research and its related re
 - **ctl-015 / ctl-016** are defined as the receipt-driven per-line report-existence gate (→ OK / E_PARTIAL / E_NO_REPORT, where E_NO_REPORT means no line passed the gate) and the deterministic report lint (hard: ソース section and citations; soft: 機会メモ, source count, body length — the soft checks are skipped for `kind: brief`).
 - **DR-Expect** is defined as a commit trailer `DR-Expect: <metric> <op> <value>` stating the expected effect of a change on `metrics.jsonl`, reconciled by `expect-check` during `/dr-review`.
 - **Frozen archive** is defined as the status of `graph.jsonld` after ADR-0008: historical concept-cluster data, no further increments.
+
+## Configure a line
+
+Each `[tracks.X]` entry is a research **line** (the config and the `DR_*_TRACK` variables still say *track*) mapped to one research repository via a `[[tracks.X.repos]]` entry. The area of interest is the repo's own operational context, read at runtime from inside the repo.
+
+```toml
+[general]
+vault_path = "/path/to/your/obsidian/vault"
+output_dir = "daily-research"
+lines_per_day = 3                                # how many lines run per morning (the rotation window)
+# Self-contamination guard: artifacts matching these strings never count as
+# "external signals" (third-party mentions/adoptions of them are fine)
+self_signals = ["github.com/YOUR_GITHUB_HANDLE", "Your Name"]
+
+[verification]
+model = "sonnet"                                 # model for call 2 (verification + clarity)
+
+[tracks.example_line]
+name = "Research Line A 前進"
+focus = "What this line is about (a description of the subject, not a selection criterion)"
+aliases = ["old_track_a"]                        # legacy track names whose history keeps feeding dedup
+context_files = [".notes/TASKS.md", "docs/manifesto.md"]  # repo-relative; read after the question is chosen (Step 3b); missing files are skipped
+sources = ["arXiv / Semantic Scholar (your keywords)"]
+# daily = true                                   # run every morning outside the rotation (ADR-0011)
+
+[[tracks.example_line.repos]]
+key = "repo_a"
+target_repo = "/path/to/your/research-repo-a"    # becomes the run's cwd (read-only)
+target_doi = "10.xxxx/zenodo.xxxxxxxx"           # optional
+
+[tracks.example_ecosystem_line]                  # a line with no repo (ADR-0018)
+name = "Example Ecosystem 観測"
+mode = "ecosystem"                               # cwd = state/example_ecosystem_line, ecosystem protocol, --safe-mode
+daily = true
+template = "templates/report-template-ecosystem.md"
+focus = "The ecosystem to watch, and what to look at in it"
+sources = ["Official site / docs / GitHub org", "GitHub search, package registries"]
+# no repos and no context_files — the schema rejects both for mode = "ecosystem"
+```
+
+Reports are generated in Japanese by default; change the language constraint in `prompts/repo-research-protocol.md` (and `prompts/ecosystem-research-protocol.md`). The prompts are written in Japanese. See [CONTRIB](docs/CONTRIB.md) for CLI flags and environment variables.
+
+## Project structure
+
+```
+daily-research/
+├── scripts/
+│   ├── daily-research.sh       # Orchestrator (rotation-pick → per line: call 1 research + call 2 verification/clarity, cwd = the line's repo, or state/<line> for an ecosystem line)
+│   ├── lib/                    # Sourced shell libraries + the Python parsing module
+│   │   ├── env.sh log.sh notify.sh lock.sh auth.sh claude.sh
+│   │   └── dr_pipeline.py      # Single stdlib-only JSON/TOML module (line-brief, past-themes, receipt-read, verify-read, report-lint, metrics)
+│   ├── check-auth.sh           # Real OAuth probe health check (shares lib/auth.sh)
+│   └── pre-commit.sh           # Secret / syntax guard
+├── prompts/                    # repo-research-protocol.md + ecosystem-research-protocol.md (call 1) + verification-protocol.md (call 2)
+├── templates/report-template*.md      # Explanatory-report writing rules + fixed tail sections (per-line overrides: edge, ecosystem)
+├── state/                      # Per-line brief / pending / watched-sources / playbook / runs (gitignored)
+├── graph.jsonld                # FROZEN archive of the retired concept-graph pipeline (docs/graph-schema.md)
+├── config.example.toml         # Line → repo mapping (config.toml is gitignored)
+├── tests/                      # bats (daily-research / e2e-mock / lib) + pytest (dr_pipeline_test.py)
+└── docs/                       # RUNBOOK, CONTRIB, graph-schema, adr/
+```
+
+## Key design decisions
+
+| Decision | Why |
+|----------|-----|
+| Per-repo in-context research: per picked line, call 1 = Opus research + call 2 = fresh-context verification and clarity revision (Sonnet by default), cwd = the repo | The central 2-pass concept-graph pipeline could only see repos through synced graphs, so selection degenerated into gap-filling surveys; the operational context that knows what to advance lives inside each repo ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)) |
+| Objective = explain one external development and what it means for the repo, not concept reinforcement | Corroboration-as-theme is a benchmarked failure mode ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)); the proposal/approval framing turned every note into a pending to-do, so notes are now reading material with a deadline-only 機会メモ tail ([ADR-0009](docs/adr/0009-explanatory-report-and-brief-retirement.md)); the adversarial refutation framing was later retired for readability ([ADR-0014](docs/adr/0014-trend-explanation-report.md)) |
+| Diff-first + citation gate baked into the run structure | Survey-per-run is a documented anti-pattern; sycophantic drift needs structural countermeasures, not prompt intent ([ADR-0008](docs/adr/0008-per-repo-in-context-research.md)) |
+| Repos are read-only at three layers (doctrine / execution / permissions) | Contributions flow through vault notes a human folds back in, avoiding cross-repo pollution |
+| Lines map to research repositories | Fixed topic domains caused structural saturation ([ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)); 1:1 repo lines since [ADR-0007](docs/adr/0007-return-to-four-repo-concept-reinforcement.md); in the author's configuration as of 2026-10, seven repo lines, run three a morning as a rotation window ([ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md)) |
+| A line may have no repo: `mode = "ecosystem"` | Some subjects are an outside ecosystem rather than a repo's surroundings, and forcing one into a repo line makes the repo's context the selection filter; an ecosystem line runs from its own state directory under its own call-1 protocol, with the shared receipt / gate / content-state contract unchanged. The daily `jev` line is the first one ([ADR-0018](docs/adr/0018-ecosystem-mode-and-daily-jev-line.md)) |
+| Four content states with a receipt-driven gate, and source verification in call 2 | "A fresh topic at full length every morning" forces an article out of a morning with no material; an honest quiet or hold is a normal result, and the line's success is decided from its run receipt. The claims are checked by a process other than the writer, re-fetching each source ([ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md)) |
+| Local state files, not external MCP memory | The previous Mem0 MCP integration ran zero times for 32 days due to silent failure; a local file fails loudly |
+| Shell orchestration + stdlib Python parser | No pip dependencies at runtime; JSON/TOML parsing lives in one testable `dr_pipeline.py` module |
+
+Operational rationale (real auth probe vs `--version`, `--append-system-prompt-file`, path-scoped `--allowedTools`, `--max-turns`, `< /dev/null` stdin redirect) lives in [CONTRIB](docs/CONTRIB.md). In the author's own use, daily-research is also the *write* side of a knowledge cycle shared across several research lines: observed architecture, not a roadmap ([ADR-0003](docs/adr/0003-cross-line-knowledge-cycle.md)). The self-improvement loop (a per-line check that the line's report exists, a deterministic lint of the note's fixed sections, a daily record in `metrics.jsonl`, expected effects written into commits and checked against that record, and a roughly weekly review by the author) is preserved from [ADR-0006](docs/adr/0006-self-improvement-loop-human-consumer.md): no score is kept for an automated judge, and whether the notes are good is left to the person who reads them.
+
+## Gotchas
+
+- **Runs from inside a Claude Code session too**: `lib/env.sh` unsets `CLAUDECODE`, so the nested-session check passes (verified 2026-08-22). Test seams: `DR_FORCE_TRACK=<line>` (one line, even outside today's window), `DR_ONLY_TRACK=<line>` (only that line among today's picks), `DR_DATE=YYYY-MM-DD`.
+- **OAuth token expires ~4 days** (the author's observation, recorded 2026-06-21): refresh by running `claude` interactively. The real auth probe (a one-turn Haiku call, not `claude --version`, which passes with an expired token) stops the run before any line and sends a re-auth notification.
+- **Claude Code plugins cause hangs**: globally-installed plugins initialize their MCP servers on every `claude -p` call (the author's observation, recorded 2026-06-21). Disable them per-project in `.claude/settings.json` (see [RUNBOOK](docs/RUNBOOK.md)).
+- **launchd doesn't source `.zshrc`**: all PATH entries must be explicit in the script and plist.
