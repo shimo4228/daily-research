@@ -26,12 +26,14 @@ daily-research/
 │   │   ├── log.sh              # log() / log_init()（作成時 chmod、30日ローテーション）
 │   │   ├── notify.sh           # notify()（osascript ガード）
 │   │   ├── lock.sh             # acquire_lock()/release_lock()（mkdir アトミック）
-│   │   ├── auth.sh             # real_auth_probe()（実 OAuth probe）
-│   │   ├── claude.sh           # run_claude()/classify_exit()（E_AUTH/E_TRANSIENT/E_FATAL）
+│   │   ├── auth.sh             # real_auth_probe()（[billing] の経路で実 API を 1 回叩く probe）
+│   │   ├── claude.sh           # run_claude()/classify_exit()（E_AUTH/E_BILLING/E_BUDGET/E_TRANSIENT/E_FATAL）
+│   │   ├── billing.sh          # 課金経路（subscription = OAuth / api = env_file の key）+ 呼び出しごとの上限 +
+│   │   │                       #   支出台帳 state/api-spend.jsonl + 日・月の上限ゲート
 │   │   └── dr_pipeline.py      # JSON/TOML 解析の単一モジュール（rotation-pick / line-brief /
 │   │                           #   past-themes / receipt-read / verify-read / report-lint /
 │   │                           #   metrics-* / expect-check / config-get 等）
-│   ├── check-auth.sh           # OAuth トークンの実 probe ヘルスチェック
+│   ├── check-auth.sh           # [billing] の経路で実 probe するヘルスチェック（api モードは今月の支出も出す）
 │   └── pre-commit.sh           # secret / 構文ガード（git pre-commit hook）
 ├── prompts/
 │   ├── repo-research-protocol.md # per-repo リサーチ・プロトコル（品質の中核、ADR-0008。
@@ -282,8 +284,10 @@ tail -f logs/$(date +%Y-%m-%d).log
   **2026-08-22 にレポートを「動向解説 + repo への含意」へ単純化 (ADR-0014)**: 対立的
   フレーミング (裏付け禁止 / 反証義務 / 前提挑戦パス / theme_rank / scoring_criteria) を
   プロトコル・テンプレート・config の 3 層から撤去
-- **所要時間とコストの目安** (4 line の見積もり。3 line 時代の実績値を 4/3 倍したもので未実測): 逐次実行して
-  典型 35〜45 分、最悪ケースは 05:00 から約 260 分。コストは 1 日 $16〜20 (呼1 ≈ $4〜5/line、
-  呼2 ≈ $0.5〜1/line。quiet / hold の line は呼2 が走らない)
+- **課金は Claude API (2026-10-29〜)**: `[billing] mode = "api"`、key は `~/.config/jrp/env` (jrp と共有)。
+  API クレジット月 $200 に対し `monthly_cap_usd = 190` / `daily_cap_usd = 15` / 呼び出しごとの
+  `--max-budget-usd` (呼1 4、呼2 1.5)。上限に当たった日はサブスクに戻さず残り line を止めて通知する。
+  支出の正本は `state/api-spend.jsonl`。見積もりは 1 line ≈ $2.4〜2.9 (2026-09 の実績トークン数に
+  2026-10-29 の定価を当てた値で、Opus 5.5 では未実測)、2 line/日で月 ≈ $155。3 line の逐次実行で 20〜35 分
 - 蓄積層: Obsidian vault の LLM-wiki (ingest は Pass 3 で継続) + line 別 state
   (brief / pending / watched-sources / playbook / runs)。中央 graph.jsonld は凍結アーカイブ

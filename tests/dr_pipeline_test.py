@@ -102,7 +102,7 @@ def test_error_fields_401_fixture(monkeypatch, capsys):
     stdin = (FIXTURES / "result-401.json").read_text()
     rc, out, _ = run_cmd(monkeypatch, capsys, ["error-fields"], stdin)
     assert rc == 0
-    assert out.strip() == "401\ttrue"
+    assert out.rstrip("\n") == "401\ttrue\t"
 
 
 @pytest.mark.unit
@@ -111,27 +111,49 @@ def test_error_fields_success_fixture(monkeypatch, capsys):
     rc, out, _ = run_cmd(monkeypatch, capsys, ["error-fields"], stdin)
     assert rc == 0
     # is_error は false。api_error_status は 401 ではない
-    code, is_err = out.rstrip("\n").split("\t")
+    code, is_err, kind = out.rstrip("\n").split("\t")
     assert is_err == "false"
     assert code != "401"
+    assert kind == ""
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
     "stdin,expected",
     [
-        ('{"is_error":false,"api_error_status":null}', "\tfalse"),
-        ('{"is_error":true,"api_error_status":401}', "401\ttrue"),
-        ("not-json", "\tparse-fail"),
-        # 空入力は `'' or 'null'` で null パースされ {} → "\tfalse" (parse-fail ではない)
-        ("", "\tfalse"),
+        ('{"is_error":false,"api_error_status":null}', "\tfalse\t"),
+        ('{"is_error":true,"api_error_status":401}', "401\ttrue\t"),
+        ("not-json", "\tparse-fail\t"),
+        # 空入力は `'' or 'null'` で null パースされ {} → "\tfalse\t" (parse-fail ではない)
+        ("", "\tfalse\t"),
+        ('{"is_error":true,"api_error_status":429}', "429\ttrue\tbilling"),
+        (
+            '{"is_error":true,"api_error_status":400,'
+            '"result":"Your credit balance is too low to access the Anthropic API"}',
+            "400\ttrue\tbilling",
+        ),
+        (
+            '{"is_error":true,"subtype":"error_max_budget_usd","api_error_status":null}',
+            "\ttrue\tbudget",
+        ),
+        # 成功した記事の本文に "billing" という語があっても課金エラーにしない
+        ('{"is_error":false,"result":"wrote a note about billing"}', "\tfalse\t"),
     ],
-    ids=["clean", "auth-401", "garbage", "empty"],
+    ids=[
+        "clean",
+        "auth-401",
+        "garbage",
+        "empty",
+        "rate-429",
+        "credit-low",
+        "budget",
+        "word-in-ok-result",
+    ],
 )
 def test_error_fields_cases(monkeypatch, capsys, stdin, expected):
     rc, out, _ = run_cmd(monkeypatch, capsys, ["error-fields"], stdin)
     assert rc == 0
-    assert out.strip() == expected.strip()
+    assert out.rstrip("\n") == expected
 
 
 # === vault-path ===
@@ -1570,3 +1592,188 @@ def test_past_themes_groups_ecosystem_line(monkeypatch, capsys, tmp_path):
     assert rc == 0
     assert "Track: eco" in out
     assert "X は初めて動くコードを公開したか — v0.1.0 の release と依存関係まで" in out
+
+
+# === billing (API 課金の設定・key・支出台帳・上限) ===
+
+
+KEY_VAR = "ANTHROPIC" + "_API_KEY"
+
+
+def _write(tmp_path, name, text):
+    p = tmp_path / name
+    p.write_text(text, encoding="utf-8")
+    return str(p)
+
+
+@pytest.mark.unit
+def test_billing_config_defaults_to_subscription(monkeypatch, capsys, tmp_path):
+    cfg = _write(tmp_path, "c.toml", "[general]\n")
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["billing-config", cfg])
+    assert rc == 0
+    mode, env_file, monthly, daily, c1, c2 = out.rstrip("\n").split("\t")
+    assert mode == "subscription"
+    assert not env_file.startswith("~")
+    assert (monthly, daily, c1, c2) == ("190", "15", "4", "1.5")
+
+
+@pytest.mark.unit
+def test_billing_config_api(monkeypatch, capsys, tmp_path):
+    cfg = _write(
+        tmp_path,
+        "c.toml",
+        '[billing]\nmode = "api"\nenv_file = "/x/env"\nmonthly_cap_usd = 100\n'
+        "daily_cap_usd = 8\ncall1_max_usd = 3\ncall2_max_usd = 1\n",
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["billing-config", cfg])
+    assert rc == 0
+    assert out.rstrip("\n") == "api\t/x/env\t100\t8\t3\t1"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "body",
+    [
+        'mode = "apikey"',
+        "monthly_cap_usd = 0",
+        "daily_cap_usd = true",
+        "unknown_key = 1",
+        # 1 line の予約額 (呼1 + 呼2) が日の上限を超える設定は 1 line も走れない
+        "daily_cap_usd = 5\ncall1_max_usd = 4\ncall2_max_usd = 2",
+        "monthly_cap_usd = 10\ndaily_cap_usd = 12",
+    ],
+    ids=[
+        "bad-mode",
+        "zero-cap",
+        "bool-cap",
+        "unknown-key",
+        "reserve-over-daily",
+        "daily-over-monthly",
+    ],
+)
+def test_billing_config_rejects(monkeypatch, capsys, tmp_path, body):
+    cfg = _write(tmp_path, "c.toml", "[billing]\n" + body + "\n")
+    rc, _, err = run_cmd(monkeypatch, capsys, ["billing-config", cfg])
+    assert rc == 2
+    assert "billing" in err
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        # 変数名と値を分けて組み立てる (secret scan の KEY=値 パターンに当てないため)
+        ("{k}=test-1\n", "test-1"),
+        ('export {k}="test-2"\nOTHER=1\n', "test-2"),
+        ("OTHER=1\n{k}='test-3'  \n", "test-3"),
+    ],
+)
+def test_env_key_reads_key(monkeypatch, capsys, tmp_path, text, expected):
+    env = _write(tmp_path, "env", text.format(k=KEY_VAR))
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["env-key", env])
+    assert rc == 0
+    assert out.rstrip("\n") == expected
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("text", ["OTHER=1\n", "{k}=\n", "# {k}=x\n"])
+def test_env_key_missing(monkeypatch, capsys, tmp_path, text):
+    env = _write(tmp_path, "env", text.format(k=KEY_VAR))
+    rc, out, err = run_cmd(monkeypatch, capsys, ["env-key", env])
+    assert rc == 1
+    assert out == ""
+    assert "missing" in err
+
+
+@pytest.mark.unit
+def test_env_key_unreadable(monkeypatch, capsys, tmp_path):
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["env-key", str(tmp_path / "nope")])
+    assert rc == 1
+    assert out == ""
+
+
+@pytest.mark.unit
+def test_spend_add_and_gate(monkeypatch, capsys, tmp_path):
+    import os
+    import stat
+
+    ledger = str(tmp_path / "state" / "api-spend.jsonl")
+    rc, out, _ = run_cmd(
+        monkeypatch,
+        capsys,
+        ["spend-add", ledger, "2026-11-02", "akc", "call1"],
+        '{"total_cost_usd": 2.5}',
+    )
+    assert rc == 0 and out.strip() == "2.5000"
+    assert stat.S_IMODE(os.stat(ledger).st_mode) == 0o600
+    # 解析できない JSON も 0 円の 1 行として残す
+    run_cmd(monkeypatch, capsys, ["spend-add", ledger, "2026-11-02", "akc", "call2"], "garbage")
+    # 前月の支出は今月の累計に入らない
+    run_cmd(
+        monkeypatch,
+        capsys,
+        ["spend-add", ledger, "2026-10-31", "aap", "call1"],
+        '{"total_cost_usd": 99}',
+    )
+    run_cmd(
+        monkeypatch,
+        capsys,
+        ["spend-add", ledger, "2026-11-01", "aap", "call1"],
+        '{"total_cost_usd": 1.0}',
+    )
+    rows = [json.loads(x) for x in open(ledger, encoding="utf-8")]
+    assert [r["call"] for r in rows] == ["call1", "call2", "call1", "call1"]
+    assert rows[1]["cost_usd"] == 0
+
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["spend-gate", ledger, "2026-11-02", "100", "8", "5.5"]
+    )
+    assert rc == 0
+    assert out.rstrip("\n") == "ok\t3.50\t2.50"
+    # 日の残額 8 - 2.5 = 5.5 はちょうど予約額 → 通る。予約額が上回れば止める
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["spend-gate", ledger, "2026-11-02", "100", "8", "6"])
+    assert rc == 1 and out.startswith("stop\t")
+    # 月の残額で止まる
+    rc, _, _ = run_cmd(monkeypatch, capsys, ["spend-gate", ledger, "2026-11-02", "8", "8", "5"])
+    assert rc == 1
+
+
+@pytest.mark.unit
+def test_spend_gate_without_ledger(monkeypatch, capsys, tmp_path):
+    rc, out, _ = run_cmd(
+        monkeypatch,
+        capsys,
+        ["spend-gate", str(tmp_path / "none.jsonl"), "2026-11-02", "190", "15", "5.5"],
+    )
+    assert rc == 0
+    assert out.rstrip("\n") == "ok\t0.00\t0.00"
+
+
+@pytest.mark.unit
+def test_spend_add_records_cap_when_cost_missing(monkeypatch, capsys, tmp_path):
+    ledger = str(tmp_path / "l.jsonl")
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["spend-add", ledger, "2026-11-02", "akc", "call1", "4"], ""
+    )
+    assert rc == 0 and out.strip() == "4.0000"
+    row = json.loads(open(ledger, encoding="utf-8").read())
+    assert row["cost_usd"] == 4.0 and row["estimated"] is True
+    # 費用が報告された呼び出しは見積もり扱いにしない (0 円も報告値として残す)
+    run_cmd(
+        monkeypatch,
+        capsys,
+        ["spend-add", ledger, "2026-11-02", "akc", "call2", "1.5"],
+        '{"total_cost_usd": 0}',
+    )
+    row2 = json.loads(open(ledger, encoding="utf-8").read().splitlines()[1])
+    assert row2["cost_usd"] == 0 and "estimated" not in row2
+
+
+@pytest.mark.unit
+def test_spend_gate_refuses_unreadable_lines(monkeypatch, capsys, tmp_path):
+    ledger = _write(tmp_path, "l.jsonl", '{"date": "2026-11-02", "cost_usd": 1}\n{broken\n')
+    rc, _, err = run_cmd(
+        monkeypatch, capsys, ["spend-gate", ledger, "2026-11-02", "190", "15", "5.5"]
+    )
+    assert rc == 2
+    assert "unreadable" in err

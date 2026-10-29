@@ -17,8 +17,10 @@ run_claude() {
 }
 
 # classify_exit <exit_code> <result_json>
-# claude -p の終了コードと result JSON を 3 クラスのエラー分類に写像して echo する:
-#   E_AUTH      : api_error_status==401 (再認証が必要。Sonnet フォールバックは無意味)
+# claude -p の終了コードと result JSON をエラー分類に写像して echo する:
+#   E_AUTH      : api_error_status==401 (OAuth 切れ・API key の拒否)、api mode では 403 も。再試行は無意味
+#   E_BILLING   : api mode の 429 / 402 / クレジット残高不足 (再試行せず残 line を止める — policy signal)
+#   E_BUDGET    : 呼び出し 1 回の --max-budget-usd に到達 (再試行しない。費用の上限そのもの)
 #   E_TRANSIENT : exit==124 (timeout。再試行で回復しうる)
 #   E_FATAL     : is_error==true (401 以外) または exit!=0 (回復不能/要調査)
 #   OK          : exit==0 かつ is_error 無し (成功)
@@ -27,15 +29,26 @@ run_claude() {
 # 等) を成功と誤認しない (ctl-003/ctl-007)。
 classify_exit() {
   local code="${1:-0}" json="${2:-}"
-  local fields acode aerr
-  # error-fields は "api_error_status<TAB>is_error" を返す。api_error_status が空のとき
-  # 先頭フィールドが空になるが、`IFS=$'\t' read` は TAB が IFS 空白扱いのため先頭の空を
-  # 潰してしまう。パラメータ展開で TAB の前後を取り出し、空の先頭フィールドを保持する。
+  local fields acode aerr akind _rest
+  # error-fields は "api_error_status<TAB>is_error<TAB>kind" を返す。空のフィールドがありうるが、
+  # `IFS=$'\t' read` は TAB が IFS 空白扱いのため連続 TAB を潰してしまう。パラメータ展開で
+  # 切り出し、空のフィールドを保持する。
   fields=$(printf '%s' "$json" | python3 "$DR_PY" error-fields) || fields=""
-  acode="${fields%%$'\t'*}"
-  aerr="${fields#*$'\t'}"
-  if [ "$acode" = "401" ]; then
+  acode="${fields%%$'\t'*}"; _rest="${fields#*$'\t'}"
+  aerr="${_rest%%$'\t'*}"; akind="${_rest#*$'\t'}"
+  [ "$akind" = "$_rest" ] && akind=""  # TAB が 2 個無い旧形式 (想定外の入力) への保険
+  # 403 と課金系 (429 / クレジット) を止める扱いにするのは api mode だけ。subscription mode は
+  # 従来どおり 401 だけが E_AUTH、それ以外の失敗は E_FATAL (1 回リトライ)。
+  if [ "${BILLING_MODE:-subscription}" != "api" ]; then
+    akind=""
+    [ "$acode" = "403" ] && acode=""
+  fi
+  if [ "$acode" = "401" ] || [ "$acode" = "403" ]; then
     echo "E_AUTH"
+  elif [ "$akind" = "billing" ]; then
+    echo "E_BILLING"
+  elif [ "$akind" = "budget" ]; then
+    echo "E_BUDGET"
   elif [ "$code" = "124" ]; then
     echo "E_TRANSIENT"
   elif [ "$aerr" = "true" ] || [ "$code" != "0" ]; then

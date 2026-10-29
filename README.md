@@ -10,7 +10,7 @@ It runs unattended via macOS `launchd`, with no API plumbing and no orchestratio
 
 > **Who it's for:** anyone maintaining one or more research repositories who wants a daily, self-directed explainer of one external development that matters to the repo's actual work, rather than generic trends or a pile of surveys.
 
-**What leaves your machine, and what it costs.** Each run is a Claude Code session, so what it reads (the repo's CLAUDE.md, task ledger and the files you list in `context_files`, plus the line's `state/` files) is sent to Anthropic, and the run searches and fetches the web. The runs are told never to write to your repos, and their write permission names only the vault, `state/` and `past_topics.json` (*Read-only repos* under [Core concepts](#core-concepts) says where that permission stops). It is built for a paid Claude Max plan: as of 2026-10 the subscription covers these runs with no per-token charges, though they count against the plan's usage limits like any other Claude Code use. The script unsets `ANTHROPIC_API_KEY` so that a key in your environment does not switch it to per-token billing. The [RUNBOOK](docs/RUNBOOK.md#cost) puts the author's four-line morning (three rotating lines plus one daily line) at about $16–20 in the cost Claude Code reports (derived from per-line figures, not yet measured); on a Max plan that figure measures usage and is not billed.
+**What leaves your machine, and what it costs.** Each run is a Claude Code session, so what it reads (the repo's CLAUDE.md, task ledger and the files you list in `context_files`, plus the line's `state/` files) is sent to Anthropic, and the run searches and fetches the web. The runs are told never to write to your repos, and their write permission names only the vault, `state/` and `past_topics.json` (*Read-only repos* under [Core concepts](#core-concepts) says where that permission stops). `[billing] mode` in `config.toml` picks who pays. `subscription` (the default) uses your Claude Code login: on a Max plan the runs have no per-token charge but count against the plan's usage limits, and the script drops any `ANTHROPIC_API_KEY` in your environment so that billing never switches without the setting. `api` reads `ANTHROPIC_API_KEY` from an env file outside the repo and bills every call to the Claude API. Each call has a spending cap, and when the day's or month's cap would be crossed the remaining lines are skipped and you get a notification. The author runs `api`. Repriced at the 2026-10-29 list prices, the author's 2026-09 runs come to about $2.4–2.9 per line, so two lines a day is about $155 a month (details in the [RUNBOOK](docs/RUNBOOK.md#cost)).
 
 The articles on how it was built, and the observation repos built on its notes, are under [More from the author](#more-from-the-author).
 
@@ -43,7 +43,7 @@ The full run, step by step (lock, auth probe, both calls, the report gate and th
 | Requirement | Notes |
 |-------------|-------|
 | [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) | Install it as the Claude Code docs describe, then sign in once by running `claude` interactively |
-| [Claude Max plan](https://claude.ai) | Paid subscription; see the cost note at the top for how the runs use it |
+| [Claude Max plan](https://claude.ai) or a [Claude API](https://platform.claude.com) key | One of the two; `[billing] mode` picks which (see the cost note at the top) |
 | `python3` >= 3.11 | Stdlib only (`json` / `tomllib` / `re`) for JSON/TOML parsing. macOS system 3.9 lacks `tomllib`; use Homebrew's `python3` |
 | macOS | Uses `launchd` for scheduling (Linux: adapt to `cron` / `systemd`) |
 | coreutils `timeout` | Required: the script stops at start without it. Install it from Homebrew (`brew install coreutils`) |
@@ -64,7 +64,7 @@ cp config.example.toml config.toml
 # 3. Make scripts executable
 chmod +x scripts/*.sh
 
-# 4. Verify Claude auth (real OAuth probe)
+# 4. Verify Claude auth: one real call on the billing path [billing] selects
 ./scripts/check-auth.sh
 
 # 5. Test run of one line (the example config names it example_line), even outside today's window.
@@ -98,7 +98,8 @@ The rotation window, the per-line state files and the design decisions with thei
 ## Gotchas
 
 - **Runs from inside a Claude Code session too**: `lib/env.sh` unsets `CLAUDECODE`, so the nested-session check passes. The other test seams are in [CONTRIB](docs/CONTRIB.md).
-- **OAuth token expires ~4 days** (the author's observation, recorded 2026-06-21): refresh by running `claude` interactively. The real auth probe (a one-turn Haiku call, not `claude --version`, which passes with an expired token) stops the run before any line and sends a re-auth notification.
+- **API mode stops instead of retrying**: a 429, a too-low credit balance or a rejected key stops the remaining lines and sends a notification. Each call's cost is appended to `state/api-spend.jsonl`, which the daily and monthly caps read.
+- **OAuth token expires ~4 days** in subscription mode (the author's observation, recorded 2026-06-21): refresh by running `claude` interactively. The real auth probe (a one-turn Haiku call, not `claude --version`, which passes with an expired token) stops the run before any line and sends a re-auth notification.
 - **Claude Code plugins cause hangs**: globally installed plugins start their MCP servers on every `claude -p` call (observed 2026-06-21); disable them per project in `.claude/settings.json` ([RUNBOOK](docs/RUNBOOK.md)).
 - **launchd doesn't source `.zshrc`**: all PATH entries must be explicit in the script and plist.
 

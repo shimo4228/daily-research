@@ -22,7 +22,8 @@ source "$LIB_DIR/log.sh"      # log() / log_init()
 source "$LIB_DIR/notify.sh"   # notify() (osascript ガード付き)
 source "$LIB_DIR/lock.sh"     # acquire_lock() / release_lock() (mkdir アトミック)
 source "$LIB_DIR/auth.sh"     # real_auth_probe() (実 OAuth probe、2 entrypoint 共有)
-source "$LIB_DIR/claude.sh"   # run_claude() / classify_exit() (E_AUTH/E_TRANSIENT/E_FATAL)
+source "$LIB_DIR/claude.sh"   # run_claude() / classify_exit() (E_AUTH/E_BILLING/E_BUDGET/E_TRANSIENT/E_FATAL)
+source "$LIB_DIR/billing.sh"  # billing_load() / budget_flags() / billing_record() / billing_gate()
 
 log_init  # logs/ 作成 + 権限 600/700 (作成時) + 30日ローテーション
 
@@ -97,13 +98,33 @@ if ! "$CLAUDE_CMD" --version >> "$LOG_FILE" 2>&1; then
   exit 1
 fi
 
-# 実 auth probe (lib/auth.sh)。`claude --version` は OAuth 期限切れを検出できないため、
-# 安価な Haiku 呼び出しで実 API を叩き is_error/api_error_status を検査する。
-if ! real_auth_probe; then
-  log "ERROR: Auth probe failed — OAuth likely expired"
-  notify "Claude認証エラー。claude を起動して再認証してください。" "Daily Research Auth Error"
+# 課金経路 (lib/billing.sh、契約の正本は dr_pipeline.py の [billing])。api mode は env_file の
+# ANTHROPIC_API_KEY を export し、以後の claude -p は全部 Claude API の課金になる。
+# key が無い日はサブスクに切り替えず止める (課金経路を config 以外で変えない)。
+if ! billing_load "$PROJECT_DIR/config.toml"; then
+  log "ERROR: billing setup failed — $BILLING_ERROR"
+  notify "課金設定のエラー: $BILLING_ERROR" "Daily Research Error"
   exit 1
 fi
+if [ "$BILLING_MODE" = "api" ]; then
+  log "Billing: api (key from $BILLING_ENV_FILE; caps month \$$BILLING_MONTHLY_CAP / day \$$BILLING_DAILY_CAP / call1 \$$BILLING_CALL1_MAX / call2 \$$BILLING_CALL2_MAX)"
+else
+  log "Billing: subscription (Max plan OAuth)"
+fi
+
+# 実 auth probe (lib/auth.sh)。`claude --version` は認証切れを検出できないため、
+# 安価な Haiku 呼び出しで実 API を叩き is_error/api_error_status を検査する。
+if ! real_auth_probe; then
+  billing_record "$AUTH_PROBE_JSON" "_probe" "probe"
+  log "ERROR: Auth probe failed ($BILLING_MODE) — $(auth_probe_reason)"
+  if [ "$BILLING_MODE" = "api" ]; then
+    notify "Claude API の認証に失敗しました (key の拒否・クレジット切れ・429 のいずれか)。ログを確認してください。" "Daily Research Auth Error"
+  else
+    notify "Claude認証エラー。claude を起動して再認証してください。" "Daily Research Auth Error"
+  fi
+  exit 1
+fi
+billing_record "$AUTH_PROBE_JSON" "_probe" "probe"
 log "Auth probe passed"
 
 # === config schema チェック (旧 schema fail-fast, ADR-0004/0008) ===
@@ -231,6 +252,10 @@ FAILED_LINES=""       # ctl-015 (receipt gate) に落ちた line (空 = 全 line
 OK_LINES=""
 METRICS_STDIN=""      # metrics-append へ渡す RUN / CLARITY / STATE / VERIFY 行の蓄積 (1 日 1 レコード)
 AUTH_ABORT=0          # 401 検出 — 残 line は中断するが、完走済み line の集計は捨てない
+BILLING_ABORT=0       # 429 / クレジット切れ — 同上 (再試行で踏み抜かない、rules: debugging.md)
+BUDGET_STOP=0         # API 支出の上限 (月・日) に届いた — 残 line を始めない
+STOPPED_LIST=""       # 上の 3 つの理由で実行しなかった line
+LINE_INDEX=0          # 実行を始めた line の数 (止めたときの残 line の算出用)
 # 日次まとめ・通知用の内容状態 (ADR-0017)。件数と "a, b(brief)" 形式の line リスト
 N_ARTICLE=0; N_BRIEF=0; N_QUIET=0; N_HOLD=0
 PUBLISHED_LIST=""     # 今朝: article / brief
@@ -241,6 +266,17 @@ SUSPECT_LIST=""       # 取得失敗の疑い: quiet/hold かつ (fetch_failed o
 for ROW in "${TRACK_ROWS[@]}"; do
 
 IFS=$'\t' read -r TRACK _ TARGET_REPO <<< "$ROW"
+
+# API 支出の上限 (lib/billing.sh): 月・日の残額が 呼1 + 呼2 の 1 回上限に満たなければ、
+# この line から先を始めない。各呼び出しは --max-budget-usd で抑えるので、超過は最後の
+# 1 turn 分に収まる。subscription mode では常に通る。
+if ! billing_gate; then
+  # 上限以外の理由 (台帳の書き込み・読み取りの失敗) は billing_gate が先に ERROR で log 済み
+  log "WARN: API spend gate stopped the run (month \$$SPEND_MONTH / \$$BILLING_MONTHLY_CAP, day \$$SPEND_DAY / \$$BILLING_DAILY_CAP, need \$$BILLING_RESERVE per line) — stopping remaining lines"
+  BUDGET_STOP=1
+  break
+fi
+LINE_INDEX=$((LINE_INDEX + 1))
 log "=== Line: $TRACK (${TARGET_REPO:-no target repo}) ==="
 
 # state 層 (brief / pending / watched-sources / playbook / runs/)。gitignored、初回は空で開始。
@@ -363,6 +399,7 @@ $LINE_TEMPLATE"
   ALLOWED_TOOLS="$ALLOWED_TOOLS,Edit(//${PROJECT_DIR#/}/past_topics.json)"
 
   LINE_CLASS=""
+  budget_flags 1
   for ATTEMPT in 1 2; do
     # timeout 後の retry で同一 line に 2 本目のノートを書く事故を防ぐ — attempt 1 が
     # ノートまたは receipt を書いた後に落ちた (124 等) なら、再実行せずゲートへ進む
@@ -371,10 +408,15 @@ $LINE_TEMPLATE"
       log "WARN: Line $TRACK attempt 1 left a report or receipt — skipping retry, going to gate"
       break
     fi
+    if [ "$ATTEMPT" = "2" ] && ! billing_gate; then
+      log "WARN: Line $TRACK retry skipped — API spend cap (month \$$SPEND_MONTH, day \$$SPEND_DAY)"
+      break
+    fi
     LINE_EXIT=0
     # ${arr[@]+...}: bash 3.2 + set -u は空配列の展開を unbound variable で落とす
     LINE_JSON=$(cd "$LINE_CWD" && CLAUDE_TIMEOUT=1500 run_claude -p "$LINE_PROMPT" \
       ${LINE_EXTRA_FLAGS[@]+"${LINE_EXTRA_FLAGS[@]}"} \
+      ${BUDGET_FLAGS[@]+"${BUDGET_FLAGS[@]}"} \
       --permission-mode default \
       --append-system-prompt-file "$LINE_PROTOCOL" \
       --allowedTools "$ALLOWED_TOOLS" \
@@ -392,15 +434,33 @@ $LINE_TEMPLATE"
     # attempt ごとに蓄積する — ループ後に 1 回だと retry 日の 1 回目のコストが metrics から
     # 消える (2026-08-14 に $1.51 欠落)。pass2 は全 attempt の合算になる
     METRICS_STDIN+="RUN"$'\t'"$LINE_JSON"$'\n'
+    # 費用の無い JSON (timeout で kill された等) は 1 回の上限額を見積もりとして記録する
+    billing_record "$LINE_JSON" "$TRACK" "call1" "$BILLING_CALL1_MAX"
 
     LINE_CLASS=$(classify_exit "$LINE_EXIT" "$LINE_JSON")
     if [ "$LINE_CLASS" = "E_AUTH" ]; then
-      # 401 は認証自体の失敗。リトライは無意味 → この line と残 line を中断する。
+      # 認証自体の失敗 (401。api mode では 403 も)。リトライは無意味 → この line と残 line を中断する。
       # 即 exit にしない — 完走済み line の metrics / lint / wiki ingest / 通知を
       # 捨てないため (ループ末尾の AUTH_ABORT 判定で break する)。
-      log "ERROR: Line $TRACK returned 401 — aborting remaining lines"
-      notify "Claude認証エラー(401)。claude を起動して再認証してください。" "Daily Research Auth Error"
+      log "ERROR: Line $TRACK returned 401 — aborting remaining lines (E_AUTH = 401/403, billing $BILLING_MODE)"
+      if [ "$BILLING_MODE" = "api" ]; then
+        notify "Claude API key が拒否されました (401/403)。key を確認してください。" "Daily Research Auth Error"
+      else
+        notify "Claude認証エラー(401)。claude を起動して再認証してください。" "Daily Research Auth Error"
+      fi
       AUTH_ABORT=1
+      break
+    fi
+    if [ "$LINE_CLASS" = "E_BILLING" ]; then
+      # 429 / クレジット切れは policy signal (rules: debugging.md)。再試行せず残 line を止める。
+      log "ERROR: Line $TRACK hit a billing/rate-limit error — aborting remaining lines, no retry"
+      notify "Claude API の課金エラー (429 またはクレジット切れ)。残りのラインを止めました。" "Daily Research Billing Error"
+      BILLING_ABORT=1
+      break
+    fi
+    if [ "$LINE_CLASS" = "E_BUDGET" ]; then
+      # 1 回の上限に届いた。再試行は同じ額をもう一度払うだけなので、書けた分でゲートへ進む
+      log "WARN: Line $TRACK reached --max-budget-usd \$$BILLING_CALL1_MAX — no retry, going to gate"
       break
     fi
     if [ "$LINE_CLASS" = "OK" ]; then
@@ -512,6 +572,14 @@ else
   esac
 fi
 
+# 認証・課金の失敗の直後には呼2 を走らせない (同じ失敗を重ねるだけ)。ノートは未検証で残す
+if [ -n "$CLARITY_NOTE" ] && { [ "$AUTH_ABORT" = "1" ] || [ "$BILLING_ABORT" = "1" ]; }; then
+  log "WARN: Line $TRACK clarity pass skipped after an auth/billing error — note stays unverified"
+  METRICS_STDIN+="STATE"$'\t'"$TRACK"$'\t'"unverified"$'\n'
+  UNVERIFIED_LIST=$(list_add "$UNVERIFIED_LIST" "$TRACK")
+  CLARITY_NOTE=""
+fi
+
 if [ -n "$CLARITY_NOTE" ]; then
   # === 呼2: fresh-context clarity 改稿 + 原典照合 (ADR-0010 / ADR-0017) ===
   # 当日レポートと根拠ファイルだけを読む別プロセスが、前提知識ゼロ読者としてのつまずき
@@ -540,7 +608,9 @@ clarity 改稿し、最後に主要な主張を原典で照合してください
 
 書き込みはこの 2 ファイル (原稿と検証結果) だけ。これ以外への書き込みは許可されていない。"
   CLARITY_EXIT=0
+  budget_flags 2
   CLARITY_JSON=$(CLAUDE_TIMEOUT=1200 run_claude -p "$CLARITY_PROMPT" \
+    ${BUDGET_FLAGS[@]+"${BUDGET_FLAGS[@]}"} \
     --permission-mode default \
     --append-system-prompt-file "$PROJECT_DIR/prompts/verification-protocol.md" \
     --allowedTools "Read,WebFetch,Edit(//${CLARITY_NOTE#/}),Edit(//${VERIFY_PATH#/})" \
@@ -555,7 +625,19 @@ clarity 改稿し、最後に主要な主張を原典で照合してください
     echo "$CLARITY_JSON" >> "$LOG_FILE"
     log_summary "$CLARITY_JSON" "Clarity"
   fi
+  billing_record "$CLARITY_JSON" "$TRACK" "call2" "$BILLING_CALL2_MAX"
   CLARITY_CLASS=$(classify_exit "$CLARITY_EXIT" "$CLARITY_JSON")
+  # 呼2 は fail-open だが、認証・課金の失敗は残 line にも効くので止める
+  case "$CLARITY_CLASS" in
+    E_AUTH)
+      log "ERROR: clarity pass returned an auth error — aborting remaining lines"
+      notify "Claude の認証エラー (呼2)。残りのラインを止めました。" "Daily Research Auth Error"
+      AUTH_ABORT=1 ;;
+    E_BILLING)
+      log "ERROR: clarity pass hit a billing/rate-limit error — aborting remaining lines"
+      notify "Claude API の課金エラー (429 またはクレジット切れ)。残りのラインを止めました。" "Daily Research Billing Error"
+      BILLING_ABORT=1 ;;
+  esac
   if [ "$CLARITY_CLASS" = "OK" ]; then
     log "Clarity pass ok"
     METRICS_STDIN+="CLARITY"$'\t'"1"$'\t'"$CLARITY_JSON"$'\n'
@@ -578,14 +660,30 @@ clarity 改稿し、最後に主要な主張を原典で照合してください
   fi
 fi
 
-# 401 検出後は残 line を実行しない (認証切れ状態での実行は無意味)。
+# 認証・課金の失敗の後は残 line を実行しない (同じ失敗を繰り返すだけ)。
 # ここまでに完走した line の集計・lint・ingest は下流で通常どおり行う。
-if [ "$AUTH_ABORT" = "1" ]; then
-  log "WARN: auth error — skipping remaining lines"
+if [ "$AUTH_ABORT" = "1" ] || [ "$BILLING_ABORT" = "1" ]; then
+  log "WARN: auth/billing error — skipping remaining lines"
   break
 fi
 
 done  # for ROW in TRACK_ROWS (per-line 実行ここまで)
+
+# 止めた理由 (上限・認証・課金) で始めなかった line を名指す
+if [ "$LINE_INDEX" -lt "${#TRACK_ROWS[@]}" ]; then
+  for ROW in "${TRACK_ROWS[@]:$LINE_INDEX}"; do
+    IFS=$'\t' read -r _STOP_TRACK _ _ <<< "$ROW"
+    STOPPED_LIST=$(list_add "$STOPPED_LIST" "$_STOP_TRACK")
+  done
+  log "Lines not started: $STOPPED_LIST"
+fi
+if [ "$BILLING_MODE" = "api" ]; then
+  billing_gate || true
+  log "API spend: today \$$SPEND_DAY / \$$BILLING_DAILY_CAP, month \$$SPEND_MONTH / \$$BILLING_MONTHLY_CAP (ledger: state/api-spend.jsonl)"
+fi
+if [ "$BUDGET_STOP" = "1" ]; then
+  notify "API 支出の上限に達したため、${STOPPED_LIST} を止めました (今日 \$$SPEND_DAY / 今月 \$$SPEND_MONTH)" "Daily Research Budget"
+fi
 
 # === 日次集約 (ctl-015 の最終判定 + metrics 用の当日レポート総数) ===
 # 全 line がゲートを通れば OK。一部だけ落ちたら E_PARTIAL、全滅なら E_NO_REPORT。
@@ -597,13 +695,14 @@ if [ -d "$REPORT_DIR" ]; then
   # track を跨ぐ ${DATE}_*.md — 旧来互換の集計
   REPORT_COUNT=$(find "$REPORT_DIR" -maxdepth 1 -name "${DATE}_*.md" 2>/dev/null | wc -l | tr -d ' ')
 fi
-if [ -z "$FAILED_LINES" ]; then
+# E_BUDGET = 支出の上限で 1 line も始めなかった日 (失敗した line は無いが成果も無い)。
+if [ -n "$FAILED_LINES" ]; then
+  if [ -n "$OK_LINES" ]; then PASS2_CLASS="E_PARTIAL"; else PASS2_CLASS="E_NO_REPORT"; fi
+elif [ -z "$OK_LINES" ] && [ "$BUDGET_STOP" = "1" ]; then
+  PASS2_CLASS="E_BUDGET"
+else
   PASS2_CLASS="OK"
   log "Report existence gate passed: $REPORT_COUNT report(s) for $DATE"
-elif [ -n "$OK_LINES" ]; then
-  PASS2_CLASS="E_PARTIAL"
-else
-  PASS2_CLASS="E_NO_REPORT"
 fi
 
 # 決定論的レポート lint (ctl-016)。品質プロキシを metrics に残し、hard fail
@@ -627,6 +726,7 @@ STATE_DETAIL=""
 [ -n "$UNCHANGED_LIST" ]  && STATE_DETAIL="${STATE_DETAIL:+$STATE_DETAIL / }更新なし: $UNCHANGED_LIST"
 [ -n "$UNVERIFIED_LIST" ] && STATE_DETAIL="${STATE_DETAIL:+$STATE_DETAIL / }未検証: $UNVERIFIED_LIST"
 [ -n "$SUSPECT_LIST" ]    && STATE_DETAIL="${STATE_DETAIL:+$STATE_DETAIL / }取得失敗の疑い: $SUSPECT_LIST"
+[ -n "$STOPPED_LIST" ]    && STATE_DETAIL="${STATE_DETAIL:+$STATE_DETAIL / }未実行: $STOPPED_LIST"
 log "Line states: article=$N_ARTICLE brief=$N_BRIEF quiet=$N_QUIET hold=$N_HOLD${STATE_DETAIL:+ ($STATE_DETAIL)}"
 
 if [ "$PASS2_CLASS" = "OK" ]; then
@@ -640,7 +740,9 @@ if [ "$PASS2_CLASS" = "OK" ]; then
 else
   FINAL_EXIT=1
   log "=== Failed ($PASS2_CLASS:$FAILED_LINES, exit code $FINAL_EXIT) ==="
-  if [ -n "$OK_LINES" ]; then
+  if [ "$PASS2_CLASS" = "E_BUDGET" ]; then
+    notify "API 支出の上限のため、今朝のリサーチは実行していません (未実行: $STOPPED_LIST)" "Daily Research Budget"
+  elif [ -n "$OK_LINES" ]; then
     # 部分成功 — 成果が存在することを通知から消さない (alarm fatigue 回避)
     notify "リサーチが一部失敗しました (${STATE_DETAIL:+$STATE_DETAIL / }failed:$FAILED_LINES)。ログを確認してください。" "Daily Research Error"
   else

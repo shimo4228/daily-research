@@ -88,7 +88,7 @@ Lines map to repositories because fixed topic domains caused structural saturati
 
 ## How is daily-research scheduled and run?
 
-Scheduling is defined by one `launchd` plist: `com.*.daily-research.plist` triggers `scripts/daily-research.sh` at 05:00. The script unsets `ANTHROPIC_API_KEY` (Max plan, not per-token billing) and `CLAUDECODE` (so it also runs from inside a Claude Code session), takes an atomic `mkdir` lock (`.daily-research.lock/` with a `pid` file; a dead-PID lock is stolen), runs a real OAuth probe (a cheap Haiku call — `claude --version` cannot detect expiry), fail-fasts on a legacy config schema, then runs `rotation-pick` and the per-line calls. Every `claude -p` call redirects stdin with `< /dev/null` to prevent MCP stdio conflicts. Logs rotate after 30 days; macOS notifications report success, failure, auth errors, and lint hard fails. After the lines, a vault-side wiki ingest (Pass 3, non-fatal) and the metrics append run. Test seams: `DR_DATE`, `DR_ONLY_TRACK`, `DR_FORCE_TRACK`.
+Scheduling is defined by one `launchd` plist: `com.*.daily-research.plist` triggers `scripts/daily-research.sh` at 05:00. The script unsets any inherited `ANTHROPIC_API_KEY` and `CLAUDECODE` (so it also runs from inside a Claude Code session), takes an atomic `mkdir` lock (`.daily-research.lock/` with a `pid` file; a dead-PID lock is stolen), sets the billing path from `[billing] mode` (`subscription` = Claude Code OAuth; `api` = `ANTHROPIC_API_KEY` read from `env_file` and exported, with `--max-budget-usd` per call, every call's cost appended to `state/api-spend.jsonl`, and a per-line gate on the day's and month's caps; 429 / credit too low / rejected key stop the remaining lines without retry — `scripts/lib/billing.sh`), runs a real auth probe on that path (a cheap Haiku call — `claude --version` cannot detect expiry), fail-fasts on a legacy config schema, then runs `rotation-pick` and the per-line calls. Every `claude -p` call redirects stdin with `< /dev/null` to prevent MCP stdio conflicts. Logs rotate after 30 days; macOS notifications report success, failure, auth errors, and lint hard fails. After the lines, a vault-side wiki ingest (Pass 3, non-fatal) and the metrics append run. Test seams: `DR_DATE`, `DR_ONLY_TRACK`, `DR_FORCE_TRACK`.
 
 ## What models does daily-research use and why?
 
@@ -170,9 +170,9 @@ daily-research/
 ├── scripts/
 │   ├── daily-research.sh       # Orchestrator (rotation-pick → per line: call 1 research + call 2 verification/clarity, cwd = the line's repo, or state/<line> for an ecosystem line)
 │   ├── lib/                    # Sourced shell libraries + the Python parsing module
-│   │   ├── env.sh log.sh notify.sh lock.sh auth.sh claude.sh
+│   │   ├── env.sh log.sh notify.sh lock.sh auth.sh claude.sh billing.sh
 │   │   └── dr_pipeline.py      # Single stdlib-only JSON/TOML module (line-brief, past-themes, receipt-read, verify-read, report-lint, metrics)
-│   ├── check-auth.sh           # Real OAuth probe health check (shares lib/auth.sh)
+│   ├── check-auth.sh           # Real auth probe on the [billing] path (shares lib/auth.sh + lib/billing.sh)
 │   └── pre-commit.sh           # Secret / syntax guard
 ├── prompts/                    # repo-research-protocol.md + ecosystem-research-protocol.md (call 1) + verification-protocol.md (call 2)
 ├── templates/report-template*.md      # Explanatory-report writing rules + fixed tail sections (per-line overrides: edge, ecosystem)
@@ -202,6 +202,6 @@ Operational rationale (real auth probe vs `--version`, `--append-system-prompt-f
 ## Gotchas
 
 - **Runs from inside a Claude Code session too**: `lib/env.sh` unsets `CLAUDECODE`, so the nested-session check passes (verified 2026-08-22). Test seams: `DR_FORCE_TRACK=<line>` (one line, even outside today's window), `DR_ONLY_TRACK=<line>` (only that line among today's picks), `DR_DATE=YYYY-MM-DD`.
-- **OAuth token expires ~4 days** (the author's observation, recorded 2026-06-21): refresh by running `claude` interactively. The real auth probe (a one-turn Haiku call, not `claude --version`, which passes with an expired token) stops the run before any line and sends a re-auth notification.
+- **OAuth token expires ~4 days** in subscription mode (the author's observation, recorded 2026-06-21): refresh by running `claude` interactively. The real auth probe (a one-turn Haiku call, not `claude --version`, which passes with an expired token) stops the run before any line and sends a re-auth notification.
 - **Claude Code plugins cause hangs**: globally-installed plugins initialize their MCP servers on every `claude -p` call (the author's observation, recorded 2026-06-21). Disable them per-project in `.claude/settings.json` (see [RUNBOOK](docs/RUNBOOK.md)).
 - **launchd doesn't source `.zshrc`**: all PATH entries must be explicit in the script and plist.

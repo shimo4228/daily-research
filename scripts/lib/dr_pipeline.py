@@ -172,16 +172,33 @@ def cmd_searches(argv):
     return 0
 
 
-# --- error-fields: stdin JSON から "api_error_status<TAB>is_error" を出力 (auth/401 判定用) ---
+# --- error-fields: stdin JSON から "api_error_status<TAB>is_error<TAB>kind" を出力 ---
+# kind は課金系の失敗の種類: "billing" = 429 (rate limit) / 402 / クレジット残高不足 —
+# 再試行で踏み抜かず止める (rules: debugging.md の policy signal)。"budget" = 呼び出しごとの
+# --max-budget-usd に到達 (subtype error_max_budget_usd)。どちらでもなければ空。
+_CREDIT_RE = re.compile(r"credit balance|insufficient.{0,20}credit", re.IGNORECASE)
+
+
+def _error_kind(d):
+    if d.get("subtype") == "error_max_budget_usd":
+        return "budget"
+    code = d.get("api_error_status")
+    if code in (402, 429):
+        return "billing"
+    if d.get("is_error") and _CREDIT_RE.search(str(d.get("result") or "")):
+        return "billing"
+    return ""
+
+
 def cmd_error_fields(argv):
     try:
         d = json.loads(sys.stdin.read() or "null")
         d = _result_dict(d) or {}
         code = d.get("api_error_status")
         code = "" if code is None else code
-        print(f"{code}\t{str(bool(d.get('is_error'))).lower()}")
+        print(f"{code}\t{str(bool(d.get('is_error'))).lower()}\t{_error_kind(d)}")
     except Exception:  # noqa: BLE001 — 解析失敗は常に parse-fail 行で返す (auth 判定は non-fatal)
-        print("\tparse-fail")
+        print("\tparse-fail\t")
     return 0
 
 
@@ -1148,6 +1165,200 @@ def cmd_expect_check(argv):
     return 0
 
 
+# === API 課金 (Claude API の key で claude -p を回す) ===========================
+#
+# [billing] の契約:
+#   mode            "api" | "subscription" (既定 subscription = Max plan の OAuth)
+#   env_file        ANTHROPIC_API_KEY を持つ env ファイル (repo の外。~ 展開あり)
+#   monthly_cap_usd 月の API 支出上限。超えそうなら残りの line を止める
+#   daily_cap_usd   1 日の API 支出上限 (暴走の止め)
+#   call1_max_usd   呼1 1 回の --max-budget-usd
+#   call2_max_usd   呼2 1 回の --max-budget-usd
+# 支出の正本は state/api-spend.jsonl (1 呼び出し 1 行、claude が報告する total_cost_usd)。
+# invariant: line を始めるのは「月・日の残額 >= call1_max + call2_max」のときだけ —
+# --max-budget-usd が各呼び出しを抑えるので、上限の超過は最後の 1 turn 分に収まる。
+BILLING_MODES = ("api", "subscription")
+_BILLING_DEFAULTS = {
+    "mode": "subscription",
+    "env_file": "~/.config/daily-research/env",
+    "monthly_cap_usd": 190.0,
+    "daily_cap_usd": 15.0,
+    "call1_max_usd": 4.0,
+    "call2_max_usd": 1.5,
+}
+
+
+def _billing(cfg):
+    import os
+
+    b = dict(_BILLING_DEFAULTS)
+    raw = cfg.get("billing", {})
+    if not isinstance(raw, dict):
+        raise ValueError("[billing] must be a table")
+    for k, v in raw.items():
+        if k not in b:
+            raise ValueError(f"[billing].{k} is not a known key ({', '.join(b)})")
+        b[k] = v
+    if b["mode"] not in BILLING_MODES:
+        raise ValueError(f"[billing].mode must be one of {BILLING_MODES}, got {b['mode']!r}")
+    if not isinstance(b["env_file"], str) or not b["env_file"]:
+        raise ValueError("[billing].env_file must be a non-empty string")
+    for k in ("monthly_cap_usd", "daily_cap_usd", "call1_max_usd", "call2_max_usd"):
+        v = b[k]
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or v <= 0:
+            raise ValueError(f"[billing].{k} must be a number > 0, got {v!r}")
+        b[k] = float(v)
+    reserve = b["call1_max_usd"] + b["call2_max_usd"]
+    if reserve > b["daily_cap_usd"] or b["daily_cap_usd"] > b["monthly_cap_usd"]:
+        raise ValueError(
+            "[billing] needs call1_max_usd + call2_max_usd <= daily_cap_usd <= monthly_cap_usd"
+        )
+    b["env_file"] = os.path.expanduser(b["env_file"])
+    return b
+
+
+# --- billing-config <config_path>: [billing] を検証して 1 行 TSV で出力 ---
+# mode \t env_file \t monthly_cap \t daily_cap \t call1_max \t call2_max。不正は rc 2。
+def cmd_billing_config(argv):
+    if not argv:
+        print("usage: billing-config <config_path>", file=sys.stderr)
+        return 64
+    try:
+        tomllib = _tomllib()
+        with open(argv[0], "rb") as f:
+            b = _billing(tomllib.load(f))
+    except (OSError, ValueError) as e:
+        print(f"billing-config: {e}", file=sys.stderr)
+        return 2
+    print(
+        "\t".join(
+            [b["mode"], b["env_file"]]
+            + [
+                f"{b[k]:g}"
+                for k in ("monthly_cap_usd", "daily_cap_usd", "call1_max_usd", "call2_max_usd")
+            ]
+        )
+    )
+    return 0
+
+
+# --- env-key <env_file>: env ファイルの ANTHROPIC_API_KEY の値を出力 ---
+# KEY=VALUE / export KEY=VALUE、前後の引用符を外す。無い・空・読めないは rc 1 (値は出さない)。
+# 呼ぶ側は出力を変数に取るだけで、ログにもエラー文にも値を載せない。
+def cmd_env_key(argv):
+    if not argv:
+        print("usage: env-key <env_file>", file=sys.stderr)
+        return 64
+    try:
+        with open(argv[0], encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        print(f"env-key: cannot read {argv[0]}", file=sys.stderr)
+        return 1
+    value = ""
+    for line in lines:
+        m = re.match(r"\s*(?:export\s+)?ANTHROPIC_API_KEY\s*=\s*(.*?)\s*$", line)
+        if m:
+            value = m.group(1)
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+                value = value[1:-1]
+    if not value:
+        print(f"env-key: ANTHROPIC_API_KEY is missing or empty in {argv[0]}", file=sys.stderr)
+        return 1
+    print(value)
+    return 0
+
+
+def _spend_totals(ledger, date_s):
+    """(month_total, day_total, skipped_lines)。読めない行は数えて返す — 黙って捨てると
+    その費用が累計から消え、上限の判定が甘くなる。台帳が無いのは 0 円 (初回)。"""
+    month, day, skipped = 0.0, 0.0, 0
+    try:
+        with open(ledger, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except FileNotFoundError:
+        return month, day, skipped
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            r = json.loads(line)
+            d = str(r.get("date", ""))
+            c = float(r.get("cost_usd", 0) or 0)
+        except (ValueError, TypeError, AttributeError):
+            skipped += 1
+            continue
+        if d[:7] == date_s[:7]:
+            month += c
+            if d == date_s:
+                day += c
+    return month, day, skipped
+
+
+# --- spend-add <ledger> <date> <line> <call> [fallback_usd]: stdin の claude JSON の費用を台帳に追記 ---
+# JSON に total_cost_usd が無い (timeout で kill された・解析失敗) ときは、その呼び出しが使えた
+# 上限額 fallback_usd を "estimated": true 付きで記録する — 0 円にすると、使ったかもしれない額が
+# 累計から消えて上限の判定が甘くなる。追記した費用を出力。書けなければ rc 1。
+def cmd_spend_add(argv):
+    import datetime
+    import os
+
+    if len(argv) < 4:
+        print("usage: spend-add <ledger> <date> <line> <call> [fallback_usd]", file=sys.stderr)
+        return 64
+    ledger, date_s, line, call = argv[:4]
+    fallback = float(argv[4]) if len(argv) >= 5 else 0.0
+    cost, estimated = None, False
+    try:
+        d = _result_dict(json.loads(sys.stdin.read() or "null")) or {}
+        if d.get("total_cost_usd") is not None:
+            cost = float(d["total_cost_usd"])
+    except (ValueError, TypeError, AttributeError):
+        cost = None
+    if cost is None:
+        cost, estimated = fallback, True
+    rec = {
+        "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+        "date": date_s,
+        "line": line,
+        "call": call,
+        "cost_usd": round(cost, 4),
+    }
+    if estimated:
+        rec["estimated"] = True
+    os.makedirs(os.path.dirname(ledger) or ".", exist_ok=True)
+    fd = os.open(ledger, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    print(f"{cost:.4f}")
+    return 0
+
+
+# --- spend-gate <ledger> <date> <monthly_cap> <daily_cap> <reserve> ---
+# 次の line を始めてよいか。"ok|stop \t month_total \t day_total" を出力し、stop は rc 1。
+# 台帳が読めない・読めない行がある場合は rc 2 (上限を判定できない — 呼ぶ側は止める)。
+def cmd_spend_gate(argv):
+    if len(argv) < 5:
+        print(
+            "usage: spend-gate <ledger> <date> <monthly_cap> <daily_cap> <reserve>", file=sys.stderr
+        )
+        return 64
+    ledger, date_s = argv[:2]
+    monthly, daily, reserve = (float(x) for x in argv[2:5])
+    try:
+        month, day, skipped = _spend_totals(ledger, date_s)
+    except OSError as e:
+        print(f"spend-gate: cannot read {ledger}: {e}", file=sys.stderr)
+        return 2
+    if skipped:
+        # 読めない行の費用は分からない。数えられない支出があるまま上限を判定しない
+        print(f"spend-gate: {skipped} unreadable line(s) in {ledger}", file=sys.stderr)
+        return 2
+    ok = monthly - month >= reserve and daily - day >= reserve
+    print(f"{'ok' if ok else 'stop'}\t{month:.2f}\t{day:.2f}")
+    return 0 if ok else 1
+
+
 COMMANDS = {
     "error-fields": cmd_error_fields,
     "log-summary": cmd_log_summary,
@@ -1168,6 +1379,10 @@ COMMANDS = {
     "wiki-quality-scan": cmd_wiki_quality_scan,
     "review-age": cmd_review_age,
     "expect-check": cmd_expect_check,
+    "billing-config": cmd_billing_config,
+    "env-key": cmd_env_key,
+    "spend-add": cmd_spend_add,
+    "spend-gate": cmd_spend_gate,
 }
 
 

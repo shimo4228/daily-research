@@ -10,7 +10,7 @@ macOS の `launchd` で無人で動きます。API を呼ぶためのコード�
 
 > **対象**: 研究リポジトリを 1 つ以上運用していて、汎用トレンドでも裏付けサーベイの山でもなく、repo の実際の仕事に関わる外部の動向を 1 つ、毎日自律的に解説してほしい人。
 
-**外に出るものと費用。** 各回の実行は Claude Code のセッションなので、実行中に読んだもの（repo の CLAUDE.md、タスク台帳、`context_files` に挙げたファイル、ラインの `state/` のファイル）は Anthropic に送られ、実行中は Web を検索・取得します。repo へは書き込まないよう指示してあり、書き込みの許可も Vault・`state/`・`past_topics.json` だけに絞っています（この許可がどこで効かなくなるかは「[中核概念](#中核概念)」の「repo は read-only」にあります）。有料の Claude Max プランを前提にしています。2026-10 時点では、実行はサブスクリプションの範囲で動いてトークン単位の課金はなく、ほかの Claude Code の利用と同じくプランの利用上限に数えられます。環境に `ANTHROPIC_API_KEY` があるとトークン単位の課金に切り替わるため、スクリプトはこれを unset します。[RUNBOOK](docs/RUNBOOK.ja.md#コスト) は、著者の 4 ラインの朝（輪番の 3 ライン + 毎日の 1 ライン）を Claude Code が報告する費用でおよそ $16〜20 と見積もっています（ライン単位の数字からの換算で、まだ実測ではありません）。Max プランでは、この金額は使用量の目安で、請求はされません。
+**外に出るものと費用。** 各回の実行は Claude Code のセッションなので、実行中に読んだもの（repo の CLAUDE.md、タスク台帳、`context_files` に挙げたファイル、ラインの `state/` のファイル）は Anthropic に送られ、実行中は Web を検索・取得します。repo へは書き込まないよう指示してあり、書き込みの許可も Vault・`state/`・`past_topics.json` だけに絞っています（この許可がどこで効かなくなるかは「[中核概念](#中核概念)」の「repo は read-only」にあります）。誰が払うかは `config.toml` の `[billing] mode` で決めます。`subscription`（既定）は Claude Code のログインを使います。Max プランならトークン単位の課金はなく、ほかの Claude Code の利用と同じくプランの利用上限に数えられます。設定なしに課金経路が変わらないよう、環境にある `ANTHROPIC_API_KEY` は捨てます。`api` は repo の外の env ファイルから `ANTHROPIC_API_KEY` を読み、すべての呼び出しを Claude API の課金にします。呼び出しごとに支出の上限があり、1 日または 1 か月の上限を超えそうになると残りのラインを止めて通知します。著者は `api` で動かしています。著者の 2026-09 の実行を 2026-10-29 の定価で計算し直すと 1 ラインあたり約 $2.4〜2.9 で、1 日 2 ラインなら月に約 $155 です（内訳は [RUNBOOK](docs/RUNBOOK.ja.md#コスト)）。
 
 作り方を書いた記事と、そのノートをもとに育つ観測のリポジトリは「[著者のほかの仕事](#著者のほかの仕事)」にあります。
 
@@ -43,7 +43,7 @@ flowchart TD
 | 要件 | 備考 |
 |------|------|
 | [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)（英語） | Claude Code のドキュメントのとおりに入れ、一度 `claude` を対話的に起動してログインする |
-| [Claude Max プラン](https://claude.ai) | 有料のサブスクリプション。実行がどう使うかは冒頭の費用の段落を参照 |
+| [Claude Max プラン](https://claude.ai) または [Claude API](https://platform.claude.com) の key | どちらか一方。`[billing] mode` で選ぶ（冒頭の費用の段落を参照） |
 | `python3` >= 3.11 | JSON/TOML 解析に stdlib のみ（`json` / `tomllib` / `re`）。macOS system 3.9 は `tomllib` 非対応のため Homebrew の `python3` を使う |
 | macOS | スケジューリングに `launchd` を使用（Linux は `cron` / `systemd` に適宜変更） |
 | coreutils の `timeout` | 必須。無いとスクリプトは開始時に止まる。Homebrew で入れる（`brew install coreutils`） |
@@ -64,7 +64,7 @@ cp config.example.toml config.toml
 # 3. スクリプトに実行権限を付与
 chmod +x scripts/*.sh
 
-# 4. Claude の認証を確認（実際に呼び出す認証プローブ）
+# 4. Claude の認証を確認（[billing] で選んだ経路で実際に 1 回呼び出す）
 ./scripts/check-auth.sh
 
 # 5. 1 ラインだけのテスト実行（設定例のライン名は example_line）。当日の担当外でも走る。
@@ -98,7 +98,8 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 ## 注意事項
 
 - **Claude Code セッション内からも実行できます**: `lib/env.sh` が `CLAUDECODE` を unset するため、ネストセッションチェックを通ります。ほかのテスト用の環境変数は [CONTRIB](docs/CONTRIB.ja.md) にあります。
-- **OAuth トークンは約4日で期限切れ**（著者の観測、2026-06-21 記録）: `claude` を対話的に実行してリフレッシュします。実際に呼び出す認証プローブ（`claude --version` ではなく 1 ターンの Haiku 呼び出し。`--version` は期限切れのトークンでも成功します）は、どのラインも走らせる前に実行を止め、再認証の通知を出します。
+- **API モードは再試行せずに止まる**: 429、クレジット残高の不足、key の拒否のどれかが出ると、残りのラインを止めて通知します。呼び出しごとの費用は `state/api-spend.jsonl` に追記され、1 日と 1 か月の上限はこれを読みます。
+- **OAuth トークンは約4日で期限切れ**（subscription モード。著者の観測、2026-06-21 記録）: `claude` を対話的に実行してリフレッシュします。実際に呼び出す認証プローブ（`claude --version` ではなく 1 ターンの Haiku 呼び出し。`--version` は期限切れのトークンでも成功します）は、どのラインも走らせる前に実行を止め、再認証の通知を出します。
 - **Claude Code プラグインがハングを引き起こす**: グローバルインストールされたプラグインは `claude -p` 呼び出しごとに MCP サーバーを起動します（2026-06-21 観測）。`.claude/settings.json` でプロジェクト単位で無効化してください（[RUNBOOK](docs/RUNBOOK.ja.md)）。
 - **launchd は `.zshrc` を読み込まない**: 全 PATH エントリをスクリプトと plist に明示してください。
 

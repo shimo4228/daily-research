@@ -21,6 +21,23 @@ min_sources = 5
 [verification]
 model = "sonnet"
 
+# Billing path (scripts/lib/billing.sh; the contract lives in dr_pipeline.py's [billing]).
+# mode = "subscription" (default): claude -p uses your Claude Code login (Max plan OAuth);
+#   any ANTHROPIC_API_KEY inherited from the environment is dropped.
+# mode = "api": ANTHROPIC_API_KEY is read from env_file (outside the repo) and every call
+#   is billed to the Claude API. Each call gets --max-budget-usd (call1 / call2), each call's
+#   cost is appended to state/api-spend.jsonl, and a line starts only when both the month's
+#   and the day's remaining budget cover call1_max_usd + call2_max_usd. When a cap is hit,
+#   the remaining lines are skipped and you get a notification. A 429, a too-low credit
+#   balance or a rejected key stops the remaining lines without retrying.
+[billing]
+mode = "subscription"
+env_file = "~/.config/daily-research/env"
+monthly_cap_usd = 190
+daily_cap_usd = 15
+call1_max_usd = 4
+call2_max_usd = 1.5
+
 # === Lines (tracks) — per-repo in-context research (ADR-0008 / ADR-0010 / ADR-0017) ===
 # Each track is a research LINE mapped 1:1 to a research repository via a
 # [[tracks.<line>.repos]] entry (lines with mode = "ecosystem" have no repo — see the

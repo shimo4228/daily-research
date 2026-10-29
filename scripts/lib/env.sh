@@ -2,7 +2,8 @@
 # env.sh — 環境サニタイズと PATH 設定。
 # daily-research.sh / check-auth.sh が source する。単独実行しない。
 
-# APIキーが設定されていると従量課金になるため確実に除去
+# 親の環境から来た API key は使わない。課金経路は config.toml の [billing] だけが決め、
+# api mode のときに lib/billing.sh が env_file から key を読み直して export する
 unset ANTHROPIC_API_KEY
 # CLAUDECODE が残っているとネストチェック・起動挙動が変わるため除去
 unset CLAUDECODE 2>/dev/null || true
