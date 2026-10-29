@@ -43,7 +43,9 @@ trap release_lock EXIT
 # set -e による予期せぬ死亡を無言にしない (2026-08-22 review): 失敗した行と command を
 # log + notify してから EXIT trap (lock 解放) に渡す。通常の非ゼロ exit は `exit N` で
 # 明示しているので ERR trap は通らない (ERR は失敗した単純コマンドでだけ発火する)。
-trap 'rc=$?; log "ERROR: unexpected exit $rc at line $LINENO: $BASH_COMMAND"; notify "リサーチが予期せず中断しました (line $LINENO)" "Daily Research Error"' ERR
+# $(…) 内の失敗を親が `|| X` で処理する箇所では trap がサブシェルで走るので、本体
+# (lib/notify.sh の report_unexpected_exit) は親シェルでだけ記録・通知する。
+trap 'report_unexpected_exit $? $LINENO "$BASH_COMMAND"' ERR
 if ! acquire_lock; then
   log "ERROR: Another instance is running. Skipping."
   notify "前回のリサーチがまだ実行中です" "Daily Research Skipped"

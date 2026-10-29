@@ -319,3 +319,17 @@ calls_of() { grep -c "kind=$1" "$MOCK_HOME/.calls" || true; }
   [ "$status" -eq 1 ]
   [[ "$output" == *"Claude API rejected the request"* ]]
 }
+
+# === ERR trap (誤った「予期せず中断」通知) ===
+
+@test "lint hard fail from another tool's note in the vault does not fire the unexpected-exit alert" {
+  # 2026-10-29: 同じ vault dir の jrp ノート (ソース節なし) で report-lint が exit 2 →
+  # `|| LINT_EXIT=$?` で処理しているのに $(…) 内で ERR trap が走り誤通知が出た
+  mkdir -p "$MOCK_HOME/vault/daily-research"
+  printf -- '---\nkind: report\n---\n本文だけ\n' > "$MOCK_HOME/vault/daily-research/${DR_DATE}_jrp_x.md"
+  run run_script
+  [ "$status" -eq 0 ]
+  grep -q 'report lint hard fail (ctl-016)' "$(log_file)"
+  if grep -q 'unexpected exit' "$(log_file)"; then cat "$(log_file)" >&2; return 1; fi
+  if grep -q 'Daily Research Error' "$MOCK_HOME/.notify_log"; then cat "$MOCK_HOME/.notify_log" >&2; return 1; fi
+}

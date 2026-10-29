@@ -12,6 +12,15 @@ teardown() {
   rm -rf "$TMP"
 }
 
+# $output に $1 が含まれないこと (`! grep` は bats の最終行以外で検出しない)
+refute_out() {
+  if echo "$output" | grep -q "$1"; then
+    echo "unexpected match: $1" >&2
+    echo "$output" >&2
+    return 1
+  fi
+}
+
 # === log.sh ===
 
 @test "log_init creates log file (600) and dir (700) at creation time" {
@@ -76,6 +85,36 @@ teardown() {
 @test "notify does not crash with embedded newlines (multi-statement injection guard)" {
   run /bin/bash -c "source '$LIB_DIR/notify.sh'; notify \$'line1\nline2' \$'ti\ntle'"
   [ "$status" -eq 0 ]
+}
+
+# === report_unexpected_exit (daily-research.sh の ERR trap 本体) ===
+# set -E で ERR trap は $(…) のサブシェルにも継承される。サブシェルからは外側の `|| X` が
+# 見えないので、親が処理した失敗でも trap が走る — 親シェルでだけ記録・通知することを確かめる。
+
+err_trap_script() {
+  printf '%s\n' "set -Eeuo pipefail" "source '$LIB_DIR/notify.sh'" \
+    "trap 'report_unexpected_exit \$? \$LINENO \"\$BASH_COMMAND\"' ERR" "$1"
+}
+
+@test "ERR trap: a failure inside \$(…) that the parent handles with || is not reported" {
+  run env PATH="/nonexistent-dir" /bin/bash -c "$(err_trap_script 'f() { return 2; }
+x=$(f 2>/dev/null) || rc=$?
+echo "handled rc=$rc"')"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "handled rc=2"
+  refute_out "unexpected exit"
+  refute_out "notify"
+}
+
+@test "ERR trap: an unhandled failure in the parent shell is logged and notified" {
+  run env PATH="/nonexistent-dir" /bin/bash -c "$(err_trap_script 'x=$(exit 3)
+echo "not reached"')"
+  [ "$status" -eq 3 ]
+  echo "$output" | grep -q "ERROR: unexpected exit 3 at line [0-9]*: x=\$(exit 3)"
+  echo "$output" | grep -q "notify skipped (osascript not found): Daily Research Error"
+  refute_out "not reached"
+  # 親で 1 回だけ (サブシェル側の重複発火なし)
+  [ "$(echo "$output" | grep -c "unexpected exit")" -eq 1 ]
 }
 
 # === lock.sh (mkdir アトミックロック) ===
