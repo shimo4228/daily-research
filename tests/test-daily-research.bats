@@ -160,7 +160,14 @@ teardown() {
 
 # === Config files exist ===
 
+# 運用者の私的ファイルを見る検査は、それが無い checkout（worktree・clone）では skip する。
+# 環境の確認は scripts/check-auth.sh の役目で、コードの検査ではない。
+skip_unless_private() {
+  [ -e "$1" ] || skip "private file absent in this checkout: ${1#"$PROJECT_DIR"/}"
+}
+
 @test "config.toml exists" {
+  skip_unless_private "$PROJECT_DIR/config.toml"
   [ -f "$PROJECT_DIR/config.toml" ]
 }
 
@@ -178,16 +185,19 @@ teardown() {
 # === launchd plist validation ===
 
 @test "plist is valid XML" {
+  skip_unless_private "$PROJECT_DIR/com.shimomoto.daily-research.plist"
   plutil -lint "$PROJECT_DIR/com.shimomoto.daily-research.plist"
 }
 
 @test "plist points to correct script path" {
+  skip_unless_private "$PROJECT_DIR/com.shimomoto.daily-research.plist"
   plutil -extract ProgramArguments json \
     "$PROJECT_DIR/com.shimomoto.daily-research.plist" \
     -o - | grep -q "daily-research.sh"
 }
 
 @test "plist schedule is set to 5:00" {
+  skip_unless_private "$PROJECT_DIR/com.shimomoto.daily-research.plist"
   local hour
   hour=$(plutil -extract StartCalendarInterval.Hour raw \
     "$PROJECT_DIR/com.shimomoto.daily-research.plist")
@@ -211,10 +221,12 @@ teardown() {
 # === Log directory ===
 
 @test "logs directory exists" {
+  skip_unless_private "$PROJECT_DIR/logs"
   [ -d "$PROJECT_DIR/logs" ]
 }
 
 @test "logs directory has permission 700" {
+  skip_unless_private "$PROJECT_DIR/logs"
   local perms
   perms=$(stat -f "%Lp" "$PROJECT_DIR/logs")
   [ "$perms" = "700" ]
@@ -223,10 +235,12 @@ teardown() {
 # === past_topics.json ===
 
 @test "past_topics.json is valid JSON" {
+  skip_unless_private "$PROJECT_DIR/past_topics.json"
   python3 -c "import json; json.load(open('$PROJECT_DIR/past_topics.json'))"
 }
 
 @test "past_topics.json backup exists" {
+  skip_unless_private "$PROJECT_DIR/past_topics.json"
   [ -f "$PROJECT_DIR/past_topics.json.bak" ]
 }
 
