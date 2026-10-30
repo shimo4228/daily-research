@@ -44,6 +44,7 @@ daily-research/
 │   ├── test-daily-research.bats        # ユニットテスト（構文、設定、セキュリティ）
 │   ├── test-e2e-mock.bats             # E2E モックテスト（ライン単位フロー）
 │   ├── test-lib.bats                  # lib/*.sh ユニットテスト（env, lock, auth, claude）
+│   ├── test_helper.bash               # bats 共通 helper（refute_grep — grep の否定 assertion は `! grep` でなくこれで書く）
 │   └── dr_pipeline_test.py            # dr_pipeline.py の pytest（dev 専用、.venv）
 ├── logs/                                # 実行ログ（日付別、30日自動ローテーション）
 ├── docs/

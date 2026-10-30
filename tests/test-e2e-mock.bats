@@ -8,6 +8,8 @@
 
 REAL_PROJECT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 
+load test_helper
+
 # === Setup / Teardown ===
 
 setup() {
@@ -394,7 +396,7 @@ get_log() {
 
   echo "$log_content" | grep -q "Rotation pick: $PICKED"
   echo "$log_content" | grep -q "Line: $PICKED"
-  ! echo "$log_content" | grep -q "Line: $OTHER"
+  refute_grep -q "Line: $OTHER" <<< "$log_content"
   echo "$log_content" | grep -q "Line $PICKED report gate passed"
   echo "$log_content" | grep -q "Report existence gate passed: 1 report(s)"
   echo "$log_content" | grep -q "Completed successfully"
@@ -415,7 +417,7 @@ get_log() {
   echo "$log_content" | grep -q "Rotation pick: $PICKED"
   echo "$log_content" | grep -q "Line: $PICKED"
   echo "$log_content" | grep -q "Line: desire"
-  ! echo "$log_content" | grep -q "Line: $OTHER"
+  refute_grep -q "Line: $OTHER" <<< "$log_content"
   # 両 line がゲートを通り、レポートは 2 本
   echo "$log_content" | grep -q "Line $PICKED report gate passed"
   echo "$log_content" | grep -q "Line desire report gate passed"
@@ -444,7 +446,7 @@ get_log() {
   echo "$log_content" | grep -q "Line $PICKED report gate passed"
   echo "$log_content" | grep -q "report gate failed for line desire"
   echo "$log_content" | grep -q "Failed (E_PARTIAL"
-  ! echo "$log_content" | grep -q "Completed successfully"
+  refute_grep -q "Completed successfully" <<< "$log_content"
   echo "$log_content" | grep -q "metrics: appended"
   [ -f "$MOCK_HOME/mock-vault/daily-research/${DR_DATE}_${PICKED}_mock-report.md" ]
   [ ! -f "$MOCK_HOME/mock-vault/daily-research/${DR_DATE}_desire_mock-report.md" ]
@@ -493,7 +495,7 @@ get_log() {
   echo "$prompt" | grep -q "answer_scope"
   # context_files は選定後に読む候補として別節 (line-brief)
   echo "$prompt" | grep -q "## Line 定義 (config)"
-  ! echo "$prompt" | grep -q "判断基準 (優先順)"  # scoring_criteria は廃止 (ADR-0014)
+  refute_grep -q "判断基準 (優先順)" <<< "$prompt"  # scoring_criteria は廃止 (ADR-0014)
   echo "$prompt" | grep -q "github.com/example-author"  # self_signals
 }
 
@@ -509,10 +511,10 @@ get_log() {
   echo "$allowed" | grep -q "mock-vault/daily-research"
   echo "$allowed" | grep -q "state/$PICKED"
   echo "$allowed" | grep -q "past_topics.json)"
-  ! echo "$allowed" | grep -q "Write("
+  refute_grep -q "Write(" <<< "$allowed"
   # 無条件 Write/Edit は含まれない
-  ! printf '%s' "$allowed" | grep -qE '(^|,)Write(,|$)'
-  ! printf '%s' "$allowed" | grep -qE '(^|,)Edit(,|$)'
+  refute_grep -qE '(^|,)Write(,|$)' <<< "$allowed"
+  refute_grep -qE '(^|,)Edit(,|$)' <<< "$allowed"
 }
 
 @test "E2E normal: state directory is created for the picked line only" {
@@ -541,10 +543,10 @@ get_log() {
   local allowed disallowed prompt
   allowed=$(cat "$MOCK_HOME/.allowed_clarity")
   [ "$allowed" = "Read,WebFetch,Edit(//${MOCK_HOME#/}/mock-vault/daily-research/${DR_DATE}_${PICKED}_mock-report.md),Edit(//${MOCK_PROJECT#/}/state/$PICKED/runs/${DR_DATE}.verify.json)" ]
-  ! echo "$allowed" | grep -q "WebSearch"
-  ! echo "$allowed" | grep -q "Bash"
-  ! echo "$allowed" | grep -q '\*\*'          # 単一ファイル限定 — glob を含まない
-  ! echo "$allowed" | grep -q "past_topics"
+  refute_grep -q "WebSearch" <<< "$allowed"
+  refute_grep -q "Bash" <<< "$allowed"
+  refute_grep -q '\*\*' <<< "$allowed"          # 単一ファイル限定 — glob を含まない
+  refute_grep -q "past_topics" <<< "$allowed"
   # state/ を含む allow は verify.json の 1 件だけ
   [ "$(printf '%s' "$allowed" | tr ',' '\n' | grep -c 'state/')" -eq 1 ]
   printf '%s' "$allowed" | tr ',' '\n' | grep 'state/' | grep -q "runs/${DR_DATE}.verify.json)$"
@@ -600,7 +602,7 @@ get_log() {
 
   echo "$log_content" | grep -q "failed after retry"
   echo "$log_content" | grep -q "report gate failed for line $PICKED"
-  ! echo "$log_content" | grep -q "Completed successfully"
+  refute_grep -q "Completed successfully" <<< "$log_content"
   echo "$log_content" | grep -q "Failed (E_NO_REPORT"
   # レポートが無いので clarity 呼2 は走らない
   [ ! -f "$MOCK_HOME/.prompt_clarity" ]
@@ -618,7 +620,7 @@ get_log() {
   log_content=$(get_log)
 
   echo "$log_content" | grep -q "Auth probe failed"
-  ! echo "$log_content" | grep -q "Line: $PICKED"
+  refute_grep -q "Line: $PICKED" <<< "$log_content"
   [ ! -f "$MOCK_HOME/.prompt_$PICKED" ]
 }
 
@@ -632,7 +634,7 @@ get_log() {
   log_content=$(get_log)
 
   echo "$log_content" | grep -q "returned 401 — aborting"
-  ! echo "$log_content" | grep -q "retrying once"
+  refute_grep -q "retrying once" <<< "$log_content"
   [ ! -f "$MOCK_HOME/.prompt_clarity" ]
 }
 
@@ -647,7 +649,7 @@ get_log() {
   local log_content
   log_content=$(get_log)
 
-  ! echo "$log_content" | grep -q "Completed successfully"
+  refute_grep -q "Completed successfully" <<< "$log_content"
   echo "$log_content" | grep -q "Failed (E_NO_REPORT"
 }
 
@@ -660,7 +662,7 @@ get_log() {
   local log_content
   log_content=$(get_log)
 
-  ! echo "$log_content" | grep -q "Completed successfully"
+  refute_grep -q "Completed successfully" <<< "$log_content"
   echo "$log_content" | grep -q "ctl-015"
   echo "$log_content" | grep -q "Failed (E_NO_REPORT"
 }
@@ -685,7 +687,7 @@ get_log() {
   run run_script
   [ "$status" -ne 0 ]
   get_log | grep -q "ctl-015"
-  ! get_log | grep -q "Clarity pass:"
+  refute_grep -q "Clarity pass:" <<< "$(get_log)"
 }
 
 # === Test: 複数ノート時は最新 mtime が呼2 の対象 (find の readdir 順に依存しない) ===
@@ -816,7 +818,9 @@ EOF
 # === Test: No legacy gtimeout dependency ===
 
 @test "E2E: script does not use gtimeout or legacy timeout patterns" {
-  ! grep -v '^#\|^[[:space:]]*#' "$MOCK_PROJECT/scripts/daily-research.sh" | grep -q 'gtimeout\|TIMEOUT_CMD\|timeout_secs'
+  if grep -v '^#\|^[[:space:]]*#' "$MOCK_PROJECT/scripts/daily-research.sh" | grep -q 'gtimeout\|TIMEOUT_CMD\|timeout_secs'; then
+    false
+  fi
 }
 
 # === Test: 自己改善ループの計測 (ADR-0006 / ctl-016) ===
@@ -832,7 +836,7 @@ EOF
   # SUMMARY 行 (backfill regex の対象): 呼1 = Run(<track>)、呼2 = Clarity
   echo "$log_content" | grep -q "SUMMARY Run($PICKED):"
   echo "$log_content" | grep -q "SUMMARY Clarity:"
-  ! echo "$log_content" | grep -q "SUMMARY Run($OTHER):"
+  refute_grep -q "SUMMARY Run($OTHER):" <<< "$log_content"
 
   [ -f "$MOCK_PROJECT/metrics.jsonl" ]
   run python3 - "$MOCK_PROJECT/metrics.jsonl" << 'PYEOF'
@@ -890,8 +894,8 @@ PYEOF
 
   echo "$log_content" | grep -q "DR_ONLY_TRACK seam: line desire のみ実行"
   echo "$log_content" | grep -q "Line: desire"
-  ! echo "$log_content" | grep -q "Line: $PICKED"
-  ! echo "$log_content" | grep -q "Rotation pick:"
+  refute_grep -q "Line: $PICKED" <<< "$log_content"
+  refute_grep -q "Rotation pick:" <<< "$log_content"
   echo "$log_content" | grep -q "Line desire report gate passed"
   echo "$log_content" | grep -q "Completed successfully"
   # 輪番担当 line の run は発生しない
@@ -907,7 +911,7 @@ PYEOF
   log_content=$(get_log)
 
   echo "$log_content" | grep -q "DR_ONLY_TRACK=nonexistent は当日の担当 line に含まれない"
-  ! echo "$log_content" | grep -q "=== Line:"
+  refute_grep -q "=== Line:" <<< "$log_content"
   [ ! -f "$MOCK_HOME/.prompt_$PICKED" ]
 }
 
@@ -923,12 +927,12 @@ PYEOF
 
   echo "$log_content" | grep -q "DR_FORCE_TRACK seam: line desire を輪番外で実行"
   echo "$log_content" | grep -q "Line: desire"
-  ! echo "$log_content" | grep -q "Rotation pick:"
+  refute_grep -q "Rotation pick:" <<< "$log_content"
   echo "$log_content" | grep -q "Line desire report gate passed"
   echo "$log_content" | grep -q "Completed successfully"
   # 輪番なら当日担当だったはずの line は走らない
-  ! echo "$log_content" | grep -q "=== Line: akc"
-  ! echo "$log_content" | grep -q "=== Line: authorship"
+  refute_grep -q "=== Line: akc" <<< "$log_content"
+  refute_grep -q "=== Line: authorship" <<< "$log_content"
 }
 
 @test "E2E force-track: DR_FORCE_TRACK not in config fails fast" {
@@ -964,7 +968,7 @@ exec(sys.stdin.read())
   echo "$log_content" | grep -q "VERIFY $PICKED: {\"supported\": 3, \"partial\": 1, \"unsupported\": 0, \"unverifiable\": 1, \"edits\": 2, \"ran\": true}"
   echo "$log_content" | grep -q "Line states: article=1 brief=0 quiet=0 hold=0 (今朝: $PICKED)"
   notified "今朝のリサーチレポートが完成しました (今朝: $PICKED)\""
-  ! echo "$log_content" | grep -q "unverified"
+  refute_grep -q "unverified" <<< "$log_content"
   [ -f "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.json" ]
   [ -f "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.verify.json" ]
   assert_metrics << 'PY'
@@ -1002,9 +1006,9 @@ PY
   echo "$log_content" | grep -q "Line $PICKED state: quiet (reason_code=no_new_evidence) mock reason"
   echo "$log_content" | grep -q "Line $PICKED report gate passed"
   echo "$log_content" | grep -q "Completed successfully"
-  ! echo "$log_content" | grep -q "Clarity pass:"
-  ! echo "$log_content" | grep -q "VERIFY $PICKED"
-  ! echo "$log_content" | grep -q "fetch failure"
+  refute_grep -q "Clarity pass:" <<< "$log_content"
+  refute_grep -q "VERIFY $PICKED" <<< "$log_content"
+  refute_grep -q "fetch failure" <<< "$log_content"
   echo "$log_content" | grep -q "Line states: article=0 brief=0 quiet=1 hold=0 (更新なし: $PICKED)"
   notified "今朝は更新なし (更新なし: $PICKED)\""
   [ ! -f "$MOCK_HOME/.prompt_clarity" ]
@@ -1038,7 +1042,7 @@ PY
 
   run run_script
   [ "$status" -eq 0 ]
-  ! get_log | grep -q "pending.md is empty"
+  refute_grep -q "pending.md is empty" <<< "$(get_log)"
 }
 
 @test "E2E gate: a report without a run receipt fails the line" {
@@ -1224,7 +1228,7 @@ PY
   echo "$log_content" | grep -q "Line states: article=2 brief=0 quiet=0 hold=0 (今朝: akc, authorship)"
   # past-themes は line ごとに再計算 — 後続 line は先行 line の問いを見る
   grep -q "mock question for akc — mock scope" "$MOCK_HOME/.prompt_authorship"
-  ! grep -q "mock question for authorship" "$MOCK_HOME/.prompt_akc"
+  refute_grep -q "mock question for authorship" "$MOCK_HOME/.prompt_akc"
   assert_metrics << 'PY'
 assert rec["line_states"]["article"] == 2, rec
 assert rec["verification"]["lines_verified"] == 2, rec
@@ -1236,15 +1240,6 @@ PY
 # =============================================================================
 # ADR-0018: ecosystem-mode daily line (接地 repo なし)
 # =============================================================================
-
-# 否定 assertion。bats は test 本体を set -e で走らせるが、`! cmd` は errexit の対象外で、
-# test の最終行でない限り失敗しても検出されない。否定は必ずこの helper で書く。
-refute_grep() {
-  if grep "$@"; then
-    echo "refute_grep: unexpected match: grep $*" >&2
-    return 1
-  fi
-}
 
 @test "E2E ecosystem: the daily ecosystem line runs after the rotation pick with no target repo" {
   echo "normal" > "$MOCK_HOME/.mock_scenario"

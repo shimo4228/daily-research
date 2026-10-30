@@ -53,7 +53,9 @@ daily-research/
 ├── config.example.toml         # config.toml のテンプレート（Git 管理）
 ├── past_topics.json            # 過去テーマ履歴（.gitignore）
 ├── logs/                       # 実行ログ（30日でローテーション、.gitignore）
-├── tests/                      # bats（daily-research / e2e-mock / lib）+ pytest（dr_pipeline_test.py）+ fixtures/
+├── tests/                      # bats（daily-research / e2e-mock / lib、共通 helper = test_helper.bash: 否定 assertion は
+│                               #   refute_grep で書く — `! grep` は set -e の対象外で最終行以外は無検出）+
+│                               #   pytest（dr_pipeline_test.py）+ fixtures/
 ├── docs/
 │   ├── RUNBOOK.md / RUNBOOK.ja.md   # 運用ガイド
 │   ├── CONTRIB.md / CONTRIB.ja.md   # 開発ガイド

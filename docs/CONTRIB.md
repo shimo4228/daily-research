@@ -44,6 +44,7 @@ daily-research/
 │   ├── test-daily-research.bats        # Unit tests (syntax, config, security)
 │   ├── test-e2e-mock.bats             # E2E mock tests (per-line flow)
 │   ├── test-lib.bats                  # lib/*.sh unit tests (env, lock, auth, claude)
+│   ├── test_helper.bash               # shared bats helpers (refute_grep — write negative grep assertions with it, never `! grep`)
 │   └── dr_pipeline_test.py            # pytest for dr_pipeline.py (dev-only, .venv)
 ├── logs/                                # Execution logs (date-stamped, auto-rotated 30d)
 ├── docs/

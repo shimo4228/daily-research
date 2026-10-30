@@ -6,6 +6,8 @@
 PROJECT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 SCRIPT="$PROJECT_DIR/scripts/daily-research.sh"
 
+load test_helper
+
 # === Setup / Teardown ===
 
 setup() {
@@ -31,7 +33,7 @@ teardown() {
   # auth-002: lib/auth.sh で正本化し共有 (bootstrap-graph.sh は ADR-0008 で retire)
   grep -q 'real_auth_probe' "$SCRIPT"
   grep -q 'real_auth_probe' "$PROJECT_DIR/scripts/check-auth.sh"
-  ! grep -qi 'version.*authentication\|authentication.*version' "$PROJECT_DIR/scripts/check-auth.sh"
+  refute_grep -qi 'version.*authentication\|authentication.*version' "$PROJECT_DIR/scripts/check-auth.sh"
 }
 
 # === Per-repo 実行の配線 (ADR-0008 / 輪番は ADR-0010) ===
@@ -64,10 +66,13 @@ teardown() {
 @test "orchestrator restricts file writes to vault, state, and past_topics (repo read-only)" {
   # path 規則は Edit(path) だけが consult される仕様 — Write(path) 規則は書かない
   grep -q 'Edit(//' "$SCRIPT"
-  ! grep -q 'Write(' "$SCRIPT"
+  # コメント行は除く — script 自身がこの仕様を `Write(path) 規則は無視される` と注記している
+  if grep -v '^[[:space:]]*#' "$SCRIPT" | grep -q 'Write('; then
+    false
+  fi
   grep -q 'past_topics.json)' "$SCRIPT"
   # 無条件の Write/Edit (path 制限なし) を allowedTools に入れていない
-  ! grep -qE 'ALLOWED_TOOLS="[^"]*,(Write|Edit),' "$SCRIPT"
+  refute_grep -qE 'ALLOWED_TOOLS="[^"]*,(Write|Edit),' "$SCRIPT"
 }
 
 @test "orchestrator uses per-repo research protocol as system prompt" {
@@ -76,10 +81,10 @@ teardown() {
 }
 
 @test "concept-graph selection machinery is retired (ADR-0008)" {
-  ! grep -q 'coverage-report' "$SCRIPT"
-  ! grep -q 'cluster-report' "$SCRIPT"
-  ! grep -q 'sync_repo_graphs' "$SCRIPT"
-  ! grep -q 'validate_theme_json' "$SCRIPT"
+  refute_grep -q 'coverage-report' "$SCRIPT"
+  refute_grep -q 'cluster-report' "$SCRIPT"
+  refute_grep -q 'sync_repo_graphs' "$SCRIPT"
+  refute_grep -q 'validate_theme_json' "$SCRIPT"
   [ ! -f "$PROJECT_DIR/scripts/coverage-report.sh" ]
   [ ! -f "$PROJECT_DIR/scripts/bootstrap-graph.sh" ]
   [ ! -f "$PROJECT_DIR/scripts/lib/graph.sh" ]
@@ -94,9 +99,9 @@ teardown() {
   grep -q '承認要求・「〜すべき」・手順の列挙は書かない' "$PROJECT_DIR/prompts/repo-research-protocol.md"
   # 使い道は選定のゲートにしない / 対立フレーミングは戻っていない
   grep -q 'ゲートにしない' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  ! grep -q '前提挑戦パス' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  ! grep -q '反証プレッシャー' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  ! grep -q 'theme_rank' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  refute_grep -q '前提挑戦パス' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  refute_grep -q '反証プレッシャー' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  refute_grep -q 'theme_rank' "$PROJECT_DIR/prompts/repo-research-protocol.md"
 }
 
 @test "protocol mandates short context, citation gate, self-signal guard, evidence file and receipt" {
@@ -119,9 +124,9 @@ teardown() {
   grep -q '^kind: article' "$PROJECT_DIR/templates/report-template.md"
   grep -q '^question:' "$PROJECT_DIR/templates/report-template.md"
   grep -q '固定見出しは置かない' "$PROJECT_DIR/templates/report-template.md"
-  ! grep -q '^## 結論' "$PROJECT_DIR/templates/report-template.md"
-  ! grep -q '^## この repo への含意' "$PROJECT_DIR/templates/report-template.md"
-  ! grep -q 'theme_rank' "$PROJECT_DIR/templates/report-template.md"
+  refute_grep -q '^## 結論' "$PROJECT_DIR/templates/report-template.md"
+  refute_grep -q '^## この repo への含意' "$PROJECT_DIR/templates/report-template.md"
+  refute_grep -q 'theme_rank' "$PROJECT_DIR/templates/report-template.md"
   grep -q '## 機会メモ' "$PROJECT_DIR/templates/report-template.md"
   grep -q '## ソース' "$PROJECT_DIR/templates/report-template.md"
   grep -q '失効日' "$PROJECT_DIR/templates/report-template.md"
@@ -134,8 +139,8 @@ teardown() {
   grep -q '事件から始める' "$T"
   grep -q '## 盗める手筋' "$T"
   # 逆リード・台帳神学の節は持たない
-  ! grep -q '## 結論' "$T"
-  ! grep -q '## この repo への含意' "$T"
+  refute_grep -q '## 結論' "$T"
+  refute_grep -q '## この repo への含意' "$T"
   # 機械検査 (ctl-016) 対象の固定 2 節は共通テンプレと同じく必須
   grep -q '## 機会メモ' "$T"
   grep -q '## ソース' "$T"
@@ -200,7 +205,7 @@ teardown() {
 @test "orchestrator uses mkdir-atomic lock via lib/lock.sh" {
   grep -q 'source.*lock.sh' "$SCRIPT"
   grep -q 'acquire_lock' "$SCRIPT"
-  ! grep -q 'echo \$\$ > "\$LOCK_FILE"' "$SCRIPT"
+  refute_grep -q 'echo \$\$ > "\$LOCK_FILE"' "$SCRIPT"
 }
 
 # === Log directory ===
@@ -232,7 +237,7 @@ teardown() {
 }
 
 @test "no hardcoded API keys in script" {
-  ! grep -qE '(sk-[a-zA-Z0-9]{20,}|api_key\s*=\s*"[^"]+")' "$SCRIPT"
+  refute_grep -qE '(sk-[a-zA-Z0-9]{20,}|api_key\s*=\s*"[^"]+")' "$SCRIPT"
 }
 
 @test "log file permissions are restricted (chmod 600)" {
@@ -300,7 +305,7 @@ teardown() {
 
 @test "second call is verification: WebFetch allowed, WebSearch denied, note + verify.json only" {
   grep -q 'prompts/verification-protocol.md' "$SCRIPT"
-  ! grep -q 'clarity-review-protocol.md' "$SCRIPT"
+  refute_grep -q 'clarity-review-protocol.md' "$SCRIPT"
   grep -qF -- '--allowedTools "Read,WebFetch,Edit(//${CLARITY_NOTE#/}),Edit(//${VERIFY_PATH#/})"' "$SCRIPT"
   grep -qF -- '--disallowedTools "$DISALLOWED_TOOLS,WebSearch"' "$SCRIPT"
   grep -qF -- '--max-turns 30' "$SCRIPT"
@@ -328,15 +333,6 @@ PY
 
 
 # === ecosystem line (mode = "ecosystem"、ADR-0018) の contract ===
-
-# 否定 assertion。bats は test 本体を set -e で走らせるが、`! cmd` は errexit の対象外で、
-# test の最終行でない限り失敗しても検出されない。否定は必ずこの helper で書く。
-refute_grep() {
-  if grep "$@"; then
-    echo "refute_grep: unexpected match: grep $*" >&2
-    return 1
-  fi
-}
 
 ECO_PROTOCOL="$PROJECT_DIR/prompts/ecosystem-research-protocol.md"
 ECO_TEMPLATE="$PROJECT_DIR/templates/report-template-ecosystem.md"
