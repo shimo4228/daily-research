@@ -43,6 +43,7 @@ Codex（gpt-6-astra）に premise challenge させ、8 件の反証・欠落を�
 1. **7 line を 1 日 3 本の K-window で輪番する。** `[general] lines_per_day = 3`。`rotation-pick` は非 daily 行から
    `start = ordinal × K mod N` を起点に連続 K 行を選ぶ（K=1 は従来と同位相。7 × 3 で各 line は 7 日に 3 回、
    同日重複なし）。edge line の `daily = true` は外し、輪番に合流する。daily 機構は schema に残す。
+   > **注記（2026-10-31, [ADR-0019](0019-wide-line-safe-mode-static-state.md)）**: 運用値は `lines_per_day = 1`（per-repo 輪番 1 本）+ daily の広域 line 1 本になった（ADR-0019 Decision 1）。K-window の機構はそのまま。
 2. **各 line の結果を 4 つの内容状態にする。** 呼1 は記事の直後に run receipt `state/<line>/runs/<date>.json`
    （status = `article` / `brief` / `quiet` / `hold`、report、question、reason、reason_code）を書く。
    レポート存在ゲート（ctl-015）は receipt 駆動になる: receipt が無い・不正 → line 失敗。article / brief は
@@ -52,6 +53,7 @@ Codex（gpt-6-astra）に premise challenge させ、8 件の反証・欠落を�
    前提 / repo 参照箇所。初回は呼1 が focus から初期化）、問い履歴、`pending.md`、自己シグナルだけを読んで
    候補を立てる。config の `context_files` は選んだ問いの含意を確認するために選定後に読む。config の `focus`
    は主題の説明であり選択条件ではない（「使い道優先」の文言は外す）。
+   > **注記（2026-10-31, [ADR-0019](0019-wide-line-safe-mode-static-state.md)）**: brief.md の「開いた問い」は撤去し、brief は運用者が書く静的な文書になった。playbook への追記と repo line の watched-sources 記帳もやめた（ADR-0019 Decision 3）。待ちの問いは pending.md だけが持つ。
 4. **問いの候補を問いの形で自由記述し、履歴の照合を問い粒度にする。** 候補 3〜6 件のうち 1 件は視点変更
    （当事者 / 状況 / 言語・地域 / 隣接）、1 件は広い探索で拾った未使用の観測から。選定は「答えが分かって
    いない度合い」を第一にし、repo での使い道はゲートにしない。past_topics.json の entry に `question` と
@@ -94,6 +96,7 @@ Codex（gpt-6-astra）に premise challenge させ、8 件の反証・欠落を�
 - `total_cost_mean` > 18（導出は design 文書: 呼1 $4.1〜4.7 × 3 + 呼2 $0.7〜1.0 × 3 = $14.4〜17.1 の天井）、または
   完了が 07:00 を越える日が続く（典型 25〜35 分、最悪 210 分 = 08:30） → claim 数・探索枝を減らす。検証を形だけ残さない。
   > **注記（2026-09-21, ADR-0018）**: daily の ecosystem line `jev` の追加で 1 日 4 line になった。この項の閾値は 4 line 前提で `total_cost_mean` > 24、最悪完了 280 分 = 09:40 と読む（導出は [ADR-0018](0018-ecosystem-mode-and-daily-jev-line.md) Decision 6）。上の `receipt_count_min` < 3 は < 4 と読み、`quiet_rate` は jev の quiet 日数を引いてから見る（同 Decision 6）。「07:00 を越える日が続く」の条件と対処はそのまま有効。
+  > **注記（2026-10-31, [ADR-0019](0019-wide-line-safe-mode-static-state.md)）**: 1 日の本数が per-repo 1 + daily 1（desire の一時 daily を外すまでは 3）になり、上の 4 line 前提の `total_cost_mean` と `receipt_count_min` の閾値は使わない。費用の判定は ADR-0019 Decision 7 の G1、本数は当日の実行 line 数で読む。
 - 運用者が「無関係な記事が増えた」と述べる → 選定前に渡す repo 文脈（brief.md の内容）を増やす。多様性のために
   関連性を後回しにしたことを成功と扱わない。
 - モデルまたは Claude Code の更新で、単一 pass で同等の原典照合ができるようになる → 呼2 の分離を再比較する。
@@ -157,6 +160,7 @@ Codex 版ディープリサーチが Kim et al.（arXiv 2512.08296、180 構成�
   しない。
 - **state は検証前の版である**: 呼2 が主張を訂正・削除しても past_topics / pending / receipt は呼1 が書いた
   ままになる（呼2 は state を触らない設計）。次回の呼1 が playbook の delta で吸収する。
+  > **注記（2026-10-31, [ADR-0019](0019-wide-line-safe-mode-static-state.md)）**: playbook への追記は撤去した（ADR-0019 Decision 3）。呼2 の訂正は記事と verify.json に残るだけで、state へは吸収されない。
 - receipt を記事直後に書く順序のため、receipt 後・state 更新前に timeout した run は成功扱いになり state が
   更新されない（受容したリスク。retry skip が二重実行を防ぐ）。
 - 本文見出しの撤去と問い候補の自由記述は**編集判断**であり、Price of Format（arXiv 2505.18949）の実証対象

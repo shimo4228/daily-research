@@ -63,6 +63,7 @@ repo 文脈なしの日刊号は 8 日の運用で「無関係な話題ばかり
    注入が `permissions.allow` を書くと翌朝の書き込み先が広がる — 2026-09-21 の security review の指摘）と、
    `Read(~/.claude/**)` / `Read(~/.codex/**)`（運用者の harness を permission 層でも読ませない。safe mode で user hook が
    外れる分の代替を兼ねる）。いずれも絶対パスで渡す。repo line に渡るプロンプト文字列と実行引数は変えない。
+   > **注記（2026-10-31, [ADR-0019](0019-wide-line-safe-mode-static-state.md)）**: 書き込み許可は vault のレポート dir・`pending.md`・`watched-sources.md`・`runs/**` に狭め、`past_topics.json` を外した（ADR-0019 Decision 4）。`--safe-mode` と `~/.claude`・`~/.codex` の Read deny は全 line 共通になった（同 Decision 2）。
 3. **ecosystem line 用のプロトコルとテンプレートを別ファイルで持つ**。`prompts/ecosystem-research-protocol.md` は
    既存プロトコルと同じ契約（receipt 形式、根拠ファイルの表、4 内容状態、末尾固定 2 節、完了報告）を持ち、次を変える:
    目的関数を「エコシステムで前回報告以降に起きた意味のある変化」にする / 探索を毎回 2 経路（A = watchlist の差分確認、
@@ -81,6 +82,7 @@ repo 文脈なしの日刊号は 8 日の運用で「無関係な話題ばかり
    quiet = 意味のある新規動向なし、hold = 有望だが一次ソースや動く実装を未確認。line 定義（focus / sources）は
    gitignore された運用者の `config.toml` に置き、公開 repo は `config.example.toml` の `example_ecosystem_line` が
    形だけを示す。
+   > **注記（2026-10-31, [ADR-0019](0019-wide-line-safe-mode-static-state.md)）**: jev line は廃止した（2026-10-19 から輪番に入っていた）。ecosystem mode（Decision 1〜4）は広域 line `wide` の器として有効（ADR-0019 Decision 1）。
 6. **ADR-0017 の費用・所要時間の閾値を 4 line 前提へ再基準化する**。`total_cost_mean` の閾値を 18 から 24 にする
    （0017 の導出「呼1 $4.1〜4.7 × 3 + 呼2 $0.7〜1.0 × 3 = $14.4〜17.1 の天井」を 4 line に当てると $19.2〜22.8、
    同じ丸め方で 24）。最悪完了は 0017 の「最悪 210 分 = 08:30」（1 line あたり 70 分）を 4 line に当てて
@@ -180,3 +182,4 @@ CLI のフラグに依存しない。棄却: `~/.claude/CLAUDE.md` と rules は
   本番 run になる。
 - ecosystem line は `--safe-mode` という CLI の挙動に依存する。呼2 は従来どおり project root で safe mode なしに走る
   （呼2 は研究文脈を持たず、対象ノートと根拠ファイルだけを読む）。
+  > **注記（2026-10-31, [ADR-0019](0019-wide-line-safe-mode-static-state.md)）**: `--safe-mode` と `~/.claude`・`~/.codex` の Read deny は repo line と呼2 にも広げた（ADR-0019 Decision 2）。上の「Read 系の hook が外れる範囲を deny が覆う」は全 line・両呼び出しで成り立つ。`[billing] env_file` の親 dir の Read も共通 deny に足した。
