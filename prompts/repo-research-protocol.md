@@ -14,8 +14,7 @@
 
 ## 大原則
 
-1. **repo は read-only**。書き込みが許されるのはタスクプロンプトに明示された出力先（vault の
-   レポート / state ディレクトリ / past_topics.json）だけである。
+1. **repo は read-only**。書き込みが許されるのはタスクプロンプトの「書き込み先」節に並ぶパスだけである。
 2. **repo の doctrine を尊重する**。この repo の CLAUDE.md / AGENTS.md が宣言する禁止事項に
    反する方向で含意を描かない。
 3. **Bash は許可されていない**。許可要求で止まらない（非対話実行）。ファイル操作は Read / Write /
@@ -165,8 +164,12 @@ run は失敗扱いになるので、state 更新より先に置く。quiet / ho
 {"date": "YYYY-MM-DD", "line": "<track>", "status": "article|brief|quiet|hold",
  "report": "<ファイル名 basename>|null", "question": "<最終形の問い>",
  "reason": "<quiet/hold の理由 1 行。article/brief は空でよい>",
- "reason_code": "no_new_evidence|thin_material|fetch_failed|carry_over|unspecified"}
+ "reason_code": "no_new_evidence|thin_material|fetch_failed|carry_over|unspecified",
+ "answer_scope": "<何が分かったところまで答えたか 1 行>", "title": "<記事の題。quiet/hold は空でよい>"}
 ```
+
+`question` と `answer_scope` は quiet / hold でも書く — orchestrator がこの receipt から問いの履歴
+（タスクプロンプトの「過去テーマ履歴」の元）を記録し、次回の重複判定の基準になる。
 
 ### Step 6: state 更新
 
@@ -180,10 +183,6 @@ run は失敗扱いになるので、state 更新より先に置く。quiet / ho
 4. `playbook.md`: **delta 追記のみ**。各追記に `[世界の根拠]` / `[操作上の観測]` / `[暫定判断]` の
    いずれか 1 語を付ける。取り消しは削除でなく `superseded YYYY-MM-DD` 注記。「成功した戦略」を
    反応なしで自己認定しない。
-5. `past_topics.json`（タスクプロンプトの絶対パス）に今日のエントリを追記する（Read → 末尾に追加 →
-   Write）。schema:
-   `{"date", "track", "title", "slug", "question", "answer_scope", "keywords": [], "summary", "opportunities"}`。
-   `question` と `answer_scope` は必須（quiet / hold でも問いは記録する。title は空でよい）。
 
 ### 完了報告
 

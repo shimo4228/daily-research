@@ -19,8 +19,8 @@
 ## 大原則
 
 1. **読むのは state ディレクトリと外部の原典だけ**。運用者の他の repo・`~/.claude` などの個人設定・
-   他 line の state は、この line の文脈ではない。書き込みが許されるのはタスクプロンプトに明示された
-   出力先（vault のレポート / state ディレクトリ / past_topics.json）だけである。
+   他 line の state は、この line の文脈ではない。書き込みが許されるのはタスクプロンプトの「書き込み先」節に
+   並ぶパスだけである。
 2. **Bash は許可されていない**。許可要求で止まらない（非対話実行）。ファイル操作は Read / Write /
    Edit / Glob / Grep、外部調査は WebSearch / WebFetch で行う。
 3. **鮮度が第一級の制約**。すべての claim に as-of 日付を付ける。**公開日と出来事の日付を区別する**
@@ -206,8 +206,13 @@ run は失敗扱いになるので、state 更新より先に置く。quiet / ho
 {"date": "YYYY-MM-DD", "line": "<track>", "status": "article|brief|quiet|hold",
  "report": "<ファイル名 basename>|null", "question": "<最終形の問い>",
  "reason": "<quiet/hold の理由 1 行。article/brief は空でよい>",
- "reason_code": "no_new_evidence|thin_material|fetch_failed|carry_over|unspecified"}
+ "reason_code": "no_new_evidence|thin_material|fetch_failed|carry_over|unspecified",
+ "answer_scope": "<何が分かったところまで答えたか 1 行>", "title": "<記事の題。quiet/hold は空でよい>"}
 ```
+
+`question` と `answer_scope` は quiet / hold でも書く — orchestrator がこの receipt から問いの履歴
+（タスクプロンプトの「過去テーマ履歴」の元）を記録し、次回の重複判定の基準になる。`answer_scope` には
+**どの時点のどの変化まで答えたか**を書く。
 
 ### Step 6: state 更新
 
@@ -233,11 +238,6 @@ run は失敗扱いになるので、state 更新より先に置く。quiet / ho
 4. `playbook.md`: **delta 追記のみ**。各追記に `[世界の根拠]` / `[操作上の観測]` / `[暫定判断]` の
    いずれか 1 語を付ける。取り消しは削除でなく `superseded YYYY-MM-DD` 注記。「成功した戦略」を
    反応なしで自己認定しない。効いた検索語・空振りした検索語はここに残す。
-5. `past_topics.json`（タスクプロンプトの絶対パス）に今日のエントリを追記する（Read → 末尾に追加 →
-   Write）。schema:
-   `{"date", "track", "title", "slug", "question", "answer_scope", "keywords": [], "summary", "opportunities"}`。
-   `question` と `answer_scope` は必須（quiet / hold でも問いは記録する。title は空でよい）。
-   `answer_scope` には**どの時点のどの変化まで答えたか**を書く（次回の重複判定の基準になる）。
 
 ### 完了報告
 

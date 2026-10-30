@@ -203,7 +203,6 @@ if [[ "$PROTOCOL" == *repo-research-protocol.md || "$PROTOCOL" == *ecosystem-res
   REASON_CODE=$(cat "$MOCK_HOME_DIR/.reason_code_$TRACK" 2>/dev/null || echo no_new_evidence)
   RECEIPT=$(printf '%s\n' "$PROMPT" | grep -oE '/[^ ]*/runs/[0-9-]+\.json' | head -1)
   EVIDENCE=$(printf '%s\n' "$PROMPT" | grep -oE '/[^ ]*/runs/[0-9-]+\.md' | head -1)
-  PAST=$(printf '%s\n' "$PROMPT" | grep -oE '/[^ ]*/past_topics\.json' | head -1)
   printf '%s' "$RECEIPT" > "$MOCK_HOME_DIR/.receipt_path_$TRACK"
 
   REPORT_DIR="$MOCK_HOME_DIR/mock-vault/daily-research"
@@ -212,21 +211,8 @@ if [[ "$PROTOCOL" == *repo-research-protocol.md || "$PROTOCOL" == *ecosystem-res
   write_receipt() {  # $1 = status, $2 = report basename or empty
     local report_json=null
     [ -n "$2" ] && report_json="\"$2\""
-    printf '{"date": "%s", "line": "%s", "status": "%s", "report": %s, "question": "mock question for %s", "reason": "mock reason", "reason_code": "%s"}\n' \
-      "$DR_DATE" "$TRACK" "$1" "$report_json" "$TRACK" "$REASON_CODE" > "$RECEIPT"
-  }
-  append_past_topic() {
-    python3 - "$PAST" "$TRACK" "$DR_DATE" << 'PY'
-import json, sys
-path, track, date = sys.argv[1:4]
-d = json.load(open(path))
-d.setdefault("topics", []).append({
-    "date": date, "track": track, "title": f"mock title for {track}", "slug": "mock-report",
-    "question": f"mock question for {track}", "answer_scope": "mock scope",
-    "keywords": [], "summary": "", "opportunities": [],
-})
-json.dump(d, open(path, "w"))
-PY
+    printf '{"date": "%s", "line": "%s", "status": "%s", "report": %s, "question": "mock question for %s", "reason": "mock reason", "reason_code": "%s", "answer_scope": "mock scope", "title": "mock title for %s"}\n' \
+      "$DR_DATE" "$TRACK" "$1" "$report_json" "$TRACK" "$REASON_CODE" "$TRACK" > "$RECEIPT"
   }
 
   case "$SCENARIO" in
@@ -268,7 +254,6 @@ PY
           fi
           echo "# evidence for $TRACK" > "$EVIDENCE"
           write_receipt "$STATE" "$REPORT_NAME"
-          append_past_topic
           ;;
         quiet|hold)
           write_receipt "$STATE" ""
@@ -484,7 +469,9 @@ get_log() {
   echo "$prompt" | grep -q "line focus"
   echo "$prompt" | grep -q "過去テーマ履歴"
   echo "$prompt" | grep -q "state/$PICKED"
-  echo "$prompt" | grep -q "past_topics.json"
+  # past_topics はモデルに書かせない (orchestrator が receipt から追記、ADR-0019)
+  refute_grep -q "past_topics.json" <<< "$(sed -n '/^## 書き込み先/,/^## 過去テーマ履歴/p' <<< "$prompt")"
+  echo "$prompt" | grep -q "## 書き込み先"
   echo "$prompt" | grep -q "機会メモ"   # テンプレート注入
   # 書き込み先の列挙 (ADR-0017): state の brief / pending / 根拠ファイル / run receipt
   echo "$prompt" | grep -q "run receipt"
@@ -492,7 +479,6 @@ get_log() {
   echo "$prompt" | grep -q "pending.md"
   echo "$prompt" | grep -q "state/$PICKED/runs/${DR_DATE}.json"
   echo "$prompt" | grep -q "state/$PICKED/runs/${DR_DATE}.md"
-  echo "$prompt" | grep -q "answer_scope"
   # context_files は選定後に読む候補として別節 (line-brief)
   echo "$prompt" | grep -q "## Line 定義 (config)"
   refute_grep -q "判断基準 (優先順)" <<< "$prompt"  # scoring_criteria は廃止 (ADR-0014)
@@ -510,7 +496,7 @@ get_log() {
   echo "$allowed" | grep -q "Edit(//"
   echo "$allowed" | grep -q "mock-vault/daily-research"
   echo "$allowed" | grep -q "state/$PICKED"
-  echo "$allowed" | grep -q "past_topics.json)"
+  refute_grep -q "past_topics" <<< "$allowed"
   refute_grep -q "Write(" <<< "$allowed"
   # 無条件 Write/Edit は含まれない
   refute_grep -qE '(^|,)Write(,|$)' <<< "$allowed"
@@ -1230,8 +1216,17 @@ PY
   echo "$log_content" | grep -q "Line akc report gate passed"
   echo "$log_content" | grep -q "Line authorship report gate passed"
   echo "$log_content" | grep -q "Line states: article=2 brief=0 quiet=0 hold=0 (今朝: akc, authorship)"
-  # past-themes は line ごとに再計算 — 後続 line は先行 line の問いを見る
+  # past-themes は line ごとに再計算 — 後続 line は先行 line の問いを見る (orchestrator が receipt から追記)
   grep -q "mock question for akc — mock scope" "$MOCK_HOME/.prompt_authorship"
+  python3 - "$MOCK_PROJECT/past_topics.json" "$DR_DATE" << 'PY'
+import json, sys
+topics = json.load(open(sys.argv[1]))["topics"]
+new = [t for t in topics if t.get("date") == sys.argv[2]]
+assert [t["track"] for t in new] == ["akc", "authorship"], new
+assert new[0] == {"date": sys.argv[2], "track": "akc", "title": "mock title for akc",
+                  "slug": "mock-report", "question": "mock question for akc",
+                  "answer_scope": "mock scope"}, new[0]
+PY
   refute_grep -q "mock question for authorship" "$MOCK_HOME/.prompt_akc"
   assert_metrics << 'PY'
 assert rec["line_states"]["article"] == 2, rec

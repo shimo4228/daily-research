@@ -63,14 +63,20 @@ teardown() {
   grep -q 'line-brief' "$SCRIPT"
 }
 
-@test "orchestrator restricts file writes to vault, state, and past_topics (repo read-only)" {
+@test "orchestrator restricts file writes to the WRITE_PATHS array (repo read-only, no past_topics)" {
   # path 規則は Edit(path) だけが consult される仕様 — Write(path) 規則は書かない
   grep -q 'Edit(//' "$SCRIPT"
   # コメント行は除く — script 自身がこの仕様を `Write(path) 規則は無視される` と注記している
   if grep -v '^[[:space:]]*#' "$SCRIPT" | grep -q 'Write('; then
     false
   fi
-  grep -q 'past_topics.json)' "$SCRIPT"
+  # 書き込み先の正本は WRITE_PATHS 1 つ — allow 規則もプロンプトの節もここから描く (ADR-0019)
+  grep -q '^  WRITE_PATHS=(' "$SCRIPT"
+  refute_grep -q 'past_topics' <<< "$(grep '^  WRITE_PATHS=(' "$SCRIPT")"
+  grep -qF 'ALLOWED_TOOLS="$ALLOWED_TOOLS,Edit(//${_wp#/})"' "$SCRIPT"
+  grep -qF '${WRITE_PATHS_LIST}' "$SCRIPT"
+  refute_grep -q 'Edit(//${PROJECT_DIR#/}/past_topics.json)' "$SCRIPT"
+  grep -q 'past-topics-append' "$SCRIPT"
   # 無条件の Write/Edit (path 制限なし) を allowedTools に入れていない
   refute_grep -qE 'ALLOWED_TOOLS="[^"]*,(Write|Edit),' "$SCRIPT"
 }
@@ -348,14 +354,6 @@ skip_unless_private() {
   python3 "$PROJECT_DIR/scripts/lib/dr_pipeline.py" tracks "$PROJECT_DIR/config.example.toml" > /dev/null
 }
 
-@test "past_topics.example.json carries a question-granular entry" {
-  python3 - "$PROJECT_DIR/past_topics.example.json" << 'PY'
-import json, sys
-t = json.load(open(sys.argv[1]))["topics"][0]
-for k in ("date", "track", "title", "slug", "question", "answer_scope", "keywords", "summary", "opportunities"):
-    assert k in t, k
-PY
-}
 
 
 # === ecosystem line (mode = "ecosystem"、ADR-0018) の contract ===
@@ -378,7 +376,6 @@ ECO_TEMPLATE="$PROJECT_DIR/templates/report-template-ecosystem.md"
     grep -q 'fetch_status' "$P"
     grep -qF '"status": "article|brief|quiet|hold"' "$P"
     grep -qF '"reason_code": "no_new_evidence|thin_material|fetch_failed|carry_over|unspecified"' "$P"
-    grep -qF '{"date", "track", "title", "slug", "question", "answer_scope", "keywords": [], "summary", "opportunities"}' "$P"
     grep -q 'pending.md' "$P"
     grep -q '一文一命題' "$P"
     grep -q '## Line Research Complete' "$P"

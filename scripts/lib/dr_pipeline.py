@@ -443,6 +443,19 @@ def cmd_line_brief(argv):
 # (パス区切り・カンマを通さない)。shell は report を allowedTools に埋めない
 # (呼2 の対象は run スコープの find 結果) — ここでの検証は gate 判定用。
 RECEIPT_STATUSES = ("article", "brief", "quiet", "hold")
+# receipt (呼1 が state/<line>/runs/{date}.json に書く) のキーと順序。両プロトコルの receipt 例は
+# この順で書く — tests/dr_pipeline_test.py がプロトコル本文と照合する (共有契約の正本)。
+RECEIPT_KEYS = (
+    "date",
+    "line",
+    "status",
+    "report",
+    "question",
+    "reason",
+    "reason_code",
+    "answer_scope",
+    "title",
+)
 REASON_CODES = ("no_new_evidence", "thin_material", "fetch_failed", "carry_over")
 _CTRL_RE = re.compile(r"[\x00-\x1f\x7f]")
 
@@ -485,6 +498,90 @@ def cmd_receipt_read(argv):
     code = d.get("reason_code")
     code = code if code in REASON_CODES else "unspecified"
     print(f"{status}\t{report}\t{reason}\t{code}")
+    return 0
+
+
+# --- past-topics-append <past_path> <receipt_path> <date> <track> [report_basename] ---
+# past_topics.json への追記 (ADR-0019 Decision 4)。orchestrator が receipt gate の成功後に呼ぶ。
+# entry は読み手 cmd_past_themes が使うキーだけ。report_basename は gate が解決した run の
+# ノート (quiet / hold は省略 → slug は空)。既存 file が壊れていたら書かずに rc 1 (run 開始時の
+# 退避 past_topics.json.bak が残る)。receipt の欠けた項目は空文字 + stderr に WARN。
+# 書き込みは同じ dir の一時 file → os.replace (途中で落ちても既存 file は壊れない)。
+PAST_TOPIC_KEYS = ("date", "track", "title", "slug", "question", "answer_scope")
+_PAST_TOPIC_FIELD_MAX = 300
+
+
+def cmd_past_topics_append(argv):
+    import os
+    import tempfile
+
+    if len(argv) < 4:
+        print(
+            "usage: past-topics-append <past_path> <receipt_path> <date> <track> [report]",
+            file=sys.stderr,
+        )
+        return 64
+    past_path, receipt_path, date_s, track = argv[:4]
+    report = argv[4] if len(argv) >= 5 else ""
+
+    def bad(msg):
+        print(f"past-topics-append: {msg}", file=sys.stderr)
+        return 1
+
+    slug = ""
+    if report:
+        m = re.fullmatch(rf"{re.escape(date_s)}_{re.escape(track)}_([A-Za-z0-9._-]+)\.md", report)
+        if not m:
+            return bad(f"invalid report name {report!r}")
+        slug = m.group(1)
+    try:
+        with open(receipt_path, encoding="utf-8") as f:
+            rec = json.load(f)
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
+        return bad(f"unreadable receipt: {e}")
+    if not isinstance(rec, dict):
+        return bad("receipt is not a JSON object")
+
+    def field(name):
+        v = rec.get(name)
+        if v is None or v == "":
+            print(f"past-topics-append: WARN receipt has no {name}", file=sys.stderr)
+            return ""
+        text = re.sub(r"\s+", " ", _CTRL_RE.sub(" ", str(v))).strip()
+        return text[:_PAST_TOPIC_FIELD_MAX]
+
+    entry = {
+        "date": date_s,
+        "track": track,
+        "title": field("title"),
+        "slug": slug,
+        "question": field("question"),
+        "answer_scope": field("answer_scope"),
+    }
+
+    if os.path.exists(past_path):
+        try:
+            with open(past_path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
+            return bad(f"existing file unreadable, not writing: {e}")
+        if not isinstance(data, dict) or not isinstance(data.get("topics"), list):
+            return bad("existing file has no topics list, not writing")
+    else:
+        data = {"version": 1, "topics": []}
+    data["topics"].append(entry)
+
+    out_dir = os.path.dirname(os.path.abspath(past_path))
+    fd, tmp = tempfile.mkstemp(prefix=".past_topics.", suffix=".tmp", dir=out_dir)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        os.replace(tmp, past_path)
+    except OSError as e:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        return bad(f"write failed: {e}")
     return 0
 
 
@@ -1368,6 +1465,7 @@ COMMANDS = {
     "tracks": cmd_tracks,
     "rotation-pick": cmd_rotation_pick,
     "past-themes": cmd_past_themes,
+    "past-topics-append": cmd_past_topics_append,
     "line-brief": cmd_line_brief,
     "receipt-read": cmd_receipt_read,
     "verify-read": cmd_verify_read,

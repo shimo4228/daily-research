@@ -1777,3 +1777,169 @@ def test_spend_gate_refuses_unreadable_lines(monkeypatch, capsys, tmp_path):
     )
     assert rc == 2
     assert "unreadable" in err
+
+
+# --- past-topics-append (ADR-0019 Decision 4: 記帳をコードへ) ---
+
+
+def _pta(monkeypatch, capsys, past, receipt, report="", date="2026-09-15", track="akc"):
+    args = ["past-topics-append", str(past), str(receipt), date, track]
+    if report:
+        args.append(report)
+    return run_cmd(monkeypatch, capsys, args)
+
+
+def _full_receipt(**over):
+    d = {
+        "date": "2026-09-15",
+        "line": "akc",
+        "status": "article",
+        "report": "2026-09-15_akc_some-slug.md",
+        "question": "Q1?",
+        "reason": "r",
+        "reason_code": "no_new_evidence",
+        "answer_scope": "as of 2026-09-15",
+        "title": "Some title",
+    }
+    d.update(over)
+    return d
+
+
+@pytest.mark.unit
+def test_past_topics_append_creates_file_with_entry(monkeypatch, capsys, tmp_path):
+    past = tmp_path / "past_topics.json"
+    rec = _receipt(tmp_path, _full_receipt())
+    rc, _, err = _pta(monkeypatch, capsys, past, rec, "2026-09-15_akc_some-slug.md")
+    assert rc == 0, err
+    data = json.loads(past.read_text())
+    assert data["version"] == 1
+    assert data["topics"] == [
+        {
+            "date": "2026-09-15",
+            "track": "akc",
+            "title": "Some title",
+            "slug": "some-slug",
+            "question": "Q1?",
+            "answer_scope": "as of 2026-09-15",
+        }
+    ]
+    assert set(data["topics"][0]) == set(dr_pipeline.PAST_TOPIC_KEYS)
+
+
+@pytest.mark.unit
+def test_past_topics_append_keeps_existing_entries_and_unicode(monkeypatch, capsys, tmp_path):
+    past = tmp_path / "past_topics.json"
+    old = {"version": 1, "topics": [{"date": "2026-01-01", "track": "x", "title": "旧", "extra": 1}]}
+    past.write_text(json.dumps(old, ensure_ascii=False))
+    rec = _receipt(tmp_path, _full_receipt(title="日本語の題", question="問い？"))
+    rc, _, _ = _pta(monkeypatch, capsys, past, rec, "2026-09-15_akc_some-slug.md")
+    assert rc == 0
+    text = past.read_text()
+    assert "日本語の題" in text  # ensure_ascii=False
+    data = json.loads(text)
+    assert data["topics"][0] == old["topics"][0]
+    assert len(data["topics"]) == 2
+
+
+@pytest.mark.unit
+def test_past_topics_append_quiet_has_empty_slug(monkeypatch, capsys, tmp_path):
+    past = tmp_path / "past_topics.json"
+    rec = _receipt(tmp_path, _full_receipt(status="quiet", report=None))
+    rc, _, _ = _pta(monkeypatch, capsys, past, rec)
+    assert rc == 0
+    entry = json.loads(past.read_text())["topics"][0]
+    assert entry["slug"] == ""
+    assert entry["question"] == "Q1?"
+
+
+@pytest.mark.unit
+def test_past_topics_append_sanitizes_and_truncates(monkeypatch, capsys, tmp_path):
+    past = tmp_path / "past_topics.json"
+    rec = _receipt(tmp_path, _full_receipt(title="a\x00b\nc", answer_scope="x" * 1000))
+    rc, _, _ = _pta(monkeypatch, capsys, past, rec, "2026-09-15_akc_some-slug.md")
+    assert rc == 0
+    entry = json.loads(past.read_text())["topics"][0]
+    assert entry["title"] == "a b c"
+    assert len(entry["answer_scope"]) <= 300
+
+
+@pytest.mark.unit
+def test_past_topics_append_missing_fields_warn_and_blank(monkeypatch, capsys, tmp_path):
+    past = tmp_path / "past_topics.json"
+    d = _full_receipt()
+    del d["answer_scope"], d["title"]
+    rec = _receipt(tmp_path, d)
+    rc, _, err = _pta(monkeypatch, capsys, past, rec, "2026-09-15_akc_some-slug.md")
+    assert rc == 0
+    assert "WARN" in err and "answer_scope" in err and "title" in err
+    entry = json.loads(past.read_text())["topics"][0]
+    assert entry["answer_scope"] == "" and entry["title"] == ""
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("raw", ["{not json", '{"topics": 3}', "[]"])
+def test_past_topics_append_refuses_corrupt_file(monkeypatch, capsys, tmp_path, raw):
+    past = tmp_path / "past_topics.json"
+    past.write_text(raw)
+    rec = _receipt(tmp_path, _full_receipt())
+    rc, _, err = _pta(monkeypatch, capsys, past, rec, "2026-09-15_akc_some-slug.md")
+    assert rc != 0
+    assert past.read_text() == raw  # 書かない
+    assert err
+
+
+@pytest.mark.unit
+def test_past_topics_append_rejects_bad_receipt(monkeypatch, capsys, tmp_path):
+    past = tmp_path / "past_topics.json"
+    rec = _receipt(tmp_path, None, raw="{broken")
+    rc, _, _ = _pta(monkeypatch, capsys, past, rec)
+    assert rc != 0
+    assert not past.exists()
+
+
+@pytest.mark.unit
+def test_past_topics_append_rejects_bad_report_name(monkeypatch, capsys, tmp_path):
+    past = tmp_path / "past_topics.json"
+    rec = _receipt(tmp_path, _full_receipt())
+    rc, _, _ = _pta(monkeypatch, capsys, past, rec, "../evil.md")
+    assert rc != 0
+    assert not past.exists()
+
+
+# --- 共有契約: プロトコルの receipt 例・example が定数と一致する (機械ゲート 2) ---
+
+PROTOCOLS = [
+    pathlib.Path(__file__).parent.parent / "prompts" / "repo-research-protocol.md",
+    pathlib.Path(__file__).parent.parent / "prompts" / "ecosystem-research-protocol.md",
+]
+
+
+def _receipt_example_keys(text):
+    import re
+
+    m = re.search(r'\{"date":.*?\}', text, re.S)
+    assert m, "receipt example not found"
+    return re.findall(r'"([a-z_]+)":', m.group(0))
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("path", PROTOCOLS, ids=lambda p: p.name)
+def test_protocol_receipt_example_matches_receipt_keys(path):
+    text = path.read_text(encoding="utf-8")
+    assert tuple(_receipt_example_keys(text)) == dr_pipeline.RECEIPT_KEYS
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("path", PROTOCOLS, ids=lambda p: p.name)
+def test_protocols_do_not_name_model_written_bookkeeping(path):
+    text = path.read_text(encoding="utf-8")
+    assert "past_topics.json" not in text
+
+
+@pytest.mark.unit
+def test_past_topics_example_matches_keys():
+    ex = pathlib.Path(__file__).parent.parent / "past_topics.example.json"
+    data = json.loads(ex.read_text(encoding="utf-8"))
+    assert data["version"] == 1
+    for t in data["topics"]:
+        assert tuple(t) == dr_pipeline.PAST_TOPIC_KEYS
