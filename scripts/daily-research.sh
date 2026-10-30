@@ -296,7 +296,8 @@ fi
 LINE_INDEX=$((LINE_INDEX + 1))
 log "=== Line: $TRACK (${TARGET_REPO:-no target repo}) ==="
 
-# state 層 (brief / pending / watched-sources / playbook / runs/)。gitignored、初回は空で開始。
+# state 層 (brief = 運用者が書く静的な文書 / pending / runs/、ecosystem line は watched-sources も)。
+# gitignored、初回は空で開始。
 # gate が target_repo 不在の line でも receipt を探すため、分岐の前に置く。
 # track 名は dr_pipeline._load_tracks が [A-Za-z0-9_-]+ に制限済み (パス・allowedTools 安全)。
 STATE_DIR="$PROJECT_DIR/state/$TRACK"
@@ -365,7 +366,12 @@ else
   # モデルが書いてよい場所の正本 (ADR-0019 Decision 4)。--allowedTools の Edit 規則とプロンプトの
   # 「書き込み先」節をこの配列から描く — プロトコルはパスを列挙せず「書き込み先」節を指す。
   # past_topics.json はモデルに書かせない (gate 成功後に past-topics-append が receipt から追記する)。
-  WRITE_PATHS=("$REPORT_DIR/**" "$STATE_DIR/**")
+  # state のうちモデルが書くのは pending.md と runs/ だけ (brief は運用者の静的な文書、playbook と
+  # repo line の watched-sources は撤去 — ADR-0019 Decision 3)。ecosystem line は watchlist も書く。
+  WRITE_PATHS=("$REPORT_DIR/**" "$STATE_DIR/pending.md" "$STATE_DIR/runs/**")
+  if [ "$LINE_MODE" = "ecosystem" ]; then
+    WRITE_PATHS+=("$STATE_DIR/watched-sources.md")
+  fi
   WRITE_PATHS_LIST=""
   for _wp in "${WRITE_PATHS[@]}"; do
     WRITE_PATHS_LIST+="- $_wp"$'\n'
@@ -389,7 +395,7 @@ $LINE_BRIEF
 ${WRITE_PATHS_LIST}
 1. レポート: $REPORT_DIR/${DATE}_${TRACK}_{slug}.md (slug は英小文字ケバブケース。status が quiet / hold の日は書かない)
 2. state ディレクトリ: $STATE_DIR
-   - brief.md (line brief) / pending.md (機会・保留の正本) / watched-sources.md / playbook.md
+   - brief.md (line brief。運用者が書く静的な文書で、読むだけ) / pending.md (機会・保留の正本)
    - 根拠ファイル: $STATE_DIR/runs/${DATE}.md
    - run receipt (必須。記事の直後、state 更新より先に書く。quiet / hold の日も書く): $RECEIPT_PATH
      キーと形はプロトコルの receipt の節。問いの履歴はこの receipt から orchestrator が記録する

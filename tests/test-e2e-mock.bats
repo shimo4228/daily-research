@@ -1278,7 +1278,14 @@ PY
   grep -qF "Read(//${MOCK_HOME#/}/.claude/**)" "$MOCK_HOME/.disallowed_eco"
   grep -qF "Read(//${MOCK_HOME#/}/.codex/**)" "$MOCK_HOME/.disallowed_eco"
   grep -qF "Read(//${MOCK_HOME#/}/.config/daily-research/**)" "$MOCK_HOME/.disallowed_eco"
-  grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/**)" "$MOCK_HOME/.allowed_eco"
+  # state のうち書けるのは pending.md / runs/ / watchlist だけ (brief は静的、ADR-0019 Decision 3)
+  grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/pending.md)" "$MOCK_HOME/.allowed_eco"
+  grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/runs/**)" "$MOCK_HOME/.allowed_eco"
+  grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/watched-sources.md)" "$MOCK_HOME/.allowed_eco"
+  refute_grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/**)" "$MOCK_HOME/.allowed_eco"
+  # repo line は watchlist を書かない
+  refute_grep -q "watched-sources" "$MOCK_HOME/.allowed_$PICKED"
+  grep -qF "Edit(//${MOCK_PROJECT#/}/state/$PICKED/pending.md)" "$MOCK_HOME/.allowed_$PICKED"
 
   # repo line の実行形は不変
   [ "$(cat "$MOCK_HOME/.cwd_$PICKED")" = "$(cd "$MOCK_HOME/mock-repos/authorship-strategy" && pwd -P)" ]

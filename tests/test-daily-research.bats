@@ -124,7 +124,10 @@ teardown() {
 
 @test "protocol mandates short context, citation gate, self-signal guard, evidence file and receipt" {
   grep -q 'brief.md' "$PROJECT_DIR/prompts/repo-research-protocol.md"
-  grep -q 'last-attempt' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  # repo line は watched-sources を巡回・記帳しない (ADR-0019 Decision 3)。選定後に repo の CLAUDE.md を Read
+  refute_grep -q 'watched-sources' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  refute_grep -q 'last-attempt' "$PROJECT_DIR/prompts/repo-research-protocol.md"
+  grep -q '最初に repo の `CLAUDE.md`' "$PROJECT_DIR/prompts/repo-research-protocol.md"
   grep -q 'citation ゲート' "$PROJECT_DIR/prompts/repo-research-protocol.md"
   grep -q '自己汚染ガード' "$PROJECT_DIR/prompts/repo-research-protocol.md"
   grep -q '根拠ファイル' "$PROJECT_DIR/prompts/repo-research-protocol.md"
@@ -371,7 +374,8 @@ ECO_TEMPLATE="$PROJECT_DIR/templates/report-template-ecosystem.md"
     grep -q '承認要求・「〜すべき」・手順の列挙は書かない' "$P"
     grep -q 'citation ゲート' "$P"
     grep -q '自己汚染ガード' "$P"
-    grep -q 'last-attempt' "$P"
+    grep -q '静的な文書で、\*\*読むだけ\*\*' "$P"
+    refute_grep -q '開いた問い' "$P"
     grep -q '根拠ファイル' "$P"
     grep -q 'fetch_status' "$P"
     grep -qF '"status": "article|brief|quiet|hold"' "$P"

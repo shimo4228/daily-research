@@ -1934,6 +1934,7 @@ def test_protocol_receipt_example_matches_receipt_keys(path):
 def test_protocols_do_not_name_model_written_bookkeeping(path):
     text = path.read_text(encoding="utf-8")
     assert "past_topics.json" not in text
+    assert "playbook" not in text
 
 
 @pytest.mark.unit
