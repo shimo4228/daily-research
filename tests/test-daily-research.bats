@@ -52,7 +52,7 @@ teardown() {
   grep -q -- '--safe-mode' "$SCRIPT"
   # line 名での特殊分岐が無い (config の line 名はコードに現れない)
   # 否定は `! grep` で書かない (set -e の対象外で、最終行以外は検出されない)
-  if grep -qE '"\$TRACK" *=+ *"?(jev|edge|akc|desire|ans|aap|authorship|contemplative)"?' "$SCRIPT"; then false; fi
+  if grep -qE '"\$TRACK" *=+ *"?(jev|wide|edge|akc|desire|ans|aap|authorship|contemplative)"?' "$SCRIPT"; then false; fi
   if grep -qw 'jev' "$SCRIPT"; then false; fi
   if grep -qw 'jev' "$PROJECT_DIR/scripts/lib/dr_pipeline.py"; then false; fi
 }
@@ -395,6 +395,9 @@ ECO_TEMPLATE="$PROJECT_DIR/templates/report-template-ecosystem.md"
   grep -q '前回報告後の変化' "$ECO_PROTOCOL"
   grep -q '初めて動くコードが公開された' "$ECO_PROTOCOL"
   grep -q '言い換えは再掲載しない' "$ECO_PROTOCOL"
+  grep -q '1 run で確認するのは' "$ECO_PROTOCOL"
+  grep -q '実装・製品' "$ECO_PROTOCOL" && grep -q '考え・実践・研究' "$ECO_PROTOCOL"
+  grep -q '反論・再現・反証' "$ECO_PROTOCOL"
   grep -qF '| 名前 | canonical URL | 種別 | 初出日 | last-attempt | last-seen | 最後に報告した意味のある変化 | 状態 |' "$ECO_PROTOCOL"
   grep -q 'active' "$ECO_PROTOCOL" && grep -q 'stalled' "$ECO_PROTOCOL" && grep -q 'archived' "$ECO_PROTOCOL"
   grep -q '掲載されていることを採用の根拠にしない' "$ECO_PROTOCOL"

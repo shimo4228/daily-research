@@ -3,7 +3,7 @@ vault_path = "/path/to/your/obsidian/vault"
 output_dir = "daily-research"
 # Rotating lines run per morning (ADR-0017). Integer >= 1 (default 1). The window
 # advances by lines_per_day each day; daily = true lines run in addition.
-lines_per_day = 3
+lines_per_day = 1
 language = "ja"            # informational — not read by scripts (output language lives in prompts/)
 date_format = "%Y-%m-%d"   # informational — not read by scripts
 # Self-contamination guard (ADR-0008): artifacts matching these strings are never
