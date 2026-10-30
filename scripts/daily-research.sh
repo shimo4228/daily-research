@@ -54,8 +54,18 @@ fi
 
 log "=== Starting daily research ==="
 
-# 無人 run で model に絶対に渡さないツール (呼1 / 呼2 共通)。理由は ALLOWED_TOOLS の注記。
-DISALLOWED_TOOLS="Bash,Task,NotebookEdit"
+# 呼1 / 呼2 の起動条件 (ADR-0019 Decision 2)。両呼び出しとも --safe-mode で ~/.claude の
+# CLAUDE.md / rules / skills / plugins / hooks / MCP と cwd の CLAUDE.md を外し、--tools で組み込み
+# ツールの集合を絞る (呼び出しごとの土台を削る)。safe mode は permissions を外さない — user settings の
+# defaultMode: auto も効くので、境界は deny で書く。
+# Write は Edit(//abs) 規則が同じ path に許可する (呼2 は verify.json の新規作成に要る)。
+CALL1_TOOLS="WebSearch,WebFetch,Read,Glob,Grep,Edit,Write"
+CALL2_TOOLS="Read,WebFetch,Edit,Write"
+# 無人 run で model に絶対に渡さないツールと読ませない場所 (呼1 / 呼2・全 line 共通)。
+# Bash 等の理由は ALLOWED_TOOLS の注記。Read deny: safe mode で user hook (episode-log ブロッカー等)
+# が外れるので、運用者の harness (~/.claude・~/.codex) を permission 層で塞ぐ。API key の env file の
+# dir は billing_load の後に足す。
+DISALLOWED_TOOLS="Bash,Task,NotebookEdit,Read(//${HOME#/}/.claude/**),Read(//${HOME#/}/.codex/**)"
 
 # run スコープのファイル検索: この invocation (lock 取得時刻 = $LOCK_DIR/pid の mtime) より
 # 新しい <dir>/<name> だけを返す。同日の先行 invocation (DR_FORCE_TRACK 試験・手動再実行)
@@ -112,6 +122,11 @@ if [ "$BILLING_MODE" = "api" ]; then
   log "Billing: api (key from $BILLING_ENV_FILE; caps month \$$BILLING_MONTHLY_CAP / day \$$BILLING_DAILY_CAP / call1 \$$BILLING_CALL1_MAX / call2 \$$BILLING_CALL2_MAX)"
 else
   log "Billing: subscription (Max plan OAuth)"
+fi
+# API key の env file を model に読ませない (mode を問わず、config が指す dir 全体)
+if [ -n "${BILLING_ENV_FILE:-}" ]; then
+  BILLING_ENV_DIR=$(dirname "$BILLING_ENV_FILE")
+  DISALLOWED_TOOLS="$DISALLOWED_TOOLS,Read(//${BILLING_ENV_DIR#/}/**)"
 fi
 
 # 実 auth probe (lib/auth.sh)。`claude --version` は認証切れを検出できないため、
@@ -292,35 +307,26 @@ mkdir -p "$STATE_DIR/runs"
 # 実行形は [tracks.<x>].mode が決める (ADR-0018)。line 名では分岐しない。
 # - repo (既定): cwd = target_repo、per-repo プロトコル (ADR-0008)
 # - ecosystem: 接地 repo なし。cwd = この line の state dir (手元の文脈は line-local state だけ)、
-#   ecosystem プロトコル、--safe-mode で ~/.claude の CLAUDE.md / rules / skills / plugins /
-#   hooks / MCP を外す (2026-09-21 probe: -p と --append-system-prompt-file は safe mode でも
-#   有効)。safe mode は permissions を外さない — user settings の defaultMode: auto も project
-#   settings も通常どおり効くので、境界は従来どおり deny で書く。ecosystem line は deny を足す:
-#   (1) cwd の設定面: cwd = state/<line> は model が書ける場所で、claude は cwd 直下の
-#       .claude/settings.json を project settings として読む。web 由来の注入が day N に
-#       permissions.allow を書けば day N+1 の書き込み先が広がる (2026-09-21 security review)。
-#       CLAUDE.md / .mcp.json は safe mode が読まないが、運用者が対話で開いた時のために塞ぐ
-#   (2) 運用者の harness: ~/.claude と ~/.codex の Read (この line は harness を文脈にしない。
-#       safe mode で user hook の episode-log ブロッカーも外れるので permission 層で代替する)
+#   ecosystem プロトコル。safe mode と Read deny は全 line 共通 (CALL1_TOOLS の注記)。ecosystem line は
+#   cwd の設定面の deny を足す: cwd = state/<line> は model が書ける場所で、claude は cwd 直下の
+#   .claude/settings.json を project settings として読む。web 由来の注入が day N に
+#   permissions.allow を書けば day N+1 の書き込み先が広がる (2026-09-21 security review)。
+#   CLAUDE.md / .mcp.json は safe mode が読まないが、運用者が対話で開いた時のために塞ぐ。
 #   allowedTools / gate / 呼2 は repo line と同一。
 # mode の enum は dr_pipeline._load_tracks が検証済み (rotation-pick が先に通っている)。
 LINE_MODE=$(python3 "$DR_PY" config-get "$PROJECT_DIR/config.toml" "tracks.$TRACK.mode" repo 2>> "$LOG_FILE") || LINE_MODE="repo"
-LINE_EXTRA_FLAGS=()
 if [ "$LINE_MODE" = "ecosystem" ]; then
   LINE_CWD="$STATE_DIR"
   LINE_PROTOCOL="$PROJECT_DIR/prompts/ecosystem-research-protocol.md"
-  LINE_EXTRA_FLAGS=(--safe-mode)
   LINE_DISALLOWED="$DISALLOWED_TOOLS"
   LINE_DISALLOWED="$LINE_DISALLOWED,Edit(//${STATE_DIR#/}/.claude/**)"
   LINE_DISALLOWED="$LINE_DISALLOWED,Edit(//${STATE_DIR#/}/CLAUDE.md)"
   LINE_DISALLOWED="$LINE_DISALLOWED,Edit(//${STATE_DIR#/}/.mcp.json)"
-  LINE_DISALLOWED="$LINE_DISALLOWED,Read(//${HOME#/}/.claude/**)"
-  LINE_DISALLOWED="$LINE_DISALLOWED,Read(//${HOME#/}/.codex/**)"
   LINE_CWD_MISSING="state ディレクトリが存在しない"
   LINE_RUN_LABEL="今日のデイリーリサーチ (ecosystem line 実行) を、システムプロンプトに追記された
 エコシステム観測プロトコルに厳密に従って実行してください。"
   LINE_CWD_NOTE="- 作業ディレクトリ = この line の state ディレクトリ (この line に接地 repo は無い。手元の文脈は state だけ)"
-  log "Line $TRACK mode: ecosystem (cwd = state/$TRACK, safe mode)"
+  log "Line $TRACK mode: ecosystem (cwd = state/$TRACK)"
 else
   LINE_CWD="$TARGET_REPO"
   LINE_DISALLOWED="$DISALLOWED_TOOLS"
@@ -417,8 +423,9 @@ $LINE_TEMPLATE"
     LINE_EXIT=0
     # ${arr[@]+...}: bash 3.2 + set -u は空配列の展開を unbound variable で落とす
     LINE_JSON=$(cd "$LINE_CWD" && CLAUDE_TIMEOUT=1500 run_claude -p "$LINE_PROMPT" \
-      ${LINE_EXTRA_FLAGS[@]+"${LINE_EXTRA_FLAGS[@]}"} \
       ${BUDGET_FLAGS[@]+"${BUDGET_FLAGS[@]}"} \
+      --safe-mode \
+      --tools "$CALL1_TOOLS" \
       --permission-mode default \
       --append-system-prompt-file "$LINE_PROTOCOL" \
       --allowedTools "$ALLOWED_TOOLS" \
@@ -586,9 +593,9 @@ if [ -n "$CLARITY_NOTE" ]; then
   # === 呼2: fresh-context clarity 改稿 + 原典照合 (ADR-0010 / ADR-0017) ===
   # 当日レポートと根拠ファイルだけを読む別プロセスが、前提知識ゼロ読者としてのつまずき
   # 箇所を span 単位で改稿し、最後に主要 claim を原典 (WebFetch) で照合して verify.json に
-  # 結果を書く。「fresh」の範囲 = リサーチ過程・対象 repo の文脈を持たないこと。cwd は
-  # PROJECT_DIR のまま (daily-research の CLAUDE.md はロードされる — repo-local
-  # settings.json のプラグイン無効化を効かせるための意図的トレードオフ、ADR-0010)。
+  # 結果を書く。「fresh」の範囲 = リサーチ過程・対象 repo の文脈を持たないこと。
+  # --safe-mode で daily-research の CLAUDE.md もロードしない — 記述規律は verification プロトコルと
+  # テンプレートが自己完結して持つ (ADR-0019 Decision 2、ADR-0010 Decision 4 の旧トレードオフは不要)。
   # 書き込みは原稿と verify.json の 2 ファイルだけ。WebSearch は deny (照合は既知 URL の
   # 再取得に限る — auto mode では allow が加算なので deny で書く)。
   # fail-open: 失敗しても未改稿 (timeout 時は部分改稿) の版が残り、FINAL_EXIT に
@@ -613,6 +620,8 @@ clarity 改稿し、最後に主要な主張を原典で照合してください
   budget_flags 2
   CLARITY_JSON=$(CLAUDE_TIMEOUT=1200 run_claude -p "$CLARITY_PROMPT" \
     ${BUDGET_FLAGS[@]+"${BUDGET_FLAGS[@]}"} \
+    --safe-mode \
+    --tools "$CALL2_TOOLS" \
     --permission-mode default \
     --append-system-prompt-file "$PROJECT_DIR/prompts/verification-protocol.md" \
     --allowedTools "Read,WebFetch,Edit(//${CLARITY_NOTE#/}),Edit(//${VERIFY_PATH#/})" \

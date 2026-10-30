@@ -553,6 +553,10 @@ get_log() {
   disallowed=$(cat "$MOCK_HOME/.disallowed_clarity")
   printf '%s' "$disallowed" | grep -qE '(^|,)WebSearch(,|$)'
   printf '%s' "$disallowed" | grep -qE '(^|,)Bash(,|$)'
+  grep -qF "Read(//${MOCK_HOME#/}/.claude/**)" <<< "$disallowed"
+  # 呼2 も safe mode + 組み込みツールの集合 (ADR-0019 Decision 2)
+  grep -qx -- "--safe-mode" "$MOCK_HOME/.args_clarity"
+  grep -A1 -x -- '--tools' "$MOCK_HOME/.args_clarity" | grep -qx "Read,WebFetch,Edit,Write"
   # max-turns 30 / model は config-get の既定 sonnet
   grep -A1 -x -- '--max-turns' "$MOCK_HOME/.args_clarity" | grep -qx 30
   grep -A1 -x -- '--model' "$MOCK_HOME/.args_clarity" | grep -qx sonnet
@@ -1275,16 +1279,20 @@ PY
   grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/.claude/**)" "$MOCK_HOME/.disallowed_eco"
   grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/CLAUDE.md)" "$MOCK_HOME/.disallowed_eco"
   grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/.mcp.json)" "$MOCK_HOME/.disallowed_eco"
-  # 運用者の harness は permission 層でも読ませない
+  # 運用者の harness と API key の dir は permission 層でも読ませない (全 line 共通、ADR-0019)
   grep -qF "Read(//${MOCK_HOME#/}/.claude/**)" "$MOCK_HOME/.disallowed_eco"
   grep -qF "Read(//${MOCK_HOME#/}/.codex/**)" "$MOCK_HOME/.disallowed_eco"
+  grep -qF "Read(//${MOCK_HOME#/}/.config/daily-research/**)" "$MOCK_HOME/.disallowed_eco"
   grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/**)" "$MOCK_HOME/.allowed_eco"
 
   # repo line の実行形は不変
   [ "$(cat "$MOCK_HOME/.cwd_$PICKED")" = "$(cd "$MOCK_HOME/mock-repos/authorship-strategy" && pwd -P)" ]
   [[ "$(cat "$MOCK_HOME/.protocol_$PICKED")" == */prompts/repo-research-protocol.md ]]
-  refute_grep -qx -- "--safe-mode" "$MOCK_HOME/.args_$PICKED"
-  [ "$(cat "$MOCK_HOME/.disallowed_$PICKED")" = "Bash,Task,NotebookEdit" ]
+  # safe mode・組み込みツールの集合・共通 deny は repo line にも効く (ADR-0019 Decision 2)
+  grep -qx -- "--safe-mode" "$MOCK_HOME/.args_$PICKED"
+  grep -A1 -x -- '--tools' "$MOCK_HOME/.args_$PICKED" | grep -qx "WebSearch,WebFetch,Read,Glob,Grep,Edit,Write"
+  grep -A1 -x -- '--tools' "$MOCK_HOME/.args_eco" | grep -qx "WebSearch,WebFetch,Read,Glob,Grep,Edit,Write"
+  [ "$(cat "$MOCK_HOME/.disallowed_$PICKED")" = "Bash,Task,NotebookEdit,Read(//${MOCK_HOME#/}/.claude/**),Read(//${MOCK_HOME#/}/.codex/**),Read(//${MOCK_HOME#/}/.config/daily-research/**)" ]
 }
 
 @test "E2E ecosystem: the prompt carries no repo wording; the repo line's prompt is unchanged" {

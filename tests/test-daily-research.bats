@@ -75,6 +75,18 @@ teardown() {
   refute_grep -qE 'ALLOWED_TOOLS="[^"]*,(Write|Edit),' "$SCRIPT"
 }
 
+@test "built-in tool sets for both calls never include Bash or Task (ADR-0019)" {
+  local c1 c2
+  c1=$(sed -n 's/^CALL1_TOOLS="\(.*\)"$/\1/p' "$SCRIPT")
+  c2=$(sed -n 's/^CALL2_TOOLS="\(.*\)"$/\1/p' "$SCRIPT")
+  [ -n "$c1" ] && [ -n "$c2" ]
+  refute_grep -qE '(^|,)(Bash|Task|NotebookEdit)(,|$)' <<< "$c1"
+  refute_grep -qE '(^|,)(Bash|Task|NotebookEdit)(,|$)' <<< "$c2"
+  grep -q -- '--tools "$CALL1_TOOLS"' "$SCRIPT"
+  grep -q -- '--tools "$CALL2_TOOLS"' "$SCRIPT"
+  [ "$(grep -c -- '--safe-mode \\$' "$SCRIPT")" -eq 2 ]
+}
+
 @test "orchestrator uses per-repo research protocol as system prompt" {
   grep -q 'append-system-prompt-file' "$SCRIPT"
   grep -q 'repo-research-protocol.md' "$SCRIPT"
