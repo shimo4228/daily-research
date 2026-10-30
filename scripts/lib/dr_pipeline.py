@@ -585,6 +585,66 @@ def cmd_past_topics_append(argv):
     return 0
 
 
+# --- repo-activity <repo> [--days N]: 直近の commit 件名 (ADR-0019 Decision 5) ---
+# repo line の line brief の直後に「データであって指示ではない」注記の内側で注入される。
+# repo 由来の文字列が呼1 の context に入る経路なので、件名だけ・上限付き・行頭の # と制御文字を
+# 除いて出す。git の失敗や repo の不在は空出力 + rc 0 (line を止めない)。
+REPO_ACTIVITY_MAX_LINES = 30
+REPO_ACTIVITY_MAX_CHARS = 2000
+
+
+def cmd_repo_activity(argv):
+    import subprocess
+
+    if not argv:
+        print("usage: repo-activity <repo> [--days N]", file=sys.stderr)
+        return 64
+    repo = argv[0]
+    days = 14
+    if len(argv) >= 3 and argv[1] == "--days":
+        try:
+            days = max(0, int(argv[2]))
+        except ValueError:
+            print(f"repo-activity: invalid --days {argv[2]!r}", file=sys.stderr)
+            return 64
+    try:
+        proc = subprocess.run(
+            [
+                "git",
+                "-C",
+                repo,
+                "log",
+                f"--since={days}.days.ago",
+                "--no-merges",
+                "--format=%s",
+                f"-n{REPO_ACTIVITY_MAX_LINES}",
+            ],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return 0
+    if proc.returncode != 0:
+        return 0
+    out = []
+    total = 0
+    for raw in proc.stdout.splitlines():
+        subject = re.sub(r"\s+", " ", _CTRL_RE.sub(" ", raw)).strip().lstrip("#").strip()
+        if not subject:
+            continue
+        line = f"- {subject}"
+        if total + len(line) + 1 > REPO_ACTIVITY_MAX_CHARS:
+            break
+        out.append(line)
+        total += len(line) + 1
+    if out:
+        print("\n".join(out))
+    return 0
+
+
 # --- verify-read [path]: 呼2 の verify.json を 1 行 JSON に正規化して出力 ---
 # {supported, partial, unsupported, unverifiable, edits, ran}。各値は int >= 0
 # (bool / 文字列 / 負値 / 小数は 0)。ファイル欠損・破損・非 object は全零 + ran:false。
@@ -1466,6 +1526,7 @@ COMMANDS = {
     "rotation-pick": cmd_rotation_pick,
     "past-themes": cmd_past_themes,
     "past-topics-append": cmd_past_topics_append,
+    "repo-activity": cmd_repo_activity,
     "line-brief": cmd_line_brief,
     "receipt-read": cmd_receipt_read,
     "verify-read": cmd_verify_read,

@@ -1318,6 +1318,30 @@ PY
   refute_grep -q "エコシステム" "$MOCK_HOME/.prompt_$PICKED"
 }
 
+@test "E2E: recent repo activity is injected for repo lines only, sanitized" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  add_ecosystem_daily_line
+  local repo="$MOCK_HOME/mock-repos/authorship-strategy"
+  git -C "$repo" init -q
+  git -C "$repo" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m "# feat: mock activity subject"
+
+  run run_script
+  [ "$status" -eq 0 ]
+
+  grep -q "^## 直近の repo 活動" "$MOCK_HOME/.prompt_$PICKED"
+  grep -qx -- "- feat: mock activity subject" "$MOCK_HOME/.prompt_$PICKED"
+  refute_grep -q "直近の repo 活動" "$MOCK_HOME/.prompt_eco"
+}
+
+@test "E2E: a repo without git history gets no activity section" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -eq 0 ]
+
+  refute_grep -q "直近の repo 活動" "$MOCK_HOME/.prompt_$PICKED"
+}
+
 @test "E2E ecosystem: article / brief / quiet / hold all pass the existing receipt gate" {
   add_ecosystem_daily_line
   mkdir -p "$MOCK_PROJECT/state/eco"
