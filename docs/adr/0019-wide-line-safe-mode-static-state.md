@@ -54,8 +54,9 @@ jev line（ADR-0018）は運用者が「外していい」と判断した（gril
    何を変化と数えるかは `state/wide/brief.md` に置く（関心の定義は運用者の持ち物）。
 2. **呼1・呼2 の両方を `--safe-mode` と `--tools <必要な組み込みツール>` で起動する。** 呼1 は
    WebSearch・WebFetch・Read・Glob・Grep・Edit・Write、呼2 は Read・WebFetch・Edit・Write。safe mode で外れる
-   user の Read hook の代わりに、`~/.claude`・`~/.codex`・`[billing] env_file` の親 dir への Read を全 line・両呼び出しの
-   共通 deny に置く。境界は従来どおり deny で書く（safe mode は permissions を外さない — ADR-0018 の probe）。repo の
+   user の Read hook（episode-log ブロッカー）の代わりに、HOME 配下の `*/logs/episodes/` と harness（`~/.claude`・
+   `~/.claude.json`・`~/.codex`）への Read を、WebFetch で外へ送れる資格情報の置き場（`~/.config`・`~/.ssh`・`~/.aws`・
+   `~/.gnupg`・`~/.netrc`・`[billing] env_file` の親 dir）への Read とともに、全 line・両呼び出しの共通 deny に置く。境界は従来どおり deny で書く（safe mode は permissions を外さない — ADR-0018 の probe）。repo の
    CLAUDE.md（無ければ AGENTS.md）は自動ロードされなくなるので、呼1 が選定後の Step 3b で明示的に Read する。
 3. **run ごとの記帳を撤去する。** playbook への追記をやめる。brief は主題・読者に既知の前提・参照箇所だけの静的な
    文書にし、モデルは編集しない（「開いた問い」を撤去。待ちの問いは hold が書く `pending.md` だけ）。repo line の

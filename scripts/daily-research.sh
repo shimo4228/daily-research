@@ -62,10 +62,17 @@ log "=== Starting daily research ==="
 CALL1_TOOLS="WebSearch,WebFetch,Read,Glob,Grep,Edit,Write"
 CALL2_TOOLS="Read,WebFetch,Edit,Write"
 # 無人 run で model に絶対に渡さないツールと読ませない場所 (呼1 / 呼2・全 line 共通)。
-# Bash 等の理由は ALLOWED_TOOLS の注記。Read deny: safe mode で user hook (episode-log ブロッカー等)
-# が外れるので、運用者の harness (~/.claude・~/.codex) を permission 層で塞ぐ。API key の env file の
-# dir は billing_load の後に足す。
-DISALLOWED_TOOLS="Bash,Task,NotebookEdit,Read(//${HOME#/}/.claude/**),Read(//${HOME#/}/.codex/**)"
+# Bash 等の理由は ALLOWED_TOOLS の注記。Read deny は 2 つの穴を塞ぐ:
+# - safe mode で user の hook が外れる。episode-log ブロッカー (他 agent の生ログ = prompt injection の
+#   運び手) の代わりに HOME 配下の */logs/episodes/ を塞ぎ、harness (~/.claude・~/.claude.json・~/.codex) も塞ぐ。
+# - WebFetch が外へ送れるので、資格情報の置き場 (~/.config・~/.ssh・~/.aws・~/.gnupg・~/.netrc) を塞ぐ。
+# API key の env file の dir は billing_load の後に足す (~/.config の外に置かれた場合のため)。
+DISALLOWED_TOOLS="Bash,Task,NotebookEdit"
+# 値はクォートする (無いと ** が cwd で glob 展開される)
+for _deny in ".claude/**" ".claude.json" ".codex/**" ".config/**" ".ssh/**" ".aws/**" ".gnupg/**" ".netrc" "**/logs/episodes/**"; do
+  DISALLOWED_TOOLS+=",Read(//${HOME#/}/$_deny)"
+done
+unset _deny
 
 # run スコープのファイル検索: この invocation (lock 取得時刻 = $LOCK_DIR/pid の mtime) より
 # 新しい <dir>/<name> だけを返す。同日の先行 invocation (DR_FORCE_TRACK 試験・手動再実行)

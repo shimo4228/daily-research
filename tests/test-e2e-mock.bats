@@ -1294,7 +1294,7 @@ PY
   grep -qx -- "--safe-mode" "$MOCK_HOME/.args_$PICKED"
   grep -A1 -x -- '--tools' "$MOCK_HOME/.args_$PICKED" | grep -qx "WebSearch,WebFetch,Read,Glob,Grep,Edit,Write"
   grep -A1 -x -- '--tools' "$MOCK_HOME/.args_eco" | grep -qx "WebSearch,WebFetch,Read,Glob,Grep,Edit,Write"
-  [ "$(cat "$MOCK_HOME/.disallowed_$PICKED")" = "Bash,Task,NotebookEdit,Read(//${MOCK_HOME#/}/.claude/**),Read(//${MOCK_HOME#/}/.codex/**),Read(//${MOCK_HOME#/}/.config/daily-research/**)" ]
+  [ "$(cat "$MOCK_HOME/.disallowed_$PICKED")" = "Bash,Task,NotebookEdit,Read(//${MOCK_HOME#/}/.claude/**),Read(//${MOCK_HOME#/}/.claude.json),Read(//${MOCK_HOME#/}/.codex/**),Read(//${MOCK_HOME#/}/.config/**),Read(//${MOCK_HOME#/}/.ssh/**),Read(//${MOCK_HOME#/}/.aws/**),Read(//${MOCK_HOME#/}/.gnupg/**),Read(//${MOCK_HOME#/}/.netrc),Read(//${MOCK_HOME#/}/**/logs/episodes/**),Read(//${MOCK_HOME#/}/.config/daily-research/**)" ]
 }
 
 @test "E2E ecosystem: the prompt carries no repo wording; the repo line's prompt is unchanged" {
