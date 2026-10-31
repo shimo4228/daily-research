@@ -34,8 +34,8 @@ daily-research/
 │   └── lib/                             # Sourced shell libs + Python parser
 │       ├── env.sh / log.sh / notify.sh / lock.sh / auth.sh / claude.sh / billing.sh
 │       └── dr_pipeline.py              # Single stdlib-only JSON/TOML parsing module
-├── state/                               # Per-line brief.md / pending.md / watched-sources.md /
-│                                        #   playbook.md / runs/{date}.md (evidence file) / runs/{date}.json
+├── state/                               # Per-line brief.md (static, written by you) / pending.md /
+│                                        #   watched-sources.md (ecosystem lines) / runs/{date}.md (evidence file) / runs/{date}.json
 │                                        #   (run receipt) / runs/{date}.verify.json (gitignored)
 ├── graph.jsonld                         # FROZEN archive (retired concept-graph pipeline)
 ├── com.example.daily-research.plist    # launchd schedule (AM 5:00, research)
@@ -148,7 +148,7 @@ The run is invoked with `cd "$TARGET_REPO"` so the repo's own CLAUDE.md auto-loa
 
 | Flag | Value | Purpose |
 |------|-------|---------|
-| `-p` | Per-line prompt (line brief from `dr_pipeline.py line-brief` + allowed write paths — the vault report, `state/<line>/` brief / pending / watched-sources / playbook / evidence file / run receipt, and `past_topics.json` — + past-question dedup data + report template) | Non-interactive mode |
+| `-p` | Per-line prompt (line brief from `dr_pipeline.py line-brief` + allowed write paths, drawn from the `WRITE_PATHS` array — + past-question dedup data + report template) | Non-interactive mode |
 | `--permission-mode` | `default` | Use default permission handling |
 | `--append-system-prompt-file` | `prompts/repo-research-protocol.md`, or `prompts/ecosystem-research-protocol.md` when `mode = "ecosystem"` | Inject the research protocol while preserving defaults |
 | `--safe-mode` | ecosystem lines only | The line has no repo to ground it, so the operator's `~/.claude` CLAUDE.md / rules / skills / plugins / hooks / MCP are kept out of the run (`-p` and `--append-system-prompt-file` still apply under safe mode, verified 2026-09-21). Safe mode does not switch off permissions — the boundary is `--disallowedTools` |

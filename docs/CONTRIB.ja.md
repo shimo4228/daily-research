@@ -35,7 +35,7 @@ daily-research/
 │       ├── env.sh / log.sh / notify.sh / lock.sh / auth.sh / claude.sh / billing.sh
 │       └── dr_pipeline.py              # JSON/TOML 解析の単一 stdlib モジュール
 ├── state/                               # ラインごとの brief.md / pending.md / watched-sources.md /
-│                                        #   playbook.md / runs/{date}.md（根拠ファイル）/ runs/{date}.json
+│                                        #   runs/{date}.md（根拠ファイル）/ runs/{date}.json
 │                                        #   （run receipt）/ runs/{date}.verify.json（gitignored）
 ├── graph.jsonld                         # 凍結アーカイブ（退役した concept-graph パイプライン）
 ├── com.example.daily-research.plist    # launchd スケジュール（AM 5:00、リサーチ）
@@ -148,7 +148,7 @@ run は `cd "$TARGET_REPO"` で起動されるため、repo 自身の CLAUDE.md 
 
 | フラグ | 値 | 用途 |
 |--------|---|------|
-| `-p` | ライン単位プロンプト（`dr_pipeline.py line-brief` の line brief + 許可された書き込み先パス（vault のレポート / `state/<line>/` の brief・pending・watched-sources・playbook・根拠ファイル・run receipt / `past_topics.json`）+ 過去の問いの dedup データ + レポートテンプレート） | 非対話モード |
+| `-p` | ライン単位プロンプト（`dr_pipeline.py line-brief` の line brief + 許可された書き込み先パス（`WRITE_PATHS` 配列から描く）+ 過去の問いの dedup データ + レポートテンプレート） | 非対話モード |
 | `--permission-mode` | `default` | デフォルトの権限処理を使用 |
 | `--append-system-prompt-file` | `prompts/repo-research-protocol.md`、`mode = "ecosystem"` では `prompts/ecosystem-research-protocol.md` | デフォルト能力を保持しつつリサーチプロトコルを注入 |
 | `--safe-mode` | ecosystem ラインのみ | 接地 repo が無いため、運用者の `~/.claude` の CLAUDE.md / rules / skills / plugins / hooks / MCP を run に持ち込まない（safe mode でも `-p` と `--append-system-prompt-file` は有効。2026-09-21 確認）。safe mode は permissions を外さない — 境界は `--disallowedTools` |

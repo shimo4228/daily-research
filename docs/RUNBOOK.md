@@ -46,7 +46,7 @@ Config/prompt changes (`config.toml`, `prompts/*`, `templates/*`) take effect on
 
 ```bash
 # Via launchd
-launchctl start com.daily-research
+launchctl start com.yourname.daily-research   # the Label in your plist
 
 # Direct execution — also works from inside a Claude Code session (lib/env.sh unsets CLAUDECODE)
 ./scripts/daily-research.sh
@@ -125,7 +125,7 @@ launchctl list | grep daily-research
 | Auth valid | `./scripts/check-auth.sh` | "OK: Claude authentication is valid" |
 | Today's log exists | `ls logs/$(date +%Y-%m-%d).log` | File exists |
 | Log shows success | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | Match found |
-| Reports generated | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | One file per line that ended as article or brief (3 lines a day by default; quiet / hold lines write no file) |
+| Reports generated | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | One file per line that ended as article or brief (quiet / hold lines write no file) |
 | Receipts present | `ls state/*/runs/$(date +%Y-%m-%d).json` | One file per *picked* line (what the gate reads) |
 | Verification ran | `grep "VERIFY " logs/$(date +%Y-%m-%d).log` | One line per article / brief line (`"ran": true`) |
 | Today's breakdown | `grep "Line states:" logs/$(date +%Y-%m-%d).log` | `article=N brief=N quiet=N hold=N` plus the published / quiet / unverified breakdown |
@@ -147,7 +147,7 @@ launchctl list | grep daily-research
 | `Rotation pick: a, b, c (ADR-0010/0017)` | The rotation window picked for today |
 | `Today's lines: N` | How many lines run today (`lines_per_day` + any daily lines) |
 | `=== Line: <track> (<repo path>) ===` | Per-line run starting with that repo as cwd (an ecosystem line has no repo and logs `no target repo`) |
-| `Line <track> mode: ecosystem (cwd = state/<track>, safe mode)` | The line is `mode = "ecosystem"`: it runs from its state directory under the ecosystem protocol with `--safe-mode` (ADR-0018) |
+| `Line <track> mode: ecosystem (cwd = state/<track>, safe mode)` | The line is `mode = "ecosystem"`: it runs from its state directory under the ecosystem protocol (ADR-0018). Every line runs with `--safe-mode` (ADR-0019) |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | Per-line run statistics (cost, turns, duration, tokens) |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | Transient failure; the single retry is starting |
 | `ERROR: Line <track> returned 401 — aborting remaining lines (…)` | Auth failed mid-run (401 / 403: expired OAuth or rejected key); remaining lines are skipped, finished lines' results are kept |
@@ -292,7 +292,7 @@ ps aux | grep -E "pyright|sourcekit|claude-mem|sequential|japanese|ableton"
 
 **Symptoms**: Reports answer the same question with the same answer as recent days (the same topic under a different question is fine).
 
-**Cause**: `past_topics.json` not updated properly (the run's question selection depends on the past questions and their `answer_scope` it feeds), or `state/<line>/brief.md` not keeping its open questions current.
+**Cause**: `past_topics.json` not updated properly (the run's question selection depends on the past questions and their `answer_scope` it feeds). `state/<line>/brief.md` is a static document you write; if the line keeps returning to one subject, narrow or reword its subject there.
 
 **Fix**:
 ```bash
@@ -340,15 +340,15 @@ If Mac was asleep at the scheduled time, launchd runs the job on wake (behavior 
 
 ## Cost
 
-Each morning the `lines_per_day` lines of the rotation window plus every `daily = true` line run (ADR-0010 / ADR-0011 / ADR-0017). The author's config as of 2026-10-29 runs two rotating lines, plus `desire` as a daily line until 2026-11-03, so three lines a day until then and two after. Per line: Call 1 = one Opus research run (at most 2 invocations with its single retry, 25-min cap) plus Call 2 = one verification + clarity pass (Sonnet by default, 20-min cap); a line that ends quiet or hold skips Call 2.
+Each morning the `lines_per_day` lines of the rotation window plus every `daily = true` line run (ADR-0010 / ADR-0011 / ADR-0017 / ADR-0019). Per line: Call 1 = one Opus research run (at most 2 invocations with its single retry) plus Call 2 = one verification + clarity pass (`[verification] model`); a line that ends quiet or hold skips Call 2. Timeouts and turn limits are in `scripts/daily-research.sh`.
 
 **Who pays** is `[billing] mode` in `config.toml` (`scripts/lib/billing.sh`; the contract is `[billing]` in `scripts/lib/dr_pipeline.py`):
 
 | mode | Auth | Billing | Limits |
 |---|---|---|---|
 | `subscription` (default) | Claude Code login (OAuth) | No per-token charge on a Max plan; counts against the plan's usage limits | The plan's own limits. Any `ANTHROPIC_API_KEY` in the environment is dropped |
-| `api` (author's setting since 2026-10-29) | `ANTHROPIC_API_KEY` read from `env_file` (author: `~/.config/jrp/env`, shared with jev-research-pipeline) | Every call is billed to the Claude API | `--max-budget-usd` per call (`call1_max_usd` 4, `call2_max_usd` 1.5); a line starts only if the day's and the month's remaining budget both cover call1 + call2 (`daily_cap_usd` 15, `monthly_cap_usd` 190 against $200/month of API credit). Otherwise the remaining lines are skipped with a notification; a day where no line started ends as `E_BUDGET` (exit 1) |
+| `api` | `ANTHROPIC_API_KEY` read from `env_file`, a file outside the repo that the model is denied from reading | Every call is billed to the Claude API | `--max-budget-usd` per call (`call1_max_usd`, `call2_max_usd`); a line starts only if the day's and the month's remaining budget both cover call1 + call2 (`daily_cap_usd`, `monthly_cap_usd`). Otherwise the remaining lines are skipped with a notification; a day where no line started ends as `E_BUDGET` (exit 1) |
 
-In `api` mode every call's cost (the `total_cost_usd` Claude Code reports, including the auth probe) is appended to `state/api-spend.jsonl`; the caps read that file, and the day's totals are logged as `API spend: today $… / $15, month $… / $190`. A 429, a too-low credit balance or a rejected key stops the remaining lines without a retry (`E_BILLING` / `E_AUTH`).
+In `api` mode every call's cost (the `total_cost_usd` Claude Code reports, including the auth probe) is appended to `state/api-spend.jsonl`; the caps read that file, and the day's and month's totals are logged as `API spend: today … month …`. A 429, a too-low credit balance or a rejected key stops the remaining lines without a retry (`E_BILLING` / `E_AUTH`).
 
-**Estimate.** The 2026-09-15–22 runs (Opus 5 / Sonnet 5, 25 lines) averaged $3.32 for call 1 and $0.60 for call 2. Repriced at the list prices on [platform.claude.com/docs/en/about-claude/pricing](https://platform.claude.com/docs/en/about-claude/pricing) as of 2026-10-29 (Opus 5.5 $4 / $20 per MTok, cache read $0.20; Sonnet 5.5 $2 / $10, cache read $0.10; web search $10 per 1,000) with the same token counts, a line comes to about $2.4–2.9: call 1 ≈ $1.9–2.3 (most of it is re-reading the cached context every turn, about 2.4M cache-read tokens per run), call 2 ≈ $0.45–0.55. That is about $155 a month at two lines a day. The token counts on Opus 5.5 are not yet measured; check `state/api-spend.jsonl` after the first week. Three lines run sequentially in 20–35 minutes (2026-09 runs).
+**Actual spend.** `./scripts/check-auth.sh` prints the month's spend so far, and `state/api-spend.jsonl` has one line per call. The defaults for the caps are in `config.example.toml`; set yours from what the ledger shows.

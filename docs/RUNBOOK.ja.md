@@ -46,7 +46,7 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 
 ```bash
 # launchd 経由
-launchctl start com.daily-research
+launchctl start com.yourname.daily-research   # plist の Label
 
 # 直接実行 — Claude Code セッション内からも実行できる（lib/env.sh が CLAUDECODE を unset する）
 ./scripts/daily-research.sh
@@ -123,7 +123,7 @@ launchctl list | grep daily-research
 | 認証有効 | `./scripts/check-auth.sh` | "OK: Claude authentication is valid" |
 | 今日のログが存在 | `ls logs/$(date +%Y-%m-%d).log` | ファイルが存在 |
 | ログに成功メッセージ | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | マッチあり |
-| レポートが生成済み | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | article / brief で終わったライン数のファイル（既定は 1 日 3 ライン。quiet / hold のラインはファイルを作らない） |
+| レポートが生成済み | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | article / brief で終わったライン数のファイル（quiet / hold のラインはファイルを作らない） |
 | receipt が揃っている | `ls state/*/runs/$(date +%Y-%m-%d).json` | 当日*担当*ライン数のファイル（ゲートの判定材料） |
 | 検証が走った | `grep "VERIFY " logs/$(date +%Y-%m-%d).log` | article / brief のラインごとに 1 行（`"ran": true`） |
 | 当日の内訳 | `grep "Line states:" logs/$(date +%Y-%m-%d).log` | `article=N brief=N quiet=N hold=N` と今朝 / 更新なし / 未検証の内訳 |
@@ -145,7 +145,7 @@ launchctl list | grep daily-research
 | `Rotation pick: a, b, c (ADR-0010/0017)` | 当日担当ラインの輪番 window 選択結果 |
 | `Today's lines: N` | 当日実行するライン数（`lines_per_day` + daily ライン） |
 | `=== Line: <track> (<repo パス>) ===` | その repo を cwd にしたライン run の開始（ecosystem ラインは repo を持たず `no target repo` と出る） |
-| `Line <track> mode: ecosystem (cwd = state/<track>, safe mode)` | `mode = "ecosystem"` のライン。state ディレクトリを cwd に、ecosystem プロトコル + `--safe-mode` で走る（ADR-0018） |
+| `Line <track> mode: ecosystem (cwd = state/<track>, safe mode)` | `mode = "ecosystem"` のライン。state ディレクトリを cwd に、ecosystem プロトコルで走る（ADR-0018）。`--safe-mode` は全ラインに付く（ADR-0019） |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | ライン run の実行統計（コスト、ターン数、所要時間、トークン数） |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | transient 失敗。1 回きりのリトライを開始 |
 | `ERROR: Line <track> returned 401 — aborting remaining lines (…)` | run 中に認証が失敗（401 / 403: OAuth 期限切れか key の拒否）。残ラインは中断、完走済みラインの成果は保持 |
@@ -290,7 +290,7 @@ ps aux | grep -E "pyright|sourcekit|claude-mem|sequential|japanese|ableton"
 
 **症状**: 最近と同じ問いに同じ答えを返すレポートが生成される（同じ topic を別の問いで扱うのは正常）。
 
-**原因**: `past_topics.json` が正しく更新されていない（run の問い選定はここから渡される過去の問い・`answer_scope` の一覧に依存する）。または `state/<line>/brief.md` の「開いた問い」が更新されていない。
+**原因**: `past_topics.json` が正しく更新されていない（run の問い選定はここから渡される過去の問い・`answer_scope` の一覧に依存する）。`state/<line>/brief.md` はあなたが書く静的な文書なので、同じ題材に戻り続けるならそこで主題を絞るか言い換える。
 
 **対処**:
 ```bash
@@ -338,15 +338,15 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 
 ## コスト
 
-毎朝、輪番 window で選ばれた `lines_per_day` 本のラインと、`daily = true` の全ラインが走る（ADR-0010 / ADR-0011 / ADR-0017）。著者の config（2026-10-29 時点）は輪番 2 本で、2026-11-03 までは `desire` が毎日ラインとして加わる。つまり 11-03 までは 1 日 3 ライン、その後は 2 ライン。ラインごとに、呼1 = Opus の研究 run（リトライ込みで最大 2 回、25 分で打ち切り）と、呼2 = 検証 + clarity（既定 sonnet、20 分で打ち切り）が 1 回ずつ走る。quiet / hold で終わったラインは呼2 を飛ばす。
+毎朝、輪番 window で選ばれた `lines_per_day` 本のラインと、`daily = true` の全ラインが走る（ADR-0010 / ADR-0011 / ADR-0017 / ADR-0019）。ラインごとに、呼1 = Opus の研究 run（リトライ込みで最大 2 回）と、呼2 = 検証 + clarity（`[verification] model`）が 1 回ずつ走る。quiet / hold で終わったラインは呼2 を飛ばす。timeout とターン数の上限は `scripts/daily-research.sh` にある。
 
 **誰が払うか**は `config.toml` の `[billing] mode` で決まる（`scripts/lib/billing.sh`。契約の正本は `scripts/lib/dr_pipeline.py` の `[billing]`）:
 
 | mode | 認証 | 課金 | 上限 |
 |---|---|---|---|
 | `subscription`（既定） | Claude Code のログイン（OAuth） | Max プランならトークン単位の課金なし。プランの利用上限に数えられる | プランの上限。環境にある `ANTHROPIC_API_KEY` は捨てる |
-| `api`（著者の設定、2026-10-29 から） | `env_file` から読む `ANTHROPIC_API_KEY`（著者は `~/.config/jrp/env`。jev-research-pipeline と共有） | すべての呼び出しが Claude API の課金 | 呼び出しごとに `--max-budget-usd`（`call1_max_usd` 4、`call2_max_usd` 1.5）。1 日と 1 か月の残額がどちらも 呼1 + 呼2 の分を満たすときだけラインを始める（`daily_cap_usd` 15、`monthly_cap_usd` 190。API クレジットは月 $200）。満たさなければ残りのラインを止めて通知する。1 本も始められなかった日は `E_BUDGET`（exit 1） |
+| `api` | `env_file` から読む `ANTHROPIC_API_KEY`（repo の外のファイルで、モデルの読み取りは拒否される） | すべての呼び出しが Claude API の課金 | 呼び出しごとに `--max-budget-usd`（`call1_max_usd`、`call2_max_usd`）。1 日と 1 か月の残額がどちらも 呼1 + 呼2 の分を満たすときだけラインを始める（`daily_cap_usd`、`monthly_cap_usd`）。満たさなければ残りのラインを止めて通知する。1 本も始められなかった日は `E_BUDGET`（exit 1） |
 
-`api` モードでは、呼び出しごとの費用（Claude Code が報告する `total_cost_usd`。認証 probe を含む）を `state/api-spend.jsonl` に追記する。上限の判定はこのファイルを読み、その日の合計は `API spend: today $… / $15, month $… / $190` としてログに出る。429、クレジット残高の不足、key の拒否が出たら、再試行せずに残りのラインを止める（`E_BILLING` / `E_AUTH`）。
+`api` モードでは、呼び出しごとの費用（Claude Code が報告する `total_cost_usd`。認証 probe を含む）を `state/api-spend.jsonl` に追記する。上限の判定はこのファイルを読み、その日と月の合計は `API spend: today … month …` としてログに出る。429、クレジット残高の不足、key の拒否が出たら、再試行せずに残りのラインを止める（`E_BILLING` / `E_AUTH`）。
 
-**見積もり。** 2026-09-15〜22 の実行（Opus 5 / Sonnet 5、25 ライン）は、平均で呼1 が $3.32、呼2 が $0.60 だった。同じトークン数に [platform.claude.com/docs/en/about-claude/pricing](https://platform.claude.com/docs/en/about-claude/pricing) の 2026-10-29 時点の定価（Opus 5.5 は入力 $4 / 出力 $20 per MTok、cache read $0.20。Sonnet 5.5 は $2 / $10、cache read $0.10。web search は 1,000 回 $10）を当てると、1 ラインは約 $2.4〜2.9。内訳は呼1 ≈ $1.9〜2.3（大半はターンごとのキャッシュ済み文脈の再読み込みで、1 run あたり cache read 約 240 万トークン）、呼2 ≈ $0.45〜0.55。1 日 2 ラインで月に約 $155。Opus 5.5 でのトークン数はまだ実測していないので、最初の 1 週間が過ぎたら `state/api-spend.jsonl` で確かめる。所要時間は 3 ラインの逐次実行で 20〜35 分（2026-09 の実行）。
+**実際の支出。** その月の支出は `./scripts/check-auth.sh` が表示し、`state/api-spend.jsonl` には呼び出しごとに 1 行ある。上限の既定値は `config.example.toml` にあり、自分の値は台帳を見て決める。
