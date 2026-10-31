@@ -130,10 +130,21 @@ if [ "$BILLING_MODE" = "api" ]; then
 else
   log "Billing: subscription (Max plan OAuth)"
 fi
-# API key の env file を model に読ませない (mode を問わず、config が指す dir 全体)
+# API key の env file を model に読ませない (mode を問わず、config が指す dir 全体)。dir が HOME や /
+# だと deny が repo・vault・state の Read まで塞いで全 line が落ちるので、そのときは file だけを塞ぐ。
+# 相対パスは deny の形にならないので WARN だけ出す。
 if [ -n "${BILLING_ENV_FILE:-}" ]; then
   BILLING_ENV_DIR=$(dirname "$BILLING_ENV_FILE")
-  DISALLOWED_TOOLS="$DISALLOWED_TOOLS,Read(//${BILLING_ENV_DIR#/}/**)"
+  case "$BILLING_ENV_FILE" in
+    /*)
+      if [ "$BILLING_ENV_DIR" = "$HOME" ] || [ "$BILLING_ENV_DIR" = "/" ]; then
+        DISALLOWED_TOOLS="$DISALLOWED_TOOLS,Read(//${BILLING_ENV_FILE#/})"
+      else
+        DISALLOWED_TOOLS="$DISALLOWED_TOOLS,Read(//${BILLING_ENV_DIR#/}/**)"
+      fi
+      ;;
+    *) log "WARN: [billing] env_file が絶対パスでない ($BILLING_ENV_FILE) — Read deny を置けない" ;;
+  esac
 fi
 
 # 実 auth probe (lib/auth.sh)。`claude --version` は認証切れを検出できないため、
@@ -323,10 +334,13 @@ mkdir -p "$STATE_DIR/runs"
 #   allowedTools / gate / 呼2 は repo line と同一。
 # mode の enum は dr_pipeline._load_tracks が検証済み (rotation-pick が先に通っている)。
 LINE_MODE=$(python3 "$DR_PY" config-get "$PROJECT_DIR/config.toml" "tracks.$TRACK.mode" repo 2>> "$LOG_FILE") || LINE_MODE="repo"
+# 書き込み先から外した場所は deny でも塞ぐ (allow は加算なので、境界は deny で書く — ADR-0019 Decision 3/4)。
+# brief.md は運用者の静的な文書、playbook は撤去済み、past_topics.json は orchestrator が追記する。
+STATE_DENY="Edit(//${STATE_DIR#/}/brief.md),Edit(//${STATE_DIR#/}/playbook.md),Edit(//${PROJECT_DIR#/}/past_topics.json)"
 if [ "$LINE_MODE" = "ecosystem" ]; then
   LINE_CWD="$STATE_DIR"
   LINE_PROTOCOL="$PROJECT_DIR/prompts/ecosystem-research-protocol.md"
-  LINE_DISALLOWED="$DISALLOWED_TOOLS"
+  LINE_DISALLOWED="$DISALLOWED_TOOLS,$STATE_DENY"
   LINE_DISALLOWED="$LINE_DISALLOWED,Edit(//${STATE_DIR#/}/.claude/**)"
   LINE_DISALLOWED="$LINE_DISALLOWED,Edit(//${STATE_DIR#/}/CLAUDE.md)"
   LINE_DISALLOWED="$LINE_DISALLOWED,Edit(//${STATE_DIR#/}/.mcp.json)"
@@ -337,7 +351,7 @@ if [ "$LINE_MODE" = "ecosystem" ]; then
   log "Line $TRACK mode: ecosystem (cwd = state/$TRACK)"
 else
   LINE_CWD="$TARGET_REPO"
-  LINE_DISALLOWED="$DISALLOWED_TOOLS"
+  LINE_DISALLOWED="$DISALLOWED_TOOLS,$STATE_DENY"
   LINE_CWD_MISSING="target_repo が存在しない"
   LINE_PROTOCOL="$PROJECT_DIR/prompts/repo-research-protocol.md"
   LINE_RUN_LABEL="今日のデイリーリサーチ (per-repo line 実行) を、システムプロンプトに追記された
@@ -414,9 +428,10 @@ ${REPO_ACTIVITY_SECTION}
 ## 書き込み先 (絶対パス。この run で Write / Edit が許されるのは次のパスだけ)
 
 ${WRITE_PATHS_LIST}
+上のパスの使い道:
 1. レポート: $REPORT_DIR/${DATE}_${TRACK}_{slug}.md (slug は英小文字ケバブケース。status が quiet / hold の日は書かない)
-2. state ディレクトリ: $STATE_DIR
-   - brief.md (line brief。運用者が書く静的な文書で、読むだけ) / pending.md (機会・保留の正本)
+2. state ディレクトリ $STATE_DIR のうち、上に並ぶもの
+   - pending.md (機会・保留の正本)。brief.md は運用者が書く静的な文書で、読むだけ (書き込み先ではない)
    - 根拠ファイル: $STATE_DIR/runs/${DATE}.md
    - run receipt (必須。記事の直後、state 更新より先に書く。quiet / hold の日も書く): $RECEIPT_PATH
      キーと形はプロトコルの receipt の節。問いの履歴はこの receipt から orchestrator が記録する

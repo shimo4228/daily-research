@@ -85,11 +85,10 @@ target_doi = "10.5281/zenodo.XXXXXXX"  # optional; informational — not read by
 # repository: it observes an external ecosystem itself (new OSS, tools, releases, design
 # trends), not "external developments relevant to a repo". It runs `claude -p` with
 # cwd = state/<line>/ (line-local state is the only local context), uses
-# prompts/ecosystem-research-protocol.md, and passes --safe-mode so the operator's
-# ~/.claude instructions / skills / plugins / hooks are not loaded. Safe mode does NOT
-# switch off permissions, so the boundary stays --disallowedTools; ecosystem lines add
-# denies for writing .claude/ / CLAUDE.md / .mcp.json into state/<line>/ (the cwd is
-# model-writable) and for reading ~/.claude and ~/.codex. Write permissions, the receipt
+# prompts/ecosystem-research-protocol.md. Like every line it runs with --safe-mode
+# (ADR-0019); safe mode does NOT switch off permissions, so the boundary stays
+# --disallowedTools. Ecosystem lines add denies for writing .claude/ / CLAUDE.md /
+# .mcp.json into state/<line>/ (the cwd is model-writable). Write permissions, the receipt
 # gate, the four content states, and the verification call are identical to repo lines. `repos` and `context_files` are rejected by the schema for this mode.
 # The watchlist lives in state/<line>/watched-sources.md (format: see the protocol);
 # duplicates are judged by "what changed since the last report", not by topic name.

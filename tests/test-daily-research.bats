@@ -75,7 +75,9 @@ teardown() {
   refute_grep -q 'past_topics' <<< "$(grep '^  WRITE_PATHS=(' "$SCRIPT")"
   grep -qF 'ALLOWED_TOOLS="$ALLOWED_TOOLS,Edit(//${_wp#/})"' "$SCRIPT"
   grep -qF '${WRITE_PATHS_LIST}' "$SCRIPT"
-  refute_grep -q 'Edit(//${PROJECT_DIR#/}/past_topics.json)' "$SCRIPT"
+  # past_topics.json の Edit 規則は deny (STATE_DENY) にだけ現れる
+  [ "$(grep -c 'Edit(//${PROJECT_DIR#/}/past_topics.json)' "$SCRIPT")" -eq 1 ]
+  grep -qF 'STATE_DENY="Edit(//${STATE_DIR#/}/brief.md),Edit(//${STATE_DIR#/}/playbook.md),Edit(//${PROJECT_DIR#/}/past_topics.json)"' "$SCRIPT"
   grep -q 'past-topics-append' "$SCRIPT"
   # 無条件の Write/Edit (path 制限なし) を allowedTools に入れていない
   refute_grep -qE 'ALLOWED_TOOLS="[^"]*,(Write|Edit),' "$SCRIPT"
