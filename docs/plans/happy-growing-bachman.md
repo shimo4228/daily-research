@@ -17,7 +17,7 @@
   past_topics.json）がターンと出力を食う。
 
 目標: per-repo の問いを運用者の関心に近づけ、広い領域の line を戻して 5〜6 月の面白さを取り戻し、
-月の API 支出を約 $160 から $80 以下へ下げる。レポートの読み物としての質（呼2 の照合・記述規律）は保つ。
+月の API 支出を約半分以下へ下げる（実数は `.notes/cost-2026-10-31.md`（私的））。レポートの読み物としての質（呼2 の照合・記述規律）は保つ。
 
 ## 決定事項（grill-me 2026-10-31、運用者）
 
@@ -210,7 +210,7 @@ worktree では `.venv` を作り直す（`uv venv && uv pip install pytest pyte
      除いた静的版を置く。既存の開いた問いは pending.md へ移さない（宿題を別の名前で再生産しないため）。
    - `state/wide/brief.md` は実装者が草稿を書き、運用者が導入前に読む。4 領域それぞれで何を変化と数えるかを
      ここに書く（関心の定義は運用者の持ち物）。
-3. 試験 run 2 本（API 課金、見積もり計 $2〜4）: その日の live run が走っていない repo line 1 本（同日の receipt と
+3. 試験 run 2 本（API 課金、line 2 本分）: その日の live run が走っていない repo line 1 本（同日の receipt と
    根拠ファイルを上書きしないため。10-31 なら edge）と `wide` を、それぞれ `DR_FORCE_TRACK` で。**この plan の
    承認を、この 2 本と P0-6 の `check-auth.sh`（実 API を 1 回叩く probe）の実行の承認とする。** 追加の run は
    都度聞く。確認項目は Verification。
@@ -285,7 +285,7 @@ interview では「2 週後に印象、6 週後に採用率 15% 以上かつ引�
 
 | ゲート | 開く条件（観測数） | 判定 | 予想日 |
 |---|---|---|---|
-| G1 コスト | 新構成の live line-run が 10 件（試験 run は支出台帳の `ts` で除く） | 支出台帳の line 平均（呼1 + 呼2）で判定: ≤ $1.2 は合格（月換算は 11-03 以後の 2 本/日で ≤ $80）。$1.2〜1.4 は合格扱いで、次は `--max-turns` と経路 A の確認数を詰める。$1.4 超は commit (1) が効いていないので、Probe の土台 token と実 run の cache 書き込みを突き合わせる。合格したら上限（呼1 / 呼2 / 日 / 月）を観測の最大値を基に下げる | 導入から約 4 日 |
+| G1 コスト | 新構成の live line-run が 10 件（試験 run は支出台帳の `ts` で除く） | 支出台帳の line 平均（呼1 + 呼2）を、導入前の live line 平均（基準値、`.notes/cost-2026-10-31.md`（私的））との比で判定: 65% 以下は合格（11-03 以後の 2 本/日で月の支出が約半分以下）。65〜75% は合格扱いで、次は `--max-turns` と経路 A の確認数を詰める。75% 超は commit (1) が効いていないので、Probe の土台 token と実 run の cache 書き込みを突き合わせる。合格したら上限（呼1 / 呼2 / 日 / 月）を観測の最大値を基に下げる | 導入から約 4 日 |
 | G2 中間 | 輪番の全 line が 1 回ずつ（現 config で 6 本。11-03 に desire が輪番へ戻ると位相が飛び、6 日より延びうる） | 運用者が読み、明らかに悪い部品だけ個別に revert する | 約 6〜8 日 |
 | G3 継続判定 | per-repo 14 本 + `wide` 14 本 | 運用者の判断（line 別に「ずれ / 繰り返し / 良い」）。生の数字として引き直し件数（当日判定できる）、窓が閉じた分の採用件数（`adoption_backtest.py`）、`pending.md` の行数の推移（hold が新しい宿題帳になっていないか）を添える。14 日目に必ず決める | 約 14 日 |
 | 参考 | G3 の 14 本目から 21 日後 | 採用率の確定値を記録する（合否には使わない） | 約 35 日 |
@@ -322,7 +322,7 @@ edge は採用が最も多い line（12 / 25）なので、G2・G3 で個別に�
 |---|---|---|
 | CLAUDE.md:3, 280 | 1 日 3 本、`contemplative` を含む 7 line | `config.toml:17` は `lines_per_day = 2`、contemplative の track は無い |
 | CLAUDE.md:281、README.md:135、llms-full.txt:15 | jev は daily line、1 日 4 本 | jev は 10-19 から輪番（config.toml:163-166）、desire が 11-03 まで daily（:116-120） |
-| CLAUDE.md:292、RUNBOOK.md:354、README.md:13 | 1 line $2.4〜2.9 | 実測 $1.6〜1.9（research §1） |
+| CLAUDE.md:292、RUNBOOK.md:354、README.md:13 | 1 line の費用の見積もり | 実測より 3〜5 割高い（research §1） |
 | llms.txt:3、SKILL.md:11、RUNBOOK.md:128 | `lines_per_day` の既定は 3 | コードの既定は 1（PY:56、config.example.toml:4）。example の値は 3（:6） |
 | README.md:135 | Max plan、key は unset | 運用は api（README.md:13、CLAUDE.md:289） |
 | CLAUDE.md:56、llms-full.txt:27, 182 | bats 3 本 | 4 本（test-billing.bats を含む） |

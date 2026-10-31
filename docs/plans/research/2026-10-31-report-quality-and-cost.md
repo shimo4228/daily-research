@@ -6,13 +6,12 @@ plan の前の内部調査。問いは 2 つ — (1) 問いの選定がずれる
 
 ## 1. 費用の内訳（呼1 が 85%、その 3 割は呼び出しの土台）
 
-- 支出台帳 `state/api-spend.jsonl`（2026-10-30〜31、live 6 line）: 呼1 $1.41〜1.65、呼2 $0.20〜0.26。
-  1 日 3 本で約 $5.3、月換算 ≈ $160。
+- 支出台帳 `state/api-spend.jsonl`（2026-10-30〜31、live 6 line）: 呼1 が line 費用の約 85%、呼2 が約 15%。
+  ドル額は `.notes/cost-2026-10-31.md`（私的） に置く（公開 doc に費用の実数を書かない方針 — `.claude/skills/dr-review/SKILL.md`）。
 - 呼1 の usage（`logs/2026-10-3{0,1}.log` の result JSON）: cache 書き込み 89k〜137k token、cache 読み
   1.79M〜2.84M token、出力 18k〜26k token、33〜58 ターン。
-- 単価は `docs/RUNBOOK.md:354` の 2026-10-29 定価（Opus 5.5 入力 $4 / 出力 $20 / cache 読み $0.20 per
-  MTok）。cache 書き込みは入力の 1.25 倍 = $5 で、akc 呼1（2026-10-31）の実費 $1.65 と内訳
-  134,147×5 + 2,277,324×0.2 + 22,689×20（per M）+ 検索 ≈ $1.62 が一致する。
+- 2026-10-29 の定価（platform.claude.com）を token 数に当てると、akc 呼1（2026-10-31）の実費と内訳
+  （cache 書き込み 134,147・cache 読み 2,277,324・出力 22,689 token + 検索）が一致する（計算は同じ付録）。
   → 呼1 の内訳は cache 書き込み ≈ 40% / cache 読み ≈ 28% / 出力 ≈ 28% / 検索 ≈ 3%。
 - 呼び出しの土台（probe: CLI 2.1.314、`claude -p "OKとだけ答えて" --model haiku --max-turns 1`）:
 
@@ -28,7 +27,7 @@ plan の前の内部調査。問いは 2 つ — (1) 問いの選定がずれる
   万 token、使わない組み込みツールの定義で約 2.3 万 token。safe-mode の合計が両 cwd で同値なので、
   **safe-mode は cwd（対象 repo）の CLAUDE.md も落とす**。API 課金への切替（commit 44a61a5）は支払い元を
   変えただけで、起動するのは今も Claude Code CLI なので土台は残る。
-- 推定: 土台を約 6 万 token 削ると、呼1 は 1 本 $0.4〜0.7、呼2 は 1 本 $0.1〜0.2 下がる。ターン数と
+- 推定: 土台を約 6 万 token 削ると、呼1 は 1 本あたり 2〜4 割、呼2 は 4〜8 割下がる。ターン数と
   リクエスト数の対応が result JSON から確定できないため幅がある。実 run の支出台帳で確かめる。
 
 ## 2. CLI フラグ（一次情報 = `claude --help`、2.1.314、2026-10-31）
@@ -101,7 +100,7 @@ ecosystem 版は 22,012 B。本文の減量は今回の plan の対象外（運�
 構成の説明が CLAUDE.md（26.6 KB）・README 英日（19.4 / 23.7 KB）・RUNBOOK 英日（19.5 / 22.7 KB）・
 CONTRIB 英日（18.2 / 20.5 KB）・llms-full.txt（42.2 KB）の 8 か所にある。すでに食い違いがある:
 `CLAUDE.md:3` と `CLAUDE.md:280` は 1 日 3 本、`config.toml` は `lines_per_day = 2`（`CLAUDE.md:293` も
-2 本）。費用見積もり `CLAUDE.md:292` / `docs/RUNBOOK.md:354` は 1 本 $2.4〜2.9、実測は $1.6〜1.9。
+2 本）。費用見積もり `CLAUDE.md:292` / `docs/RUNBOOK.md:354` は実測より 3〜5 割高い。
 凍結アーカイブ `graph.jsonld`（339 KB、ADR-0008 で増分停止）と `docs/graph-schema.md` が残る。
 
 ## 8. 削除候補の読み手（棚卸しの注意）
@@ -112,8 +111,8 @@ CONTRIB 英日（18.2 / 20.5 KB）・llms-full.txt（42.2 KB）の 8 か所に�
 
 ## 9. jev-research-pipeline（jrp）との比較
 
-jrp の README「Why jrp」: Opus agent（2026-09-15〜22）は 1 朝 107〜242 ターン・$8〜15、jrp
-（2026-10-03〜07）は $1.1〜1.5。安さの理由は「ターンが無い」こと — 候補はコードが集め、関連判定は
+jrp の README「Why jrp」: Opus agent（2026-09-15〜22）は 1 朝 107〜242 ターン、jrp（2026-10-03〜07）は
+その約 1/7〜1/10 の費用。安さの理由は「ターンが無い」こと — 候補はコードが集め、関連判定は
 Jev（選択式で確率だけ返すモデル）、LLM は本文だけ書く。情報源は論文と repo に固定で、daily-research の
 強み（LWN・issue・エッセイ・Octoverse のような Web 全体の発見）は持たない。jrp のノートの「読む価値」
 欄には 106 本中 32 か所に印があった。jrp は launchd に登録されておらず、API key を使うのは
