@@ -46,7 +46,7 @@ Config/prompt changes (`config.toml`, `prompts/*`, `templates/*`) take effect on
 
 ```bash
 # Via launchd
-launchctl start com.daily-research
+launchctl start com.yourname.daily-research   # the Label in your plist
 
 # Direct execution — also works from inside a Claude Code session (lib/env.sh unsets CLAUDECODE)
 ./scripts/daily-research.sh
@@ -59,13 +59,16 @@ launchctl start com.daily-research
 ```
 daily-research.sh (05:00)
 ├── Lock acquisition (atomic mkdir)
-├── Auth probe (real OAuth check)
+├── Billing setup ([billing]: api = ANTHROPIC_API_KEY from env_file, subscription = OAuth)
+├── Auth probe (one real Haiku call on that billing path)
 ├── Config schema check (legacy pre-ADR-0008 schema fails fast)
 ├── rotation-pick — deterministic selection of today's lines: a rotation window
 │   (start = date.toordinal() × K mod N, then K consecutive lines, K = [general]
 │   lines_per_day — proleptic Gregorian ordinal, ADR-0010 / ADR-0017) + every `daily = true` line (ADR-0011)
 ├── Call 1: claude -p, cwd = the picked line's target_repo (Opus, --max-turns 55,
 │   25-min timeout, one retry on transient failure; 401 aborts)
+│   [api mode: a spend gate before each line (day / month caps), --max-budget-usd per call,
+│    each call's cost appended to state/api-spend.jsonl; 429 / credit balance stops the run]
 │   [mode = "ecosystem" lines have no target_repo: cwd = state/<line>,
 │    prompts/ecosystem-research-protocol.md, plus --safe-mode — ADR-0018]
 │   ├── Read a short context (line brief + state/<line>/brief.md + question history + pending.md)
@@ -122,7 +125,7 @@ launchctl list | grep daily-research
 | Auth valid | `./scripts/check-auth.sh` | "OK: Claude authentication is valid" |
 | Today's log exists | `ls logs/$(date +%Y-%m-%d).log` | File exists |
 | Log shows success | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | Match found |
-| Reports generated | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | One file per line that ended as article or brief (3 lines a day by default; quiet / hold lines write no file) |
+| Reports generated | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | One file per line that ended as article or brief (quiet / hold lines write no file) |
 | Receipts present | `ls state/*/runs/$(date +%Y-%m-%d).json` | One file per *picked* line (what the gate reads) |
 | Verification ran | `grep "VERIFY " logs/$(date +%Y-%m-%d).log` | One line per article / brief line (`"ran": true`) |
 | Today's breakdown | `grep "Line states:" logs/$(date +%Y-%m-%d).log` | `article=N brief=N quiet=N hold=N` plus the published / quiet / unverified breakdown |
@@ -131,17 +134,23 @@ launchctl list | grep daily-research
 
 | Message | Meaning |
 |---------|---------|
-| `Auth probe passed` | Real OAuth probe succeeded |
-| `ERROR: Auth probe failed — OAuth likely expired` | Real OAuth probe failed; the run stops before any line (exit 1) |
+| `Billing: api (key from …; caps …)` / `Billing: subscription (Max plan OAuth)` | The billing path `[billing] mode` selected |
+| `ERROR: billing setup failed — …` | `[billing]` is invalid or (api mode) `env_file` has no `ANTHROPIC_API_KEY`; the run stops before any call (exit 1) |
+| `Auth probe passed` | The real auth probe succeeded |
+| `ERROR: Auth probe failed (<mode>) — status=… result=…` | The probe failed (expired OAuth, or in api mode a rejected key / low credit / 429); the run stops before any line (exit 1) |
+| `WARN: API spend gate stopped the run (month $… / $…, day $… / $…, need $… per line) — stopping remaining lines` | api mode: the remaining budget can't cover one more line, or (after an `ERROR: … spend …` line) the ledger could not be written or read; the rest are skipped and named in `Lines not started: …` |
+| `ERROR: Line <track> hit a billing/rate-limit error — aborting remaining lines, no retry` | api mode: 429 or credit balance too low (`E_BILLING`) |
+| `WARN: Line <track> reached --max-budget-usd $… — no retry, going to gate` | The per-call cap stopped call 1; whatever it wrote goes to the gate |
+| `API spend: today $… / $…, month $… / $…` | api mode: totals from `state/api-spend.jsonl` after the run |
 | `ERROR: Another instance is running. Skipping.` | Lock directory `.daily-research.lock/` is held by a live PID |
 | `Config schema check passed` | `config.toml` matches the current (ADR-0008) schema |
 | `Rotation pick: a, b, c (ADR-0010/0017)` | The rotation window picked for today |
 | `Today's lines: N` | How many lines run today (`lines_per_day` + any daily lines) |
 | `=== Line: <track> (<repo path>) ===` | Per-line run starting with that repo as cwd (an ecosystem line has no repo and logs `no target repo`) |
-| `Line <track> mode: ecosystem (cwd = state/<track>, safe mode)` | The line is `mode = "ecosystem"`: it runs from its state directory under the ecosystem protocol with `--safe-mode` (ADR-0018) |
+| `Line <track> mode: ecosystem (cwd = state/<track>, safe mode)` | The line is `mode = "ecosystem"`: it runs from its state directory under the ecosystem protocol (ADR-0018). Every line runs with `--safe-mode` (ADR-0019) |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | Per-line run statistics (cost, turns, duration, tokens) |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | Transient failure; the single retry is starting |
-| `ERROR: Line <track> returned 401 — aborting remaining lines` | Auth expired mid-run; remaining lines are skipped, finished lines' results are kept |
+| `ERROR: Line <track> returned 401 — aborting remaining lines (…)` | Auth failed mid-run (401 / 403: expired OAuth or rejected key); remaining lines are skipped, finished lines' results are kept |
 | `Line <track> state: <status>` | The content state the receipt declared (article / brief / quiet / hold) |
 | `Line <track> report gate passed` | ctl-015: the line delivered what its receipt declared (article / brief: `{date}_{track}_*.md` exists in the vault; quiet / hold: no file needed) |
 | `WARN: report gate failed for line <track> — no <date>_<track>_*.md (ctl-015)` | The receipt says article / brief but no report exists — counted as failed |
@@ -165,9 +174,9 @@ launchctl list | grep daily-research
 
 ## Common Issues and Fixes
 
-### 1. OAuth Token Expired
+### 1. OAuth Token Expired (subscription mode)
 
-**Symptoms**: Log shows `ERROR: Auth probe failed — OAuth likely expired`. macOS notification appears.
+**Symptoms**: Log shows `ERROR: Auth probe failed (subscription) — …`. macOS notification appears.
 
 **Cause**: Claude OAuth token expires approximately every 4 days.
 
@@ -219,19 +228,23 @@ rm -rf .daily-research.lock
 **Symptoms**: Log shows `WARN: Line <track> failed after retry` or `WARN: report gate failed for line <track> — ... (ctl-015)` on consecutive days.
 
 **Causes**:
-- Rate limit hit (Claude Max plan quota) or network issues during WebSearch
+- Rate limit hit (the plan's quota in subscription mode; in api mode a 429 stops the run instead, see issue 5) or network issues during WebSearch
 - The 25-minute per-line timeout expiring on an unusually deep run
 - The line's `target_repo` path in `config.toml` missing or moved (a `mode = "ecosystem"` line has no `target_repo` — it runs from `state/<line>`, which the script creates, and logs `Line <track> mode: ecosystem (cwd = state/<track>, safe mode)`)
 
-**Fix**: Check the specific exit class in the log (`E_TRANSIENT` / `E_FATAL`). One line failing does not stop the others — their reports still land and get ingested; the day's final class is then `E_PARTIAL` (exit 1, `=== Failed (E_PARTIAL:<lines>, exit code 1) ===`), while `E_NO_REPORT` is reserved for a day where no line passed the gate (ADR-0011 / ADR-0017 — a day where every line ended quiet is a success, not `E_NO_REPORT`). Verify `target_repo` exists, then re-run the script manually. A 401 (`E_AUTH`) means the OAuth token expired: see issue 1.
+**Fix**: Check the specific exit class in the log (`E_TRANSIENT` / `E_FATAL`). One line failing does not stop the others — their reports still land and get ingested; the day's final class is then `E_PARTIAL` (exit 1, `=== Failed (E_PARTIAL:<lines>, exit code 1) ===`), while `E_NO_REPORT` is reserved for a day where no line passed the gate (ADR-0011 / ADR-0017 — a day where every line ended quiet is a success, not `E_NO_REPORT`). Verify `target_repo` exists, then re-run the script manually. A 401 (`E_AUTH`) means the OAuth token expired (issue 1) or, in api mode, the key was rejected (issue 5).
 
-### 5. `ANTHROPIC_API_KEY` Set (Per-Token Billing)
+### 5. API Mode: Rejected Key, Credit, Rate Limit or Spend Cap
 
-**Symptoms**: Unexpected API charges on Anthropic dashboard.
+**Symptoms**: `ERROR: Auth probe failed (api) — …`, `hit a billing/rate-limit error`, or `API spend gate stopped the run` in the log, with a macOS notification.
 
-**Cause**: `ANTHROPIC_API_KEY` env var was set, bypassing Max plan.
+**Causes and fixes**:
+- `status=401` / `403`: the key in `env_file` is wrong or revoked. Replace it there (never in the repo), then run `./scripts/check-auth.sh`.
+- `Your credit balance is too low`: add credit on platform.claude.com.
+- `status=429`: rate limit. The run stops on purpose instead of backing off (a burst of rate limits is a policy signal). Re-run later by hand.
+- `API spend gate stopped the run`: the day's or month's remaining budget is below one line's reserve (`call1_max_usd + call2_max_usd`). Check `state/api-spend.jsonl`; raise the caps in `[billing]` only if the credit covers it.
 
-**Fix**: The script runs `unset ANTHROPIC_API_KEY`. If charges persist, check shell profile (`~/.zshrc`, `~/.bashrc`) for exports.
+The billing path never changes on its own: in subscription mode an `ANTHROPIC_API_KEY` exported in your shell is dropped, and in api mode only the key in `env_file` is used.
 
 ### 6. Reports Not Appearing in Obsidian
 
@@ -279,7 +292,7 @@ ps aux | grep -E "pyright|sourcekit|claude-mem|sequential|japanese|ableton"
 
 **Symptoms**: Reports answer the same question with the same answer as recent days (the same topic under a different question is fine).
 
-**Cause**: `past_topics.json` not updated properly (the run's question selection depends on the past questions and their `answer_scope` it feeds), or `state/<line>/brief.md` not keeping its open questions current.
+**Cause**: `past_topics.json` not updated properly (the run's question selection depends on the past questions and their `answer_scope` it feeds). `state/<line>/brief.md` is a static document you write; if the line keeps returning to one subject, narrow or reword its subject there.
 
 **Fix**:
 ```bash
@@ -327,4 +340,15 @@ If Mac was asleep at the scheduled time, launchd runs the job on wake (behavior 
 
 ## Cost
 
-Each morning the `lines_per_day` lines of the rotation window (3 by default) plus every `daily = true` line run (ADR-0010 / ADR-0011 / ADR-0017) — four lines in the current configuration, the three rotating repo lines plus the daily ecosystem line `jev` (ADR-0018). Per line: Call 1 = one Opus research run (at most 2 invocations with its single retry, 25-min cap) plus Call 2 = one verification + clarity pass (Sonnet by default, 20-min cap). Four lines run sequentially in 35–45 minutes typically, and about 260 minutes from 05:00 in the worst case; the cost runs about $16–20 a day (call 1 ≈ $4–5 per line, call 2 ≈ $0.5–1, and a line that ends quiet or hold costs less because call 2 is skipped). These figures are derived from the per-line numbers, not yet measured over a full four-line morning. With Claude Max plan, model usage is covered by the subscription with no per-token charges; cost and duration are recorded in `metrics.jsonl` for actual measurement.
+Each morning the `lines_per_day` lines of the rotation window plus every `daily = true` line run (ADR-0010 / ADR-0011 / ADR-0017 / ADR-0019). Per line: Call 1 = one Opus research run (at most 2 invocations with its single retry) plus Call 2 = one verification + clarity pass (`[verification] model`); a line that ends quiet or hold skips Call 2. Timeouts and turn limits are in `scripts/daily-research.sh`.
+
+**Who pays** is `[billing] mode` in `config.toml` (`scripts/lib/billing.sh`; the contract is `[billing]` in `scripts/lib/dr_pipeline.py`):
+
+| mode | Auth | Billing | Limits |
+|---|---|---|---|
+| `subscription` (default) | Claude Code login (OAuth) | No per-token charge on a Max plan; counts against the plan's usage limits | The plan's own limits. Any `ANTHROPIC_API_KEY` in the environment is dropped |
+| `api` | `ANTHROPIC_API_KEY` read from `env_file`, a file outside the repo that the model is denied from reading | Every call is billed to the Claude API | `--max-budget-usd` per call (`call1_max_usd`, `call2_max_usd`); a line starts only if the day's and the month's remaining budget both cover call1 + call2 (`daily_cap_usd`, `monthly_cap_usd`). Otherwise the remaining lines are skipped with a notification; a day where no line started ends as `E_BUDGET` (exit 1) |
+
+In `api` mode every call's cost (the `total_cost_usd` Claude Code reports, including the auth probe) is appended to `state/api-spend.jsonl`; the caps read that file, and the day's and month's totals are logged as `API spend: today … month …`. A 429, a too-low credit balance or a rejected key stops the remaining lines without a retry (`E_BILLING` / `E_AUTH`).
+
+**Actual spend.** `./scripts/check-auth.sh` prints the month's spend so far, and `state/api-spend.jsonl` has one line per call. The defaults for the caps are in `config.example.toml`; set yours from what the ledger shows.

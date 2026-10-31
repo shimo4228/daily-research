@@ -9,8 +9,9 @@ logs/
 
 # Personal data (use *.example.* as templates)
 config.toml
+config.toml.*
 reader-profile.md
-config.toml.bak
+.backup/
 past_topics.json
 past_topics.json.bak
 metrics.jsonl

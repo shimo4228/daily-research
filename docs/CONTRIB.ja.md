@@ -7,7 +7,7 @@
 | ツール | 用途 | インストール |
 |--------|------|-------------|
 | Claude Code CLI | コア実行エンジン | `brew install claude` or [docs.anthropic.com](https://docs.anthropic.com) |
-| Claude Max プラン | API追加課金なしで利用 | サブスクリプション契約が必要 |
+| Claude Max プラン または Claude API の key | `claude -p` の呼び出しの支払い。`config.toml` の `[billing] mode` で選ぶ | サブスクリプション契約、または platform.claude.com の key を repo 外の env ファイルに置く |
 | macOS (launchd) | スケジューラ | OS組み込み |
 | python3 >= 3.11 | JSON/TOML 解析（`scripts/lib/dr_pipeline.py`）; stdlib のみ | Homebrew `python3`（macOS system 3.9 は `tomllib` 非対応） |
 | bats-core | シェルテストフレームワーク | `brew install bats-core` |
@@ -29,20 +29,22 @@ daily-research/
 │   └── report-template-ecosystem.md    # ecosystem ライン専用の節構成（ADR-0018）
 ├── scripts/
 │   ├── daily-research.sh               # メインエントリポイント（輪番 window で当日 lines_per_day 本: 呼1 研究 + 呼2 検証 + clarity）; lib/ を source
-│   ├── check-auth.sh                   # OAuth チェック（real_auth_probe()）+ macOS 通知
+│   ├── check-auth.sh                   # [billing] の経路で認証チェック（real_auth_probe()）+ macOS 通知
 │   ├── pre-commit.sh                   # secret / 構文ガード（git pre-commit hook）
 │   └── lib/                             # sourced shell ライブラリ + Python 解析モジュール
-│       ├── env.sh / log.sh / notify.sh / lock.sh / auth.sh / claude.sh
+│       ├── env.sh / log.sh / notify.sh / lock.sh / auth.sh / claude.sh / billing.sh
 │       └── dr_pipeline.py              # JSON/TOML 解析の単一 stdlib モジュール
 ├── state/                               # ラインごとの brief.md / pending.md / watched-sources.md /
-│                                        #   playbook.md / runs/{date}.md（根拠ファイル）/ runs/{date}.json
+│                                        #   runs/{date}.md（根拠ファイル）/ runs/{date}.json
 │                                        #   （run receipt）/ runs/{date}.verify.json（gitignored）
 ├── graph.jsonld                         # 凍結アーカイブ（退役した concept-graph パイプライン）
 ├── com.example.daily-research.plist    # launchd スケジュール（AM 5:00、リサーチ）
 ├── tests/
+│   ├── test-billing.bats               # API 課金: エラー分類、key の受け渡し、呼び出しごと・日・月の上限
 │   ├── test-daily-research.bats        # ユニットテスト（構文、設定、セキュリティ）
 │   ├── test-e2e-mock.bats             # E2E モックテスト（ライン単位フロー）
 │   ├── test-lib.bats                  # lib/*.sh ユニットテスト（env, lock, auth, claude）
+│   ├── test_helper.bash               # bats 共通 helper（refute_grep — grep の否定 assertion は `! grep` でなくこれで書く）
 │   └── dr_pipeline_test.py            # dr_pipeline.py の pytest（dev 専用、.venv）
 ├── logs/                                # 実行ログ（日付別、30日自動ローテーション）
 ├── docs/
@@ -58,7 +60,7 @@ daily-research/
 | スクリプト | 説明 | 使い方 |
 |-----------|------|--------|
 | `scripts/daily-research.sh` | メインエントリポイント。決定論輪番 window (`rotation-pick`、ADR-0010 / ADR-0017) の `lines_per_day` 本 + `daily = true` の全ライン (ADR-0011) を当日担当に選び、ラインごとに呼1 = `claude -p` を cwd = そのラインの `target_repo` で実行（Opus、25 分タイムアウト、transient 失敗時リトライ 1 回。401 は中止）。`[tracks.<name>].mode = "ecosystem"` のラインは cwd = `state/<line>`、ecosystem プロトコル、`--safe-mode` 付きで実行する（ADR-0018。分岐はライン名ではなく `mode` が決める）。続けて呼2 = fresh-context の検証 + clarity（既定 sonnet、20 分、fail-open）を実行する。`lib/` を source し、環境サニタイズ、認証 probe、config schema チェック、receipt 駆動のレポートゲート (ctl-015)、レポート lint (ctl-016)、metrics 追記（`clarity_pass` / `line_states` / `verification` 含む）を含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
-| `scripts/check-auth.sh` | `real_auth_probe()`（共有 `lib/auth.sh`; `claude --version` ではなく実 Haiku API probe。`--version` は期限切れトークンでも成功するため）で OAuth トークンの有効性を確認。失敗時に macOS 通知を表示。 | `./scripts/check-auth.sh` |
+| `scripts/check-auth.sh` | `real_auth_probe()`（共有 `lib/auth.sh`; `claude --version` ではなく実 Haiku API probe。`--version` は期限切れトークンでも成功するため）で、`[billing] mode` が選んだ経路（OAuth、または `env_file` の API key）の認証を確認する。api モードでは今月の支出も表示。失敗時に macOS 通知を表示。 | `./scripts/check-auth.sh` |
 | `scripts/pre-commit.sh` | git pre-commit hook として走る secret / 構文ガード。 | （git が自動実行） |
 
 ## 環境変数
@@ -67,7 +69,7 @@ daily-research/
 |------|--------|------|
 | `PATH` | plist + スクリプト | `$HOME/.local/bin`（現行 Claude installer）、`$HOME/.claude/local`（旧配置）、`/opt/homebrew/bin`、`/usr/local/bin` を含む必要がある |
 | `HOME` | plist | Claude CLI が認証トークンを見つけるために必要 |
-| `ANTHROPIC_API_KEY` | **未設定であること** | 設定されていると Max プランではなく従量課金になる |
+| `ANTHROPIC_API_KEY` | `[billing].env_file` だけ | `lib/env.sh` が親の環境の値を捨てる。`api` モードでは `lib/billing.sh` が `env_file` から読んで export し、`subscription` モードでは unset のまま（OAuth） |
 | `CLAUDE_TIMEOUT` | スクリプト（内部） | `run_claude()` 経由の `claude -p` 呼び出しのタイムアウト（秒）。0 = 無制限（デフォルト）。呼1 (研究 run) は 1500秒 (25 分)、呼2 (検証 + clarity) は 1200秒 (20 分) を設定 |
 | `DEBUG` | ユーザー設定 | `1` に設定するとデバッグログ（PATH、CLAUDE_CMD）を出力 |
 | `DR_DATE` | ユーザー設定（テスト seam） | `YYYY-MM-DD` — rotation-pick とレポート名に使う日付を固定する（e2e テストが輪番を固定するために使う）。既定は当日 |
@@ -146,7 +148,7 @@ run は `cd "$TARGET_REPO"` で起動されるため、repo 自身の CLAUDE.md 
 
 | フラグ | 値 | 用途 |
 |--------|---|------|
-| `-p` | ライン単位プロンプト（`dr_pipeline.py line-brief` の line brief + 許可された書き込み先パス（vault のレポート / `state/<line>/` の brief・pending・watched-sources・playbook・根拠ファイル・run receipt / `past_topics.json`）+ 過去の問いの dedup データ + レポートテンプレート） | 非対話モード |
+| `-p` | ライン単位プロンプト（`dr_pipeline.py line-brief` の line brief + 許可された書き込み先パス（`WRITE_PATHS` 配列から描く）+ 過去の問いの dedup データ + レポートテンプレート） | 非対話モード |
 | `--permission-mode` | `default` | デフォルトの権限処理を使用 |
 | `--append-system-prompt-file` | `prompts/repo-research-protocol.md`、`mode = "ecosystem"` では `prompts/ecosystem-research-protocol.md` | デフォルト能力を保持しつつリサーチプロトコルを注入 |
 | `--safe-mode` | ecosystem ラインのみ | 接地 repo が無いため、運用者の `~/.claude` の CLAUDE.md / rules / skills / plugins / hooks / MCP を run に持ち込まない（safe mode でも `-p` と `--append-system-prompt-file` は有効。2026-09-21 確認）。safe mode は permissions を外さない — 境界は `--disallowedTools` |

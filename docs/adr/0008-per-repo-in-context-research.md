@@ -38,8 +38,10 @@ ADR-0007 の 4 line = 4 repo コンセプト補強構成は、運用 4 日で運
 1. **リサーチを各 repo の中から実行する**: orchestrator は line ごとに `claude -p` を **cwd = target_repo** で起動する（単一パス。中央の Opus テーマ選定 Pass 1 は廃止）。入力は repo native な運用文脈 — 自動ロードされる repo 設定 + config の `context_files`（タスク台帳・open questions・実施履歴）。
 2. **目的関数を置換する**: 「概念体系の補強」→「**この line を今すぐ前に進める、実行可能な手を見つける**」。レポートは actionable-tactics note（リード = 手 1〜3 件、各: 手順 / 所要 / **失効条件** / gate 留意）。裏付けを主旨とするノートは禁止。actionable な手が無い日は証拠付き「本日 actionable なし」を正の出力とし、手数ノルマは置かない。
 3. **run 構造に外部照合の対抗策を組み込む**: diff-first（line ごとの watched-sources + last-seen を `state/<line>/` に永続化し、再 survey を禁止）/ 前提挑戦パス + 「矛盾・複雑化する知見」必須節 / citation ゲート（全 URL を run 内 fetch 解決）/ 自己汚染ガード（運用者自身の成果物を外部シグナルとして数えない）/ playbook は日付付き delta 更新のみ（全面再生成の禁止）。
+   > **注記（2026-10-31, [ADR-0019](0019-wide-line-safe-mode-static-state.md)）**: repo line の watched-sources 巡回（diff-first の記帳）と playbook の delta 更新は ADR-0019 Decision 3 で撤去した。Decision 1 の「自動ロードされる repo 設定」は呼1 の `--safe-mode` で入らなくなり、repo の CLAUDE.md（無ければ AGENTS.md）は選定後の Step 3b で明示的に Read する（同 Decision 2）。citation ゲートと自己汚染ガードはそのまま有効。
 4. **concept-graph 駆動の選定機構を retire する**: `.repo-graphs` 同期・coverage-report・cluster-report・テーマ JSON 検証・中央 graph.jsonld への日次増分・graph health gate を削除（git history から復元可能）。`graph.jsonld` は凍結アーカイブとして残す。dedup は past_topics.json（aliases 込み）に一本化し、「repo 既引用文献の主ソース再利用禁止」は per-line プロンプトで repo 自身の参照リストを読む形に置換する。
 5. **repo は read-only を三層で強制する**: doctrine（プロトコル文言）+ 実行（cwd は repo だが書き込み先は vault / state / past_topics のみ）+ permission 層（`--allowedTools` の Write/Edit を絶対パスで制限）。
+   > **注記（2026-10-31, [ADR-0019](0019-wide-line-safe-mode-static-state.md)）**: 書き込み先は vault のレポート dir・`state/<line>/pending.md`・`state/<line>/runs/**` に狭めた。past_topics への追記は orchestrator が receipt から行う（ADR-0019 Decision 4）。三層の強制はそのまま有効。
 6. **毎朝 7:00 の承認ブリーフ**: `morning-brief.sh` が当日ノートの「今すぐ実行可能な手」節を**決定論的に抽出**（LLM を挟まない）し、既存の webhook ヘルパで Slack へ承認リクエストとして送る。承認・deploy 前 gate は運用者のセッション側の行為であり、ノートとブリーフは提案に留まる。
 7. **ADR-0006 の自己改善ループは保存する**: ctl-015（vault のレポート存在ゲート、line 単位に精緻化）/ ctl-016 lint（必須節を新テンプレートに同期）/ metrics.jsonl のレコード形（per-line run 群を pass2 に合算して旧形と互換写像、pass1 は None）/ `DR-Expect:` 突合 / `/dr-review`。
 

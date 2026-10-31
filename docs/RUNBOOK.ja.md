@@ -46,7 +46,7 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 
 ```bash
 # launchd 経由
-launchctl start com.daily-research
+launchctl start com.yourname.daily-research   # plist の Label
 
 # 直接実行 — Claude Code セッション内からも実行できる（lib/env.sh が CLAUDECODE を unset する）
 ./scripts/daily-research.sh
@@ -59,13 +59,16 @@ launchctl start com.daily-research
 ```
 daily-research.sh (05:00)
 ├── ロック取得（アトミック mkdir）
-├── 認証 probe（実 OAuth チェック）
+├── 課金経路の設定（[billing]: api = env_file の ANTHROPIC_API_KEY、subscription = OAuth）
+├── 認証 probe（その経路で Haiku を実際に 1 回呼ぶ）
 ├── config schema チェック（ADR-0008 以前の旧 schema は fail-fast）
 ├── rotation-pick — 当日担当ラインを決定論選択: 輪番 window（開始 = date.toordinal() × K
 │   mod N、そこから連続 K 本。K = [general] lines_per_day、ADR-0010 / ADR-0017）
 │   + `daily = true` の全ライン（毎日実行、ADR-0011）
 ├── 呼1: claude -p, cwd = 担当ラインの target_repo (Opus, --max-turns 55,
 │   25 分タイムアウト, transient 失敗時リトライ 1 回; 401 は中止)
+│   [api モード: ラインの前に支出ゲート（日・月の上限）、呼び出しごとに --max-budget-usd、
+│    呼び出しごとの費用を state/api-spend.jsonl に追記。429 とクレジット切れは run を止める]
 │   [mode = "ecosystem" のラインは target_repo を持たない: cwd = state/<line>、
 │    prompts/ecosystem-research-protocol.md、--safe-mode 付き — ADR-0018]
 │   ├── 短い文脈（line brief + state/<line>/brief.md + 問いの履歴 + pending.md）を Read
@@ -120,7 +123,7 @@ launchctl list | grep daily-research
 | 認証有効 | `./scripts/check-auth.sh` | "OK: Claude authentication is valid" |
 | 今日のログが存在 | `ls logs/$(date +%Y-%m-%d).log` | ファイルが存在 |
 | ログに成功メッセージ | `grep "Completed successfully" logs/$(date +%Y-%m-%d).log` | マッチあり |
-| レポートが生成済み | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | article / brief で終わったライン数のファイル（既定は 1 日 3 ライン。quiet / hold のラインはファイルを作らない） |
+| レポートが生成済み | `ls <vault_path>/daily-research/$(date +%Y-%m-%d)_*` | article / brief で終わったライン数のファイル（quiet / hold のラインはファイルを作らない） |
 | receipt が揃っている | `ls state/*/runs/$(date +%Y-%m-%d).json` | 当日*担当*ライン数のファイル（ゲートの判定材料） |
 | 検証が走った | `grep "VERIFY " logs/$(date +%Y-%m-%d).log` | article / brief のラインごとに 1 行（`"ran": true`） |
 | 当日の内訳 | `grep "Line states:" logs/$(date +%Y-%m-%d).log` | `article=N brief=N quiet=N hold=N` と今朝 / 更新なし / 未検証の内訳 |
@@ -129,17 +132,23 @@ launchctl list | grep daily-research
 
 | メッセージ | 意味 |
 |---------|------|
-| `Auth probe passed` | 実 OAuth probe が成功 |
-| `ERROR: Auth probe failed — OAuth likely expired` | 実 OAuth probe が失敗。ライン実行前に停止（exit 1） |
+| `Billing: api (key from …; caps …)` / `Billing: subscription (Max plan OAuth)` | `[billing] mode` が選んだ課金経路 |
+| `ERROR: billing setup failed — …` | `[billing]` が不正、または（api モードで）`env_file` に `ANTHROPIC_API_KEY` が無い。どの呼び出しより前に停止（exit 1） |
+| `Auth probe passed` | 実際に呼び出す認証 probe が成功 |
+| `ERROR: Auth probe failed (<mode>) — status=… result=…` | probe が失敗（OAuth 期限切れ、または api モードで key の拒否・クレジット不足・429）。ライン実行前に停止（exit 1） |
+| `WARN: API spend gate stopped the run (month $… / $…, day $… / $…, need $… per line) — stopping remaining lines` | api モード: 残額があと 1 ライン分に満たない、または（直前の `ERROR: … spend …` 行のとおり）台帳が書けない・読めない。残りは止め、`Lines not started: …` に名前が出る |
+| `ERROR: Line <track> hit a billing/rate-limit error — aborting remaining lines, no retry` | api モード: 429 またはクレジット残高不足（`E_BILLING`） |
+| `WARN: Line <track> reached --max-budget-usd $… — no retry, going to gate` | 呼び出しごとの上限で呼1 が止まった。書けた分でゲートへ進む |
+| `API spend: today $… / $…, month $… / $…` | api モード: run 後の `state/api-spend.jsonl` の合計 |
 | `ERROR: Another instance is running. Skipping.` | ロックディレクトリ `.daily-research.lock/` を生存中の PID が保持している |
 | `Config schema check passed` | `config.toml` が現行 (ADR-0008) schema に適合 |
 | `Rotation pick: a, b, c (ADR-0010/0017)` | 当日担当ラインの輪番 window 選択結果 |
 | `Today's lines: N` | 当日実行するライン数（`lines_per_day` + daily ライン） |
 | `=== Line: <track> (<repo パス>) ===` | その repo を cwd にしたライン run の開始（ecosystem ラインは repo を持たず `no target repo` と出る） |
-| `Line <track> mode: ecosystem (cwd = state/<track>, safe mode)` | `mode = "ecosystem"` のライン。state ディレクトリを cwd に、ecosystem プロトコル + `--safe-mode` で走る（ADR-0018） |
+| `Line <track> mode: ecosystem (cwd = state/<track>, safe mode)` | `mode = "ecosystem"` のライン。state ディレクトリを cwd に、ecosystem プロトコルで走る（ADR-0018）。`--safe-mode` は全ラインに付く（ADR-0019） |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | ライン run の実行統計（コスト、ターン数、所要時間、トークン数） |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | transient 失敗。1 回きりのリトライを開始 |
-| `ERROR: Line <track> returned 401 — aborting remaining lines` | run 中に認証が期限切れ。残ラインは中断、完走済みラインの成果は保持 |
+| `ERROR: Line <track> returned 401 — aborting remaining lines (…)` | run 中に認証が失敗（401 / 403: OAuth 期限切れか key の拒否）。残ラインは中断、完走済みラインの成果は保持 |
 | `Line <track> state: <status>` | receipt が申告した内容状態（article / brief / quiet / hold） |
 | `Line <track> report gate passed` | ctl-015: そのラインが receipt どおりの成果を残した（article / brief は `{date}_{track}_*.md` が vault に存在、quiet / hold はファイル無しで通過） |
 | `WARN: report gate failed for line <track> — no <date>_<track>_*.md (ctl-015)` | receipt が article / brief なのにレポートが無い — 失敗として計上 |
@@ -163,9 +172,9 @@ launchctl list | grep daily-research
 
 ## よくある問題と対処法
 
-### 1. OAuth トークン期限切れ
+### 1. OAuth トークン期限切れ（subscription モード）
 
-**症状**: ログに `ERROR: Auth probe failed — OAuth likely expired` が出力される。macOS 通知が表示される。
+**症状**: ログに `ERROR: Auth probe failed (subscription) — …` が出力される。macOS 通知が表示される。
 
 **原因**: Claude の OAuth トークンは約4日で期限切れになる。
 
@@ -217,19 +226,23 @@ rm -rf .daily-research.lock
 **症状**: ログに `WARN: Line <track> failed after retry` または `WARN: report gate failed for line <track> — ... (ctl-015)` が連日出力される。
 
 **原因**:
-- レート制限（Claude Max プラン枠の消費）または WebSearch 中のネットワーク障害
+- レート制限（subscription モードではプラン枠の消費。api モードの 429 は run を止める — 問題 5）または WebSearch 中のネットワーク障害
 - 深掘りしすぎた run がライン単位の 25 分タイムアウトを超過
 - `config.toml` の `target_repo` パスが存在しない・移動した（`mode = "ecosystem"` のラインは `target_repo` を持たない — スクリプトが作る `state/<line>` で走り、`Line <track> mode: ecosystem (cwd = state/<track>, safe mode)` を出力する）
 
-**対処**: ログで exit 分類（`E_TRANSIENT` / `E_FATAL`）を確認する。1 ラインの失敗は他のラインを止めない — 他のレポートは生成・ingest され、その日の final class は `E_PARTIAL`（exit 1、`=== Failed (E_PARTIAL:<lines>, exit code 1) ===`）になる。`E_NO_REPORT` はゲートを通ったラインが 1 本も無い日に限る（ADR-0011 / ADR-0017 — 全ラインが quiet で終わった日は成功であって `E_NO_REPORT` ではない）。`target_repo` の存在を確認してから手動で再実行する。401（`E_AUTH`）は OAuth 期限切れ: 問題 1 を参照。
+**対処**: ログで exit 分類（`E_TRANSIENT` / `E_FATAL`）を確認する。1 ラインの失敗は他のラインを止めない — 他のレポートは生成・ingest され、その日の final class は `E_PARTIAL`（exit 1、`=== Failed (E_PARTIAL:<lines>, exit code 1) ===`）になる。`E_NO_REPORT` はゲートを通ったラインが 1 本も無い日に限る（ADR-0011 / ADR-0017 — 全ラインが quiet で終わった日は成功であって `E_NO_REPORT` ではない）。`target_repo` の存在を確認してから手動で再実行する。401（`E_AUTH`）は OAuth 期限切れ（問題 1）か、api モードでの key の拒否（問題 5）。
 
-### 5. `ANTHROPIC_API_KEY` が設定されている（従量課金）
+### 5. api モード: key の拒否・クレジット・レート制限・支出上限
 
-**症状**: Anthropic ダッシュボードに予期しない API 課金が発生。
+**症状**: ログに `ERROR: Auth probe failed (api) — …`、`hit a billing/rate-limit error`、`API spend gate stopped the run` のどれかが出て、macOS 通知が表示される。
 
-**原因**: `ANTHROPIC_API_KEY` 環境変数が設定されていて、Max プランを迂回している。
+**原因と対処**:
+- `status=401` / `403`: `env_file` の key が違うか失効している。そこで差し替え（repo には置かない）、`./scripts/check-auth.sh` で確かめる。
+- `Your credit balance is too low`: platform.claude.com でクレジットを足す。
+- `status=429`: レート制限。backoff で踏み抜かず、意図して止めている（連発する rate limit は policy signal）。時間をおいて手で再実行する。
+- `API spend gate stopped the run`: 1 日または 1 か月の残額が 1 ライン分の予約額（`call1_max_usd + call2_max_usd`）を下回った。`state/api-spend.jsonl` を確認し、上限はクレジットが足りるときだけ `[billing]` で上げる。
 
-**対処**: スクリプトは `unset ANTHROPIC_API_KEY` を実行する。それでも課金される場合、シェルプロファイル（`~/.zshrc`, `~/.bashrc`）の export を確認する。
+課金経路は設定なしに変わらない。subscription モードではシェルで export した `ANTHROPIC_API_KEY` を捨て、api モードでは `env_file` の key だけを使う。
 
 ### 6. レポートが Obsidian に表示されない
 
@@ -277,7 +290,7 @@ ps aux | grep -E "pyright|sourcekit|claude-mem|sequential|japanese|ableton"
 
 **症状**: 最近と同じ問いに同じ答えを返すレポートが生成される（同じ topic を別の問いで扱うのは正常）。
 
-**原因**: `past_topics.json` が正しく更新されていない（run の問い選定はここから渡される過去の問い・`answer_scope` の一覧に依存する）。または `state/<line>/brief.md` の「開いた問い」が更新されていない。
+**原因**: `past_topics.json` が正しく更新されていない（run の問い選定はここから渡される過去の問い・`answer_scope` の一覧に依存する）。`state/<line>/brief.md` はあなたが書く静的な文書なので、同じ題材に戻り続けるならそこで主題を絞るか言い換える。
 
 **対処**:
 ```bash
@@ -325,4 +338,15 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 
 ## コスト
 
-毎朝、輪番 window で選ばれた `lines_per_day` 本のライン（既定 3 本）+ `daily = true` の全ラインが走る（ADR-0010 / ADR-0011 / ADR-0017）。現在の構成では 4 本 — 輪番の repo ライン 3 本 + daily の ecosystem ライン `jev`（ADR-0018）。ラインごとに呼1 = Opus 研究 run が最大 2 回 = リトライ込み、呼2 = 検証 + clarity（既定 sonnet）が 1 回。呼1 は 25 分、呼2 は 20 分でタイムアウトする。4 ラインを逐次実行して典型 35〜45 分、最悪ケースは 05:00 から約 260 分。コストの目安は 1 日 $16〜20（呼1 ≈ $4〜5/ライン、呼2 ≈ $0.5〜1/ライン。quiet / hold で終わったラインは呼2 が走らないぶん安い）。これらは 1 ラインあたりの実績から導いた見積もりで、4 ライン構成での実測はまだない。Claude Max プランではモデル使用はサブスクリプションでカバーされ、従量課金は発生しない。コスト・所要時間は `metrics.jsonl` に記録され、実測はそちらで確認する。
+毎朝、輪番 window で選ばれた `lines_per_day` 本のラインと、`daily = true` の全ラインが走る（ADR-0010 / ADR-0011 / ADR-0017 / ADR-0019）。ラインごとに、呼1 = Opus の研究 run（リトライ込みで最大 2 回）と、呼2 = 検証 + clarity（`[verification] model`）が 1 回ずつ走る。quiet / hold で終わったラインは呼2 を飛ばす。timeout とターン数の上限は `scripts/daily-research.sh` にある。
+
+**誰が払うか**は `config.toml` の `[billing] mode` で決まる（`scripts/lib/billing.sh`。契約の正本は `scripts/lib/dr_pipeline.py` の `[billing]`）:
+
+| mode | 認証 | 課金 | 上限 |
+|---|---|---|---|
+| `subscription`（既定） | Claude Code のログイン（OAuth） | Max プランならトークン単位の課金なし。プランの利用上限に数えられる | プランの上限。環境にある `ANTHROPIC_API_KEY` は捨てる |
+| `api` | `env_file` から読む `ANTHROPIC_API_KEY`（repo の外のファイルで、モデルの読み取りは拒否される） | すべての呼び出しが Claude API の課金 | 呼び出しごとに `--max-budget-usd`（`call1_max_usd`、`call2_max_usd`）。1 日と 1 か月の残額がどちらも 呼1 + 呼2 の分を満たすときだけラインを始める（`daily_cap_usd`、`monthly_cap_usd`）。満たさなければ残りのラインを止めて通知する。1 本も始められなかった日は `E_BUDGET`（exit 1） |
+
+`api` モードでは、呼び出しごとの費用（Claude Code が報告する `total_cost_usd`。認証 probe を含む）を `state/api-spend.jsonl` に追記する。上限の判定はこのファイルを読み、その日と月の合計は `API spend: today … month …` としてログに出る。429、クレジット残高の不足、key の拒否が出たら、再試行せずに残りのラインを止める（`E_BILLING` / `E_AUTH`）。
+
+**実際の支出。** その月の支出は `./scripts/check-auth.sh` が表示し、`state/api-spend.jsonl` には呼び出しごとに 1 行ある。上限の既定値は `config.example.toml` にあり、自分の値は台帳を見て決める。

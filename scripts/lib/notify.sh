@@ -31,3 +31,16 @@ notify() {
   fi
   return 0
 }
+
+# report_unexpected_exit <rc> <lineno> <command>: daily-research.sh の ERR trap の本体。
+# set -E の ERR trap は $(…) のサブシェルにも継承され、サブシェルからは外側の `|| X` /
+# `if !` が見えないので、親が処理する失敗でも発火する (2026-10-29、report-lint の exit 2 で
+# 誤った「予期せず中断」通知)。記録・通知は親シェル (BASH_SUBSHELL=0) でだけ行う。
+# `x=$(f)` や末尾が単純コマンドの pipeline が失敗して親が落ちるときは、親側の ERR trap が
+# 発火する。bash 3.2 では裸の `( f )` と `… | while …; done` (末尾が複合コマンド) の失敗は
+# 親の ERR trap を通らずに無言で落ちる — orchestrator ではこの 2 形を使わない。
+report_unexpected_exit() {
+  [ "${BASH_SUBSHELL:-0}" = "0" ] || return 0
+  _notify_log "ERROR: unexpected exit $1 at line $2: $3"
+  notify "リサーチが予期せず中断しました (line $2)" "Daily Research Error"
+}

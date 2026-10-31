@@ -7,7 +7,7 @@
 | Tool | Purpose | Install |
 |------|---------|---------|
 | Claude Code CLI | Core execution engine | `brew install claude` or [docs.anthropic.com](https://docs.anthropic.com) |
-| Claude Max plan | Zero-cost API usage | Subscription required |
+| Claude Max plan or a Claude API key | Pays for the `claude -p` calls; `[billing] mode` in `config.toml` picks which | Subscription, or a key from platform.claude.com kept in an env file outside the repo |
 | macOS (launchd) | Scheduler | Built-in |
 | python3 >= 3.11 | JSON/TOML parsing (`scripts/lib/dr_pipeline.py`); stdlib only | Homebrew `python3` (macOS system 3.9 lacks `tomllib`) |
 | bats-core | Shell test framework | `brew install bats-core` |
@@ -29,20 +29,22 @@ daily-research/
 │   └── report-template-ecosystem.md    # Per-line section override for ecosystem lines (ADR-0018)
 ├── scripts/
 │   ├── daily-research.sh               # Main entry point (rotation window: lines_per_day lines/day; call 1 research + call 2 verification/clarity); sources lib/
-│   ├── check-auth.sh                   # OAuth check via real_auth_probe() + notification
+│   ├── check-auth.sh                   # Auth check on the [billing] path via real_auth_probe() + notification
 │   ├── pre-commit.sh                   # Secret / syntax guard (git pre-commit hook)
 │   └── lib/                             # Sourced shell libs + Python parser
-│       ├── env.sh / log.sh / notify.sh / lock.sh / auth.sh / claude.sh
+│       ├── env.sh / log.sh / notify.sh / lock.sh / auth.sh / claude.sh / billing.sh
 │       └── dr_pipeline.py              # Single stdlib-only JSON/TOML parsing module
-├── state/                               # Per-line brief.md / pending.md / watched-sources.md /
-│                                        #   playbook.md / runs/{date}.md (evidence file) / runs/{date}.json
+├── state/                               # Per-line brief.md (static, written by you) / pending.md /
+│                                        #   watched-sources.md (ecosystem lines) / runs/{date}.md (evidence file) / runs/{date}.json
 │                                        #   (run receipt) / runs/{date}.verify.json (gitignored)
 ├── graph.jsonld                         # FROZEN archive (retired concept-graph pipeline)
 ├── com.example.daily-research.plist    # launchd schedule (AM 5:00, research)
 ├── tests/
+│   ├── test-billing.bats               # API billing: error classes, key handoff, per-call / daily / monthly caps
 │   ├── test-daily-research.bats        # Unit tests (syntax, config, security)
 │   ├── test-e2e-mock.bats             # E2E mock tests (per-line flow)
 │   ├── test-lib.bats                  # lib/*.sh unit tests (env, lock, auth, claude)
+│   ├── test_helper.bash               # shared bats helpers (refute_grep — write negative grep assertions with it, never `! grep`)
 │   └── dr_pipeline_test.py            # pytest for dr_pipeline.py (dev-only, .venv)
 ├── logs/                                # Execution logs (date-stamped, auto-rotated 30d)
 ├── docs/
@@ -58,7 +60,7 @@ daily-research/
 | Script | Description | Usage |
 |--------|-------------|-------|
 | `scripts/daily-research.sh` | Main entry point. Picks the `lines_per_day` lines of today's rotation window plus every `daily = true` line (`rotation-pick`, ADR-0010 / ADR-0011 / ADR-0017) and, per line, runs call 1 = `claude -p` with cwd = the line's `target_repo` (Opus, 25-min timeout, one retry on transient failure; 401 aborts) — or, when `[tracks.<name>].mode = "ecosystem"`, with cwd = `state/<line>`, the ecosystem protocol, and `--safe-mode` (ADR-0018; the branch is decided from `mode`, never from the line's name) — then call 2 = a fresh-context verification + clarity pass (Sonnet by default, 20-min timeout, fail-open). Sources `lib/`; includes env sanitization, auth probe, config schema check, receipt-driven report gate (ctl-015), report lint (ctl-016), and metrics append (incl. `clarity_pass` / `line_states` / `verification`). Called by launchd at AM 5:00. | `./scripts/daily-research.sh` |
-| `scripts/check-auth.sh` | Checks Claude OAuth token validity via `real_auth_probe()` (shared `lib/auth.sh`; a real Haiku API probe, not `claude --version`, which succeeds even with an expired token). Shows macOS notification on failure. | `./scripts/check-auth.sh` |
+| `scripts/check-auth.sh` | Checks Claude auth on the path `[billing] mode` selects (OAuth, or the API key from `env_file`; api mode also prints the month's spend) via `real_auth_probe()` (shared `lib/auth.sh`; a real Haiku API probe, not `claude --version`, which succeeds even with an expired token). Shows macOS notification on failure. | `./scripts/check-auth.sh` |
 | `scripts/pre-commit.sh` | Secret / syntax guard run as a git pre-commit hook. | (auto-run by git) |
 
 ## Environment Variables
@@ -67,7 +69,7 @@ daily-research/
 |----------|--------|---------|
 | `PATH` | plist + script | Must include `$HOME/.local/bin` (current Claude installer), `$HOME/.claude/local` (legacy), `/opt/homebrew/bin`, and `/usr/local/bin` |
 | `HOME` | plist | Required for Claude CLI to find auth tokens |
-| `ANTHROPIC_API_KEY` | **Must be unset** | If set, Claude uses per-token billing instead of Max plan |
+| `ANTHROPIC_API_KEY` | `[billing].env_file` only | `lib/env.sh` drops any inherited value; in `api` mode `lib/billing.sh` reads it from `env_file` and exports it, in `subscription` mode it stays unset (OAuth) |
 | `CLAUDE_TIMEOUT` | Script (internal) | Timeout in seconds for `claude -p` calls via `run_claude()`. 0 = no timeout (default); the research run (call 1) sets 1500s (25 min), the verification + clarity run (call 2) sets 1200s (20 min) |
 | `DEBUG` | User-set | Set to `1` to enable debug logging (PATH, CLAUDE_CMD) |
 | `DR_DATE` | User-set (test seam) | `YYYY-MM-DD` — fixes the date used for rotation-pick and report names (e2e tests pin the rotation with it). Default: today |
@@ -146,7 +148,7 @@ The run is invoked with `cd "$TARGET_REPO"` so the repo's own CLAUDE.md auto-loa
 
 | Flag | Value | Purpose |
 |------|-------|---------|
-| `-p` | Per-line prompt (line brief from `dr_pipeline.py line-brief` + allowed write paths — the vault report, `state/<line>/` brief / pending / watched-sources / playbook / evidence file / run receipt, and `past_topics.json` — + past-question dedup data + report template) | Non-interactive mode |
+| `-p` | Per-line prompt (line brief from `dr_pipeline.py line-brief` + allowed write paths, drawn from the `WRITE_PATHS` array — + past-question dedup data + report template) | Non-interactive mode |
 | `--permission-mode` | `default` | Use default permission handling |
 | `--append-system-prompt-file` | `prompts/repo-research-protocol.md`, or `prompts/ecosystem-research-protocol.md` when `mode = "ecosystem"` | Inject the research protocol while preserving defaults |
 | `--safe-mode` | ecosystem lines only | The line has no repo to ground it, so the operator's `~/.claude` CLAUDE.md / rules / skills / plugins / hooks / MCP are kept out of the run (`-p` and `--append-system-prompt-file` still apply under safe mode, verified 2026-09-21). Safe mode does not switch off permissions — the boundary is `--disallowedTools` |

@@ -18,8 +18,9 @@
 | 0014 | レポートを「動向解説 + repo への含意」へ単純化し、対立的フレーミングを撤去する | Amended by 0015; 0016 で一時退役 → 0017 で復帰 | 2026-08-22 |
 | 0015 | レポートの読者契約を文体規律として共通化し、edge line を手筋収穫型へ改修する | Accepted; 0016 で一時退役 → 0017 で復帰 | 2026-08-27 |
 | 0016 | 発見を中心に据えた日刊号へ再編する | Superseded by 0017 (Decision 5); 実行経路は退役 | 2026-09-06 |
-| 0017 | per-repo 輪番へ戻し、3 line/日の window・4 内容状態・原典照合 pass・問い粒度の履歴を導入する | Accepted; 費用・時間の閾値は 0018 で 4 line 前提に再基準化 | 2026-09-14 |
-| 0018 | 接地 repo を持たない ecosystem mode を追加し、Jev エコシステム観測 line を daily で新設する | Accepted | 2026-09-21 |
+| 0017 | per-repo 輪番へ戻し、3 line/日の window・4 内容状態・原典照合 pass・問い粒度の履歴を導入する | Accepted; 費用・時間の閾値は 0018 で 4 line 前提に再基準化、0019 で G1 へ移管 | 2026-09-14 |
+| 0018 | 接地 repo を持たない ecosystem mode を追加し、Jev エコシステム観測 line を daily で新設する | Accepted; jev line は 0019 で廃止、ecosystem mode は有効 | 2026-09-21 |
+| 0019 | 広域 line を daily で置き per-repo を 1 日 1 本にし、呼び出しの土台と run ごとの記帳を削る | Accepted | 2026-10-31 |
 
 ## Template
 

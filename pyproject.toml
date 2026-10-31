@@ -14,9 +14,9 @@ markers = [
     "unit: unit tests for dr_pipeline subcommands",
 ]
 
-# ruff は dev 専用の lint ゲート (.venv に導入。ランタイムには載らない)。
-# select はバグクラス検出と diff 安定 (import 順) に絞る — 見た目の規約 (format / 行長) は
-# ゲートにしない。実行: .venv/bin/ruff check scripts/lib tests
+# ruff は dev 専用の lint / format ゲート (ランタイムには載らない)。実行は .claude/verify.sh
+# (版の pin と選定理由は .claude/verify.md)。select はバグクラス検出・diff 安定 (import 順) ・
+# 複雑度の予算・危険な構文に絞る — 見た目の規約 (docstring・命名) は入れない。
 [tool.ruff]
 target-version = "py311"
 line-length = 100
@@ -29,8 +29,20 @@ select = [
     "I",                    # import 順 (diff 安定)
     "UP",                   # target-version より古い構文
     "RUF",                  # ruff 固有の誤り系
+    "C90",                  # 複雑度の予算 (mccabe)
+    "S",                    # bandit: 危険な構文
 ]
 ignore = [
     # 日本語の全角括弧・句読点を曖昧文字として検出するため (文字列 / docstring / コメント)
     "RUF001", "RUF002", "RUF003",
+    # git を argv のリストで呼ぶ (shell なし)。PATH は lib/env.sh がサニタイズする
+    "S603", "S607",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# test は assert で書き、fixture の一時ファイルを使う
+"tests/**" = ["S101", "S108"]
+
+[tool.ruff.lint.mccabe]
+# prune, don't raise — record changes in .claude/verify.md with a dated reason
+max-complexity = 23
