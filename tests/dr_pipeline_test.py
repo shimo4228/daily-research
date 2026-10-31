@@ -1964,10 +1964,27 @@ def _git_repo(tmp_path, subjects):
         "GIT_AUTHOR_EMAIL": "t@example.invalid",
         "GIT_COMMITTER_NAME": "t",
         "GIT_COMMITTER_EMAIL": "t@example.invalid",
+        # 運用者の global / system 設定 (hooksPath・署名) を効かせない — 効くと commit が hook 次第で落ちる
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
     }
 
     def git(*a):
-        subprocess.run(["git", "-C", str(repo), *a], check=True, env=env, capture_output=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "-c",
+                "core.hooksPath=/dev/null",
+                "-c",
+                "commit.gpgsign=false",
+                *a,
+            ],
+            check=True,
+            env=env,
+            capture_output=True,
+        )
 
     git("init", "-q")
     for i, subj in enumerate(subjects):
