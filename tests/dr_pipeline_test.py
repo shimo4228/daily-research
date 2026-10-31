@@ -1614,7 +1614,7 @@ def test_billing_config_defaults_to_subscription(monkeypatch, capsys, tmp_path):
     mode, env_file, monthly, daily, c1, c2 = out.rstrip("\n").split("\t")
     assert mode == "subscription"
     assert not env_file.startswith("~")
-    assert (monthly, daily, c1, c2) == ("190", "15", "4", "1.5")
+    assert (monthly, daily, c1, c2) == ("100", "10", "4", "1.5")
 
 
 @pytest.mark.unit

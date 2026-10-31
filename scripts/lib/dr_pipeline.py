@@ -1338,8 +1338,8 @@ BILLING_MODES = ("api", "subscription")
 _BILLING_DEFAULTS = {
     "mode": "subscription",
     "env_file": "~/.config/daily-research/env",
-    "monthly_cap_usd": 190.0,
-    "daily_cap_usd": 15.0,
+    "monthly_cap_usd": 100.0,
+    "daily_cap_usd": 10.0,
     "call1_max_usd": 4.0,
     "call2_max_usd": 1.5,
 }
