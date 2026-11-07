@@ -23,13 +23,13 @@
 - **実測**（08-13〜09-05）: 呼1 ≈ $4.1〜4.7/line、turns p50 42 / p90 48（cap 55 に 1 回）、5〜8 分。呼2 ≈ $0.47、1.5〜3 分。3 line 典型 25〜35 分、最悪 195 分（05:00 → 08:15）。
 - **tests**: pytest の rotation 2 件は K=1 で位相不変（無改変で通る）。e2e mock は rotating 2 line で `lines_per_day` を入れない。静的 bats は template の `この repo への含意` と e2e の prompt grep が固定見出し前提 → 変更。`.claude/verify.sh` は無く、検証 = `bats tests/*.bats` + `pytest`。
 - **auto mode**: allow は加算。呼2 から WebSearch を除くには `--disallowedTools`。
-- **ADR 様式**: Status / Date / Context / Decision / Review-when / Alternatives Considered / Consequences。index は `docs/adr/README.md` の表。新 ADR は 0017。past_topics.json は discovery 号に触られていない（復元不要）。
+- **ADR 様式**: Status / Date / Context / Decision / Review-when / Alternatives Considered / Consequences。index は `docs/decision-history/README.md` の表。新 ADR は 0017。past_topics.json は discovery 号に触られていない（復元不要）。
 
 ## 実装手順
 
 ### Step 0 復元と整理
 - `git checkout 56b0bfb -- scripts/daily-research.sh scripts/lib/dr_pipeline.py scripts/lib/auth.sh prompts/ templates/ tests/ pyproject.toml CLAUDE.md README.md README.ja.md SKILL.md config.example.toml docs/ llms.txt llms-full.txt .claude/skills/dr-review/SKILL.md`（HEAD は python 駆動なので merge でなく全復元）。
-- `git rm`: scripts/lib/discovery.py、prompts/discovery-protocol.md、prompts/editorial-protocol.md、tests/discovery_test.py、tests/fixtures/discovery-mock-claude、reader-profile.example.md。`docs/adr/0016-*.md` は残す。`.gitignore` の `reader-profile.md` 行は残す。`rm -rf state/discovery`。
+- `git rm`: scripts/lib/discovery.py、prompts/discovery-protocol.md、prompts/editorial-protocol.md、tests/discovery_test.py、tests/fixtures/discovery-mock-claude、reader-profile.example.md。`docs/decision-history/0016-*.md` は残す。`.gitignore` の `reader-profile.md` 行は残す。`rm -rf state/discovery`。
 - `cp .notes/reorg-baseline/2026-09-06/config.toml config.toml`。
 
 ### Step 1 config（`config.toml`、`config.example.toml`）
@@ -89,7 +89,7 @@
 - 静的 bats 追加: verification-protocol の存在と旧 protocol の不在 / 呼2 の allow・disallow・max-turns 30・config-get / past-themes が loop 内 / `PICKED_LIST` / receipt-read・verify-read・`runs/${DATE}.json`・verify.json・brief.md・pending.md・STATE・VERIFY の grep / template は `kind:`・`## 機会メモ`・`## ソース` あり、`^## 結論`・`^## この repo への含意` なし / config.example に lines_per_day と [verification]。
 
 ### Step 8 ADR-0017 と doc sync
-- `docs/adr/0017-three-line-window-content-states-and-verification-pass.md`: Decision = 7 line K=3 window 輪番、edge daily 終了、4 内容状態と receipt gate、line brief / pending / 根拠ファイルの state、問い粒度の履歴、呼2 = clarity + 原典照合（verify.json → metrics）、本文は自由形式 ≤ 3,000 字、ADR-0016 Decision 5 の退役取消（0008〜0015 復活）。Review-when = 4 週後の /dr-review: `unsupported_rate`、`quiet_rate`（隠れ蓑化）、`clarity_ok_rate < 0.8`（14 日）、`receipt_count_min`、E_PARTIAL 頻度、`total_cost_mean > 18`。「面白さ」は判定に使わない。Alternatives = discovery 号継続 / 5 本/日 / 3 process 分離（Codex 案 II）/ orchestrator–worker / 段階導入（Claude 版推奨、著者が一括を選択）。
+- `docs/decision-history/0017-three-line-window-content-states-and-verification-pass.md`: Decision = 7 line K=3 window 輪番、edge daily 終了、4 内容状態と receipt gate、line brief / pending / 根拠ファイルの state、問い粒度の履歴、呼2 = clarity + 原典照合（verify.json → metrics）、本文は自由形式 ≤ 3,000 字、ADR-0016 Decision 5 の退役取消（0008〜0015 復活）。Review-when = 4 週後の /dr-review: `unsupported_rate`、`quiet_rate`（隠れ蓑化）、`clarity_ok_rate < 0.8`（14 日）、`receipt_count_min`、E_PARTIAL 頻度、`total_cost_mean > 18`。「面白さ」は判定に使わない。Alternatives = discovery 号継続 / 5 本/日 / 3 process 分離（Codex 案 II）/ orchestrator–worker / 段階導入（Claude 版推奨、著者が一括を選択）。
 - index 行、0013・0016 に supersede 注記、0010 に window と呼2 役割変更の注記。
 - doc sync: CLAUDE.md、README.md・README.ja.md、docs/RUNBOOK(.ja).md、docs/CONTRIB(.ja).md、llms.txt・llms-full.txt、.claude/skills/dr-review/SKILL.md（`E_NO_REPORT` の意味、新 metric 語彙、pass2 は 3 line 合算）、SKILL.md。
 - commit trailer: `receipt_count_min >= 3` / `report_count_min >= 0`（外す）/ `total_cost_mean <= 18` / `pass2_turns_p90 <= 150` / `fallback_rate <= 0.15` / `lint_hard_count == 0` / `clarity_ok_rate >= 0.9` / `unsupported_rate <= 0.2` / `quiet_rate <= 0.5`。旧 `beb554a` の `total_cost_mean <= 13` は設計上 NOT_ACHIEVED になる旨を ADR に記す。

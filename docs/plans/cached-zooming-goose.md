@@ -119,7 +119,7 @@ Pass 2 = Sonnet、`--append-system-prompt-file prompts/research-protocol.md`、
 6. **permissions**: per-repo 実行の `--allowedTools` = WebSearch, WebFetch, Read,
    Glob, Grep, Write, Edit — Write/Edit は **vault 配下 + daily-research の
    past_topics.json に限定**する path 指定（repo read-only 不変式を許可レイヤで強制）。
-7. **ADR-0008**（daily-research/docs/adr/）: "Per-repo in-context research —
+7. **ADR-0008**（daily-research/docs/decision-history/）: "Per-repo in-context research —
    retire concept-graph-filtered selection"。**supersedes: ADR-0007（全体）+
    ADR-0004 の frontier-mode 選定半分。preserves: ADR-0006（ctl-015/metrics 契約）。
    restates: ADR-0002/0003**（frontier-diff / cross-line circulation の根拠を

@@ -1,6 +1,6 @@
 # graph.jsonld スキーマ仕様
 
-> **凍結アーカイブ (2026-08-04)**: 本ドキュメントは [ADR-0008](adr/0008-per-repo-in-context-research.md)
+> **凍結アーカイブ (2026-08-04)**: 本ドキュメントは [ADR-0008](decision-history/0008-per-repo-in-context-research.md)
 > で retire された concept-graph パイプラインの `graph.jsonld` を記述する。graph への日次増分は
 > 停止しており、本スキーマは**過去データを読むため**にのみ維持される。以下の本文は凍結時点の
 > 仕様であり、「Pass 1」「coverage-report」等の機構は現行アーキテクチャには存在しない。

@@ -66,7 +66,7 @@ ADR-0006 との関係: 同 ADR の死因診断は「verdict を消費する下�
 
 ### 4. ドキュメント / ADR
 
-- `docs/adr/0010-rotation-and-two-tier-eval.md` を /adr-writer で起案。
+- `docs/decision-history/0010-rotation-and-two-tier-eval.md` を /adr-writer で起案。
   ADR-0006 (条件付き復活)・ADR-0008/0009 (エンジン維持) との関係を明記
 - CLAUDE.md / RUNBOOK / config.example.toml 同期
 - commit に DR-Expect trailer: `report_count_min >= 1` / `total_cost_mean <= 13` /

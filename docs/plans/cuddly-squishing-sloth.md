@@ -131,17 +131,17 @@ supersede。
   段落を ADR-0014 参照に
 - `README.md` (`:21,30,45`) / `docs/RUNBOOK.md:68` / `docs/RUNBOOK.ja.md:68` /
   `docs/CONTRIB.md:25`: `theme_rank` 言及を削除
-- `docs/adr/0010-rotation-and-two-tier-eval.md` / `0013-edge-daily-line.md:39`:
+- `docs/decision-history/0010-rotation-and-two-tier-eval.md` / `0013-edge-daily-line.md:39`:
   削除せず、日付付き注記「2026-08-22 ADR-0014 により theme_rank 廃止」を追記 (akc-cycle 規約)
 
-### 10. `docs/adr/0014-*.md` — 新規 (skill: `adr-writer`)
+### 10. `docs/decision-history/0014-*.md` — 新規 (skill: `adr-writer`)
 
 ADR テスト: (1) 3 ADR の supersede で元に戻しにくい (2) 「なぜ反証義務を外したか」は
 将来読者に非自明 (3) 読みやすさ vs corroboration 防御の実トレードオフ → 3 条件成立。
 内容: Context = 上記根因と実例、Decision = 決定事項表、Review-when = 2026-08-30 主観判定 /
 「裏付けだけのレポートが 1 週間に 3 本以上出たら事実・解釈分離規律を強める」、
 Supersedes = ADR-0008 Decision の目的関数 / ADR-0009 の提案禁止範囲 / ADR-0010 の
-Step 3 チェックリストと theme_rank 評価。index `docs/adr/README.md` に追記。
+Step 3 チェックリストと theme_rank 評価。index `docs/decision-history/README.md` に追記。
 
 ### 順序
 

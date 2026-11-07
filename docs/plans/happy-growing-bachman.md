@@ -70,7 +70,7 @@
 | モデルが書いてよい場所 | SH の書き込み先の配列（mode 別）。`--allowedTools` の Edit 規則とプロンプトの「書き込み先」節をこの配列から描く | プロトコルは「タスクプロンプトの『書き込み先』節のパスだけ」と指す。パスを列挙しない |
 | 解析の契約（receipt・past_topics・billing・lint 対象節） | PY の定数と docstring | 参照のみ。プロトコルが示す receipt の形はテストで定数と一致させる |
 | 調査と執筆の手順・内容状態・文体規律 | `prompts/*.md`、`templates/*.md` | 1 行の要約 + 参照 |
-| 判断と経緯 | `docs/adr/` | ADR 番号で指す。CLAUDE.md に経緯を書き写さない |
+| 判断と経緯 | `docs/decision-history/` | ADR 番号で指す。CLAUDE.md に経緯を書き写さない |
 | 費用の実績 | `state/api-spend.jsonl`・`metrics.jsonl`（私的）、`check-auth.sh` が当月支出を表示 | 文書にドル額を書かない（`.claude/skills/dr-review/SKILL.md:127-128` の既存方針と同じ）。見積もりが要る判断は ADR に as-of 日付付きで残す |
 | テスト・検証の手順 | `.claude/verify.sh`（P0 で新設） | コマンドを書き写さず参照 |
 | ディレクトリ構成 | ツリーそのもの | CLAUDE.md は「どこを見るか」の短い索引だけ |
@@ -244,7 +244,7 @@ worktree では `.venv` を作り直す（`uv venv && uv pip install pytest pyte
    削除し、README・llms.txt:9・CLAUDE.md:64 の参照を付け替える。
 7. `SKILL.md` と `.claude/skills/dr-review/SKILL.md`: 書き写した値（本数・モデル・上限・節）を正本への参照に
    する。dr-review の振る舞いは変えない。
-8. `docs/adr/README.md` の索引に ADR-0019 があることを確かめる（adr-writer が足す）。
+8. `docs/decision-history/README.md` の索引に ADR-0019 があることを確かめる（adr-writer が足す）。
 
 ## Review chain（skill: implementation-chain）
 

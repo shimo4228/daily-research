@@ -27,7 +27,7 @@ line の一覧・repo 対応・focus は各自の `config.toml`（私的）が�
 | 課金経路と支出（当月の実績） | `scripts/lib/billing.sh`、`./scripts/check-auth.sh` の出力、`state/api-spend.jsonl`（私的） |
 | 運用の手順（launchd・トラブルシュート） | `docs/RUNBOOK.md` |
 | テスト・lint の入口 | `.claude/verify.sh`（選定記録は `.claude/verify.md`） |
-| 判断と経緯 | `docs/adr/`（索引は `docs/adr/README.md`） |
+| 判断の経緯 | `docs/decision-history/`（索引は `docs/decision-history/README.md`） |
 | 改善の基準値と判定 | `docs/plans/` の各 plan と `docs/plans/research/` |
 
 ## Build / Test / Run
@@ -91,8 +91,16 @@ DR_DATE=YYYY-MM-DD ./scripts/daily-research.sh      # 輪番とレポート名�
 - bats の否定 assertion は `tests/test_helper.bash` の `refute_grep` で書く（`! grep` は set -e の対象外）
 - `graph.jsonld` は凍結アーカイブ（ADR-0008）。vault の wiki が symlink で読むので残す
 
-### 過去に試して棄却したもの
+### 過去に試したもの
 
-経緯は ADR が持つ。再提案の前に読む: concept-graph 駆動の 2 パス選定（ADR-0008）、LLM-as-Judge の事後採点
-（ADR-0006 / ADR-0010）、自由探索 line と cluster 反発（ADR-0004 / ADR-0007 — 広域 line は反発の機構を持たない
-別の実行形、ADR-0019）、7:00 の Slack 承認ブリーフ（ADR-0009）、エージェントチーム版と Mem0 MCP（git history）。
+過去の提案と実測は `docs/decision-history/` にある。似た形を提案するときは、当時の実測を並べて示す:
+
+- concept-graph 駆動の 2 パス選定 — 運用 4 日で出力が「外部研究が framework を裏付ける」survey 調に収束し、
+  選定が graph の gap 埋めに縮退した（ADR-0008）
+- LLM-as-Judge の事後採点（6 次元ルーブリック × Opus judge）— スコアを消費して行動を変える下流が無かった
+  （ADR-0006 / ADR-0010）
+- 自由探索 line と cluster 反発 — 出力がユーザーの関心から構造的に遠ざかり続けた（ADR-0004 / ADR-0007。
+  広域 line は反発の機構を持たない別の実行形、ADR-0019）
+- 7:00 の Slack 承認ブリーフ — 初の定時実行（2026-08-05）が 5 ノート・8 件の手を承認リクエストとして送り、
+  承認キュー化した（ADR-0009）
+- エージェントチーム版と Mem0 MCP（git history）

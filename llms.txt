@@ -9,17 +9,17 @@ Status: active, maintained by hand in this repository and run every morning by t
 - [README](README.md): human-facing overview, setup and configuration (English)
 - [README (日本語)](README.ja.md): the same in Japanese
 - [CLAUDE.md](CLAUDE.md): where each fact lives, and the conventions that cannot be read off the code
-- [ADR index](docs/adr/README.md): every design decision with its reasons, dated
+- [Decision history](docs/decision-history/README.md): every design decision with its reasons, dated
 
 ## Architecture
 
-- [ADR-0019](docs/adr/0019-wide-line-safe-mode-static-state.md): the current shape — a broad ecosystem line plus one rotating repo line a day, `--safe-mode` and `--tools` on both calls, static briefs, no per-run bookkeeping by the model, past questions appended by code, recent repo activity in the prompt
-- [ADR-0018](docs/adr/0018-ecosystem-mode-and-daily-jev-line.md): `mode = "ecosystem"` — lines with no target repository
-- [ADR-0017](docs/adr/0017-three-line-window-content-states-and-verification-pass.md): rotation window, four content states with a receipt-driven gate, question-level dedup, call 2 as verification + clarity
-- [ADR-0014](docs/adr/0014-trend-explanation-report.md): the objective — one outside development explained, with what it means for the repo
-- [ADR-0010](docs/adr/0010-rotation-and-two-tier-eval.md): rotation and in-loop evaluation; no after-the-fact LLM judge
-- [ADR-0008](docs/adr/0008-per-repo-in-context-research.md): per-repo in-context research; why the concept-graph pipeline was retired
-- [ADR-0006](docs/adr/0006-self-improvement-loop-human-consumer.md): report gate, deterministic lint, metrics.jsonl and /dr-review
+- [ADR-0019](docs/decision-history/0019-wide-line-safe-mode-static-state.md): the current shape — a broad ecosystem line plus one rotating repo line a day, `--safe-mode` and `--tools` on both calls, static briefs, no per-run bookkeeping by the model, past questions appended by code, recent repo activity in the prompt
+- [ADR-0018](docs/decision-history/0018-ecosystem-mode-and-daily-jev-line.md): `mode = "ecosystem"` — lines with no target repository
+- [ADR-0017](docs/decision-history/0017-three-line-window-content-states-and-verification-pass.md): rotation window, four content states with a receipt-driven gate, question-level dedup, call 2 as verification + clarity
+- [ADR-0014](docs/decision-history/0014-trend-explanation-report.md): the objective — one outside development explained, with what it means for the repo
+- [ADR-0010](docs/decision-history/0010-rotation-and-two-tier-eval.md): rotation and in-loop evaluation; no after-the-fact LLM judge
+- [ADR-0008](docs/decision-history/0008-per-repo-in-context-research.md): per-repo in-context research; why the concept-graph pipeline was retired
+- [ADR-0006](docs/decision-history/0006-self-improvement-loop-human-consumer.md): report gate, deterministic lint, metrics.jsonl and /dr-review
 
 ## Source of truth
 

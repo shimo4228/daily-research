@@ -133,7 +133,7 @@ per-track テンプレート機構を追加: `[tracks.edge]` に `template = "te
 
 ### C-3. 決定の記録
 
-daily-research `docs/adr/` に次番号の ADR を 1 本（adr-writer skill 使用）:
+daily-research `docs/decision-history/` に次番号の ADR を 1 本（adr-writer skill 使用）:
 「レポートの読者契約を著者本人に固定し、文体層を共通プロトコルへ、edge を
 手筋収穫型に改修」。ADR-0014 の Review-when（2026-08-30「7 日分通読して構造を見直す」）
 への応答であることを Context に記載。edge-frontier 側は README の Status 節に 1 行追記。

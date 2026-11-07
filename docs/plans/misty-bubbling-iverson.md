@@ -53,13 +53,13 @@ target_repo = "~/MyAI_Lab/edge-frontier"
 
 あわせて config 内コメント(desire 上の「daily 現行使用 line なし」)と `[user_profile].goal` の記述を現状(7 line / daily = edge)へ同期。
 
-### 3. ADR-0013 の起票 — `docs/adr/0013-edge-daily-line.md`
+### 3. ADR-0013 の起票 — `docs/decision-history/0013-edge-daily-line.md`
 
 - Status: Accepted。ADR-0012 決定 2 の想定した daily 機構の再使用(supersede なし)
 - Context: ユーザー指示(2026-08-20)、事例出現が日単位のイベントである仮説、edge-frontier 新設
 - Decision: `edge` line 新設 / daily = true / 接地 repo / 輪番位相不変 / 毎朝 2 本・~$9/日(ADR-0010 の `total_cost_mean <= 13` の内側)
 - **Review-when(必須)**: ①収率の源が「外部の日次の動き」でなく在庫消化に転じたら輪番へ戻す(ADR-0012 と同じ失効条件)②4 週後の /dr-review で theme_rank 分布・事例捕捉数を判定 ③ metrics の `pass2` / `fallback_used` が再び 2 line 合算になる — 稼働中 DR-Expect(`fallback_rate` / `pass2_turns_*`)は次回 /dr-review で期間を分けて読む(ADR-0011 決定 4 と同じ扱い)
-- `docs/adr/README.md` の index に追記
+- `docs/decision-history/README.md` の index に追記
 
 ### 4. Doc sync
 

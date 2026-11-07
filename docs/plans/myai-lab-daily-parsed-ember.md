@@ -87,7 +87,7 @@ plugin・近接実装) を毎朝観測する line を足す。既存 7 line と�
   daily 行・config 例)、`llms.txt` / `llms-full.txt` (「Seven lines」「no line is configured as daily」)、
   `docs/RUNBOOK(.ja).md` (本数・所要時間・コスト)、`docs/CONTRIB(.ja).md` (track key 表に `mode`)、`SKILL.md` は
   該当記述があれば
-- `docs/adr/0018-ecosystem-mode-daily-jev-line.md` 新規 + `docs/adr/README.md` index。ADR-0008 (repo なし line は
+- `docs/decision-history/0018-ecosystem-mode-daily-jev-line.md` 新規 + `docs/decision-history/README.md` index。ADR-0008 (repo なし line は
   別実行形が必要 → 本 ADR がその実行形) と ADR-0017 (daily line 0 本 / cost 閾値) に `> **注記（2026-09-21,
   ADR-0018）**`。skill: `adr-writer` の手順 + `adr-reviewer` を通す
 

@@ -83,7 +83,7 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 
 ## ラインの設定
 
-各 `[tracks.X]` エントリは研究 **ライン (line)** で（設定と `DR_*_TRACK` 変数ではまだ *track* と呼びます）、`[[tracks.X.repos]]` エントリ 1 つで研究リポジトリ 1 つにマッピングされます。関心領域は、実行時に repo の中から読まれる repo 自身の運用文脈です。`daily = true` のラインは輪番の外で毎朝走ります（[ADR-0011](docs/adr/0011-daily-line.md)。ADR は `docs/adr/` にある設計判断の記録で、日本語です）。`mode = "ecosystem"` のラインは repo を持たずに外部のエコシステムを見張り、`state/<line>/` から `--safe-mode` で走ります（[ADR-0018](docs/adr/0018-ecosystem-mode-and-daily-jev-line.md)）。各項目の説明は [config.example.toml](config.example.toml) のコメントにあり、両方の mode のライン例が 1 つずつ入っています。
+各 `[tracks.X]` エントリは研究 **ライン (line)** で（設定と `DR_*_TRACK` 変数ではまだ *track* と呼びます）、`[[tracks.X.repos]]` エントリ 1 つで研究リポジトリ 1 つにマッピングされます。関心領域は、実行時に repo の中から読まれる repo 自身の運用文脈です。`daily = true` のラインは輪番の外で毎朝走ります（[ADR-0011](docs/decision-history/0011-daily-line.md)。ADR は `docs/decision-history/` にある設計判断の記録で、日本語です）。`mode = "ecosystem"` のラインは repo を持たずに外部のエコシステムを見張り、`state/<line>/` から `--safe-mode` で走ります（[ADR-0018](docs/decision-history/0018-ecosystem-mode-and-daily-jev-line.md)）。各項目の説明は [config.example.toml](config.example.toml) のコメントにあり、両方の mode のライン例が 1 つずつ入っています。
 
 レポートはデフォルトで日本語生成です。出力言語は `prompts/repo-research-protocol.md`（および `prompts/ecosystem-research-protocol.md`）の言語制約を変更します。
 
@@ -91,9 +91,9 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 
 - **4 つの内容状態** — どの実行も `article`（解説ノート。本文 3,000 字以内で、材料が薄ければ短く）、`brief`（短報。300〜600 字）、`quiet`、`hold` のいずれかで終わり、実行記録に記録されます。レポート存在ゲートはこの実行記録を読みます: 実行記録が無い・壊れているラインは失敗、`article` / `brief` はノートのファイルを要求、`quiet` / `hold` はファイル無しで成功（全ライン quiet の日も成功）。取得失敗が疑われる quiet / hold は metrics で別に数えます。
 - **ノートの形** — 既定のテンプレートでは**固定見出しを置かない**自由形式の散文で、前提知識ゼロの読者向けに書かれます。冒頭は外部の出来事から始め、すべての主張に日付を付け、出典の主張・推論・含意を分けて書きます。末尾に機械検査対象の固定 2 節: 「機会メモ」（日付付き締切を持つ機会のみ: 何を / どこで / 失効日 / 判定の出典 / 更新条件）と「ソース」。提案・承認要求は書きません。
-- **repo は read-only** — マッピングされた repo は編集しない決まりで、三層で守ります: 方針（プロトコルの文言）+ 実行（書き込み先は vault のレポートの置き場と、ラインの `pending.md`・`runs/` のみ）+ 権限の層（各呼び出しは `--permission-mode default` で走るので、設定の既定が auto mode でも `--allowedTools` のパスの外への編集は拒否される。`--disallowedTools` の拒否の層は Bash と、Claude Code の設定・資格情報のフォルダの読み取りを止める）。両方の呼び出しは `--safe-mode` で走り、あなた自身の CLAUDE.md・skill・plugin・hook は読み込まれません（[ADR-0019](docs/adr/0019-wide-line-safe-mode-static-state.md)）。
+- **repo は read-only** — マッピングされた repo は編集しない決まりで、三層で守ります: 方針（プロトコルの文言）+ 実行（書き込み先は vault のレポートの置き場と、ラインの `pending.md`・`runs/` のみ）+ 権限の層（各呼び出しは `--permission-mode default` で走るので、設定の既定が auto mode でも `--allowedTools` のパスの外への編集は拒否される。`--disallowedTools` の拒否の層は Bash と、Claude Code の設定・資格情報のフォルダの読み取りを止める）。両方の呼び出しは `--safe-mode` で走り、あなた自身の CLAUDE.md・skill・plugin・hook は読み込まれません（[ADR-0019](docs/decision-history/0019-wide-line-safe-mode-static-state.md)）。
 
-設計判断とその理由は [ADR](docs/adr/README.md) にあります。フラグ・書き込み先・拒否の規則の正確な値は `scripts/daily-research.sh` にあります。
+設計判断とその理由は [ADR](docs/decision-history/README.md) にあります。フラグ・書き込み先・拒否の規則の正確な値は `scripts/daily-research.sh` にあります。
 
 ## 注意事項
 
@@ -108,7 +108,7 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 - [RUNBOOK](docs/RUNBOOK.ja.md) / [English](docs/RUNBOOK.md): 運用、モニタリング、トラブルシューティング、費用
 - [CONTRIB](docs/CONTRIB.ja.md) / [English](docs/CONTRIB.md): 開発、テスト、CLI フラグとその理由、環境変数
 - [graph-schema.md](docs/graph-schema.md)（英語）: `graph.jsonld` のスキーマ（過去データ用）
-- [ADR の一覧](docs/adr/README.md): すべての設計判断の状態と日付。ラインを研究 repo にマッピングし直した最初の判断から ecosystem mode まで
+- [ADR の一覧](docs/decision-history/README.md): すべての設計判断の状態と日付。ラインを研究 repo にマッピングし直した最初の判断から ecosystem mode まで
 
 ## 著者のほかの仕事
 
@@ -129,12 +129,12 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 
 daily-research は、運用者自身の研究リポジトリの中で毎朝 Claude Code (`claude -p`) を無人で動かし、ラインごとに 1 本の解説ノートを Obsidian vault に書くリサーチフィードバックエンジンです。研究 repo を運用していて、repo の実際の仕事に関わる外部の動向を知りたい人のためのものです。
 
-これがあるのは、repo が次に何を必要としているかを知る文脈が repo の中にあるからです。固定トピックで回すリサーチは飽和し、その後の中央 concept-graph パイプラインも repo 自身の枠組みを裏付けるだけのサーベイに流れました（[ADR-0001](docs/adr/0001-research-repo-feedback-engine.md)、[ADR-0008](docs/adr/0008-per-repo-in-context-research.md)）。
+これがあるのは、repo が次に何を必要としているかを知る文脈が repo の中にあるからです。固定トピックで回すリサーチは飽和し、その後の中央 concept-graph パイプラインも repo 自身の枠組みを裏付けるだけのサーベイに流れました（[ADR-0001](docs/decision-history/0001-research-repo-feedback-engine.md)、[ADR-0008](docs/decision-history/0008-per-repo-in-context-research.md)）。
 
 ライセンスは MIT です。構成は Bash のオーケストレーションとプロンプトファイル、それに stdlib のみの Python モジュール 1 つです（`scripts/lib/dr_pipeline.py`、`tomllib` を使うため Python 3.11 以上、ランタイムに pip 依存なし）。テストは bats と pytest です。必要なのは macOS と launchd（Linux では cron か systemd に置き換えます）と Claude Code CLI で、課金は Claude Max プランのログインか Claude API の key です（`[billing] mode`）。外に出るデータとして、Claude Code が読んだものが Anthropic に送られ、実行中は Web を検索・取得します。モデルが書き込めるのは vault のレポートの置き場と `state/` の数ファイルだけです。状態は稼働中で、このリポジトリで手で保守し、著者が毎朝動かしています。repo ラインの輪番に加えて、AI の道具と実践を広く見る daily の ecosystem ラインが 1 本走ります。
 
 例: 設定例から `config.toml` を作って書き換えたあと、`DR_FORCE_TRACK=example_line ./scripts/daily-research.sh` でそのラインを今日 1 本だけ走らせます。ラインは `article`・`brief`（300〜600 字の短報）・`quiet`・`hold` のいずれかで終わり、`state/example_line/runs/{date}.json` に記録されます。article と brief は `{vault_path}/{output_dir}/{date}_example_line_{slug}.md` に書かれ、そのあと呼2 が各主張を supported / partial / unsupported / unverifiable のいずれかに判定し、判定ごとの件数を `state/example_line/runs/{date}.verify.json` に記録します。
 
-参照先は、[llms.txt](llms.txt)（AI 向けの索引、英語）、[docs/adr/](docs/adr/README.md)（設計判断の記録と一覧）、[docs/RUNBOOK.ja.md](docs/RUNBOOK.ja.md) と [docs/CONTRIB.ja.md](docs/CONTRIB.ja.md)（運用と開発）、[SKILL.md](SKILL.md)（Claude Code skill のマニフェスト、英語）、[graph.jsonld](graph.jsonld)（退役した concept-graph パイプラインの凍結アーカイブで、今のシステムの説明ではありません）、著者のハブ [shimo4228/shimo4228](https://github.com/shimo4228/shimo4228) です。
+参照先は、[llms.txt](llms.txt)（AI 向けの索引、英語）、[docs/decision-history/](docs/decision-history/README.md)（設計判断の記録と一覧）、[docs/RUNBOOK.ja.md](docs/RUNBOOK.ja.md) と [docs/CONTRIB.ja.md](docs/CONTRIB.ja.md)（運用と開発）、[SKILL.md](SKILL.md)（Claude Code skill のマニフェスト、英語）、[graph.jsonld](graph.jsonld)（退役した concept-graph パイプラインの凍結アーカイブで、今のシステムの説明ではありません）、著者のハブ [shimo4228/shimo4228](https://github.com/shimo4228/shimo4228) です。
 
 </details>
