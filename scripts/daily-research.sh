@@ -239,7 +239,9 @@ VERIFY_MODEL=$(python3 "$DR_PY" config-get "$PROJECT_DIR/config.toml" verificati
 # 呼1 / 呼2 の --effort ([effort] の call1 / call2。既定・値の集合・検証は dr_pipeline.py の _effort)。flag が
 # 無いと実効値は運用者の対話用の ~/.claude/settings.json (modelSettings.<model>.effortLevel) と model の既定で
 # 決まり、settings の変更が無人 run の質と費用を記録なしに動かす。env の CLAUDE_CODE_EFFORT_LEVEL は --effort
-# より優先されるので lib/env.sh が unset する。実効値は下の Effort 行と metrics の effort (EFFORT 行) に残す
+# より優先されるので lib/env.sh が unset する。下の Effort 行と metrics の effort (EFFORT 行) に残すのは渡した値。
+# 実際に走る level は maxEffortLevel・組織の上限・model が受けない level の繰り下げで下がりうる
+# (https://code.claude.com/docs/en/model-config.md、2026-11-08 確認)
 if ! EFFORT_TSV=$(python3 "$DR_PY" effort-config "$PROJECT_DIR/config.toml" 2>> "$LOG_FILE"); then
   log "ERROR: [effort] in config.toml is invalid (the reason is on the line above; see config.example.toml)"
   notify "config.toml の [effort] に誤りがあります。理由は log、書き方は config.example.toml を見てください" "Daily Research Error"
