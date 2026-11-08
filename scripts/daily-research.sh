@@ -759,8 +759,10 @@ fi
 # (全 line quiet の日は OK)。
 REPORT_COUNT=0
 if [ -d "$REPORT_DIR" ]; then
-  # track を跨ぐ ${DATE}_*.md — 旧来互換の集計
-  REPORT_COUNT=$(find "$REPORT_DIR" -maxdepth 1 -name "${DATE}_*.md" 2>/dev/null | wc -l | tr -d ' ')
+  # track を跨ぐ ${DATE}_*.md — 旧来互換の集計。find の失敗 (vault の TCC 拒否・同期中に消えた
+  # entry) は数えられた分で続ける — pipefail 下では代入ごと set -e に届き、下の通知・lint・
+  # Pass 3・metrics が全部欠ける
+  REPORT_COUNT=$(find "$REPORT_DIR" -maxdepth 1 -name "${DATE}_*.md" 2>/dev/null | wc -l | tr -d ' ') || true
 fi
 # E_BUDGET = 支出の上限で 1 line も始めなかった日 (失敗した line は無いが成果も無い)。
 if [ -n "$FAILED_LINES" ]; then

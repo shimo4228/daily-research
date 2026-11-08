@@ -1060,6 +1060,28 @@ assert sum(rec["line_states"].values()) == 0, rec
 PY
 }
 
+@test "E2E vault: an unreadable report dir still ends with the failure notify and a metrics record" {
+  # launchd の bash が vault (iCloud Drive) を TCC で拒否される・同期中に entry が消えると find が
+  # 非 0 を返す。日次集約の REPORT_COUNT (find | wc | tr) が pipefail で script ごと落ち、
+  # 失敗の通知・lint・Pass 3・metrics が全部欠けて「予期せず中断」だけが残っていた
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  mkdir -p "$MOCK_HOME/mock-vault/daily-research"
+  chmod 000 "$MOCK_HOME/mock-vault/daily-research"
+
+  run run_script
+  chmod 755 "$MOCK_HOME/mock-vault/daily-research"
+  [ "$status" -eq 1 ]
+  local log_content
+  log_content=$(get_log)
+  refute_grep -q "unexpected exit" <<< "$log_content"
+  echo "$log_content" | grep -q "Failed (E_NO_REPORT"
+  echo "$log_content" | grep -q "metrics: appended $DR_DATE (E_NO_REPORT"
+  notified "リサーチが失敗しました (lines: $PICKED)"
+  assert_metrics << 'PY'
+assert rec["final_class"] == "E_NO_REPORT", rec
+PY
+}
+
 @test "E2E gate: receipt says quiet but the run wrote a report — file wins (article + mismatch)" {
   echo "receipt-quiet-with-file" > "$MOCK_HOME/.mock_scenario"
 
