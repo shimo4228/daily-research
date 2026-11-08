@@ -150,6 +150,7 @@ launchctl list | grep daily-research
 | `API spend: today $… / $…, month $… / $…` | api モード: run 後の `state/api-spend.jsonl` の合計 |
 | `ERROR: Another instance is running. Skipping.` | ロックディレクトリ `.daily-research.lock/` を生存中の `daily-research.sh` の process が保持している |
 | `Config schema check passed` | `config.toml` が現行 (ADR-0008) schema に適合 |
+| `ERROR: config.toml schema check failed (the reason is on the line above; see config.example.toml)` | `dr_pipeline.py tracks` が `config.toml` を拒否した（旧 schema、line 名の形、`daily` / `template` / `mode` の型、壊れた `repos`、`lines_per_day` の値）。理由は直前に log された行にある。どのラインも始めずに停止（exit 1） |
 | `Rotation pick: a, b, c (ADR-0010/0017)` | 当日担当ラインの輪番 window 選択結果 |
 | `Today's lines: N` | 当日実行するライン数（`lines_per_day` + daily ライン） |
 | `=== Line: <track> (<repo パス>) ===` | その repo を cwd にしたライン run の開始（ecosystem ラインは repo を持たず `no target repo` と出る） |

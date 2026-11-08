@@ -151,6 +151,7 @@ launchctl list | grep daily-research
 | `API spend: today $… / $…, month $… / $…` | api mode: totals from `state/api-spend.jsonl` after the run |
 | `ERROR: Another instance is running. Skipping.` | Lock directory `.daily-research.lock/` is held by a live `daily-research.sh` process |
 | `Config schema check passed` | `config.toml` matches the current (ADR-0008) schema |
+| `ERROR: config.toml schema check failed (the reason is on the line above; see config.example.toml)` | `dr_pipeline.py tracks` rejected `config.toml` (legacy schema, a bad line name, a wrong type for `daily` / `template` / `mode`, a malformed `repos`, or a bad `lines_per_day`); the reason is the line logged just before. The run stops before any line (exit 1) |
 | `Rotation pick: a, b, c (ADR-0010/0017)` | The rotation window picked for today |
 | `Today's lines: N` | How many lines run today (`lines_per_day` + any daily lines) |
 | `=== Line: <track> (<repo path>) ===` | Per-line run starting with that repo as cwd (an ecosystem line has no repo and logs `no target repo`) |
