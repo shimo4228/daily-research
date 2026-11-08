@@ -1439,30 +1439,45 @@ def cmd_env_key(argv: list[str]) -> int:
     return 0
 
 
-def _spend_totals(ledger: str, date_s: str) -> tuple[float, float, int]:
-    """(month_total, day_total, skipped_lines)。読めない行は数えて返す — 黙って捨てると
-    その費用が累計から消え、上限の判定が甘くなる。台帳が無いのは 0 円 (初回)。"""
-    month, day, skipped = 0.0, 0.0, 0
+def _spend_totals(ledger: str, date_s: str) -> tuple[float, float, list[str]]:
+    """(month_total, day_total, unreadable)。unreadable は読めない行の "line N (理由)" で、
+    呼ぶ側が名指して止める — 黙って捨てるとその費用が累計から消え、上限の判定が甘くなる。
+    行ごとに UTF-8 として decode する: 壊れた byte はその行だけを読めない行にし、台帳全体の
+    UnicodeDecodeError (traceback = rc 1 = 「上限で止めた」と読まれる) にしない。
+    台帳が無いのは 0 円 (初回)。開けないのは OSError のまま呼ぶ側へ。"""
+    month, day, unreadable = 0.0, 0.0, []
     try:
-        with open(ledger, encoding="utf-8") as f:
-            lines = f.read().splitlines()
+        with open(ledger, "rb") as f:
+            raw_lines = f.read().splitlines()
     except FileNotFoundError:
-        return month, day, skipped
-    for line in lines:
+        return month, day, unreadable
+    for n, raw in enumerate(raw_lines, 1):
+        try:
+            line = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            unreadable.append(f"line {n} (not UTF-8)")
+            continue
         if not line.strip():
             continue
         try:
             r = json.loads(line)
+        except ValueError:
+            unreadable.append(f"line {n} (not JSON)")
+            continue
+        if not isinstance(r, dict):
+            unreadable.append(f"line {n} (not an object)")
+            continue
+        try:
             d = str(r.get("date", ""))
             c = float(r.get("cost_usd", 0) or 0)
-        except (ValueError, TypeError, AttributeError):
-            skipped += 1
+        except (ValueError, TypeError, OverflowError):  # OverflowError: float に収まらない整数
+            unreadable.append(f"line {n} (cost_usd is not a number)")
             continue
         if d[:7] == date_s[:7]:
             month += c
             if d == date_s:
                 day += c
-    return month, day, skipped
+    return month, day, unreadable
 
 
 # --- spend-add <ledger> <date> <line> <call> [fallback_usd]: stdin の claude JSON の費用を台帳に追記 ---
@@ -1507,6 +1522,7 @@ def cmd_spend_add(argv: list[str]) -> int:
 # --- spend-gate <ledger> <date> <monthly_cap> <daily_cap> <reserve> ---
 # 次の line を始めてよいか。"ok|stop \t month_total \t day_total" を出力し、stop は rc 1。
 # 台帳が読めない・読めない行がある場合は rc 2 (上限を判定できない — 呼ぶ側は止める)。
+# rc 2 の stderr は理由 (読めない行は "line N (理由)") を 1 行で出す — billing.sh が log に写す。
 def cmd_spend_gate(argv: list[str]) -> int:
     if len(argv) < 5:
         print(
@@ -1516,13 +1532,19 @@ def cmd_spend_gate(argv: list[str]) -> int:
     ledger, date_s = argv[:2]
     monthly, daily, reserve = (float(x) for x in argv[2:5])
     try:
-        month, day, skipped = _spend_totals(ledger, date_s)
+        month, day, unreadable = _spend_totals(ledger, date_s)
     except OSError as e:
         print(f"spend-gate: cannot read {ledger}: {e}", file=sys.stderr)
         return 2
-    if skipped:
-        # 読めない行の費用は分からない。数えられない支出があるまま上限を判定しない
-        print(f"spend-gate: {skipped} unreadable line(s) in {ledger}", file=sys.stderr)
+    if unreadable:
+        # 読めない行の費用は分からない。数えられない支出があるまま上限を判定しない。
+        # stderr は billing.sh が log の 1 行に載せるので、名指す行は先頭 5 件まで
+        named = ", ".join(unreadable[:5])
+        rest = f", and {len(unreadable) - 5} more" if len(unreadable) > 5 else ""
+        print(
+            f"spend-gate: {len(unreadable)} unreadable line(s) in {ledger}: {named}{rest}",
+            file=sys.stderr,
+        )
         return 2
     ok = monthly - month >= reserve and daily - day >= reserve
     print(f"{'ok' if ok else 'stop'}\t{month:.2f}\t{day:.2f}")

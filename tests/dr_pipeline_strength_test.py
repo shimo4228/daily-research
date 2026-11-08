@@ -185,8 +185,65 @@ def test_spend_gate_reports_count_of_unreadable_lines(monkeypatch, capsys, tmp_p
     )
     assert rc == 2
     assert out == ""
-    # 2 行 (非 JSON と非 object) が読めない。1 行目で数え止めない
-    assert err == f"spend-gate: 2 unreadable line(s) in {ledger}\n"
+    # 2 行 (非 JSON と非 object) が読めない。1 行目で数え止めず、行番号と理由を名指す
+    assert err == (
+        f"spend-gate: 2 unreadable line(s) in {ledger}: line 1 (not JSON), line 3 (not an object)\n"
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "bad",
+    [b"\xff", b'{"date": "2026-11-02", "line": "\xe3\x81", "cost_usd": 1}'],
+    ids=["stray-byte", "truncated-multibyte-in-row"],
+)
+def test_spend_gate_non_utf8_line_is_rc2_with_line_number(monkeypatch, capsys, tmp_path, bad):
+    # UTF-8 でない byte は台帳全体の UnicodeDecodeError (traceback で rc 1) にせず、その行を
+    # 読めない行として rc 2。rc 1 は billing.sh が「上限で止めた」と読み、理由が log から消えていた
+    ledger = tmp_path / "l.jsonl"
+    ledger.write_bytes(
+        b'{"date": "2026-11-02", "cost_usd": 1}\n'
+        + bad
+        + b'\n{"date": "2026-11-02", "cost_usd": 2}\n'
+    )
+    rc, out, err = run_cmd(
+        monkeypatch, capsys, ["spend-gate", str(ledger), "2026-11-02", "100", "10", "1"]
+    )
+    assert rc == 2
+    assert out == ""
+    assert err == f"spend-gate: 1 unreadable line(s) in {ledger}: line 2 (not UTF-8)\n"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "cost", ['"abc"', '{"usd": 1}', "1" + "0" * 400], ids=["string", "object", "overflows-float"]
+)
+def test_spend_gate_non_numeric_cost_is_rc2(monkeypatch, capsys, tmp_path, cost):
+    # float() で判定できない cost_usd は読めない行。巨大な整数は OverflowError で、以前は
+    # 行ごとの except を素通りして traceback (rc 1 = 上限で止めたと読まれる) だった
+    ledger = _write(tmp_path, "l.jsonl", f'{{"date": "2026-11-02", "cost_usd": {cost}}}\n')
+    rc, out, err = run_cmd(
+        monkeypatch, capsys, ["spend-gate", ledger, "2026-11-02", "100", "10", "1"]
+    )
+    assert rc == 2
+    assert out == ""
+    assert err == (
+        f"spend-gate: 1 unreadable line(s) in {ledger}: line 1 (cost_usd is not a number)\n"
+    )
+
+
+@pytest.mark.unit
+def test_spend_gate_names_at_most_five_unreadable_lines(monkeypatch, capsys, tmp_path):
+    # 理由は billing.sh が log の 1 行に載せる。壊れた台帳で log を膨らませない
+    ledger = _write(tmp_path, "l.jsonl", "x\n" * 7)
+    rc, _, err = run_cmd(
+        monkeypatch, capsys, ["spend-gate", ledger, "2026-11-02", "100", "10", "1"]
+    )
+    assert rc == 2
+    assert err == (
+        f"spend-gate: 7 unreadable line(s) in {ledger}: line 1 (not JSON), line 2 (not JSON), "
+        "line 3 (not JSON), line 4 (not JSON), line 5 (not JSON), and 2 more\n"
+    )
 
 
 @pytest.mark.unit

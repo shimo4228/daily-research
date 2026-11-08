@@ -9,6 +9,8 @@ LIB_DIR="$REAL_PROJECT_DIR/scripts/lib"
 DR_PY="$LIB_DIR/dr_pipeline.py"
 FAKE_KEY="test-key-e2e-0000"
 
+load test_helper
+
 setup() {
   MOCK_HOME="$(mktemp -d)"
   P="$MOCK_HOME/daily-research"
@@ -337,6 +339,19 @@ calls_of() { grep -c "kind=$1" "$MOCK_HOME/.calls" || true; }
   run run_script
   [ "$(calls_of repo-research-protocol)" -eq 0 ]
   grep -q 'API spend gate failed' "$(log_file)"
+}
+
+@test "non-UTF-8 byte in the ledger: the gate logs the line number as a gate failure, not a cap stop" {
+  # 以前は spend-gate が UnicodeDecodeError の traceback で rc 1 になり、billing_gate が rc 1 を
+  # 「上限で止めた」と読んで stderr を捨て、金額の空の WARN (month $ / ...) だけが log に残っていた
+  mkdir -p "$P/state"
+  printf '{"date":"2026-11-01","cost_usd":1}\n\xff\n' > "$(ledger)"
+  run run_script
+  [ "$(calls_of repo-research-protocol)" -eq 0 ]
+  grep -qF 'API spend gate failed (rc 2): spend-gate: 1 unreadable line(s) in' "$(log_file)"
+  grep -qF 'line 2 (not UTF-8) — cannot check the caps' "$(log_file)"
+  refute_grep -q 'Traceback' "$(log_file)"
+  refute_grep -qF 'month $ /' "$(log_file)"
 }
 
 @test "ledger cannot be written: the run stops before the next line" {
