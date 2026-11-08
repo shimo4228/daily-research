@@ -469,6 +469,10 @@ $LINE_TEMPLATE"
     ALLOWED_TOOLS="$ALLOWED_TOOLS,Edit(//${_wp#/})"
   done
 
+  # pending.md の項目数・字数を呼1 の前に測る (後はゲート通過後)。両プロトコル Step 6: 項目を足すのは
+  # hold の問いと日付付き締切の機会だけ — 経過メモで膨らむと選定前に読まれて次の問いを引っ張る
+  PENDING_BEFORE=$(python3 "$DR_PY" pending-stats "$STATE_DIR/pending.md" 2>> "$LOG_FILE") || PENDING_BEFORE=""
+
   LINE_CLASS=""
   budget_flags 1
   for ATTEMPT in 1 2; do
@@ -640,6 +644,19 @@ else
   log "Line $TRACK state: $LINE_STATE (reason_code=$R_CODE) ${R_REASON}"
   log "Line $TRACK report gate passed"
   OK_LINES="$OK_LINES $TRACK"
+  # pending.md の前後 (呼1 の前に測った PENDING_BEFORE と比べる)。hold 以外の run で項目の増分が
+  # 記事の機会メモの項目数 (= 日付付き締切の機会) を超えたら WARN。log だけで line の成否に効かせない
+  PENDING_AFTER=$(python3 "$DR_PY" pending-stats "$STATE_DIR/pending.md" ${CLARITY_NOTE:+"$CLARITY_NOTE"} \
+    2>> "$LOG_FILE") || PENDING_AFTER=""
+  if [ -n "$PENDING_BEFORE" ] && [ -n "$PENDING_AFTER" ]; then
+    IFS=$'\t' read -r _pb_items _pb_chars _ <<< "$PENDING_BEFORE"
+    IFS=$'\t' read -r _pa_items _pa_chars _pa_memo <<< "$PENDING_AFTER"
+    log "Line $TRACK pending.md: items ${_pb_items}→${_pa_items}, chars ${_pb_chars}→${_pa_chars}"
+    _p_added=$((_pa_items - _pb_items))
+    if [ "$LINE_STATE" != "hold" ] && [ "$_p_added" -gt "$_pa_memo" ]; then
+      log "WARN: Line $TRACK pending.md の項目が $LINE_STATE の run で ${_p_added} 件増えた (足してよいのは hold の問いと日付付き締切の機会だけ)"
+    fi
+  fi
   # 問いの履歴 (ADR-0019 Decision 4)。次の line の past-themes より前に追記する。失敗は line の
   # 成否に効かせない (run 開始時の past_topics.json.bak が残る)
   if ! python3 "$DR_PY" past-topics-append "$PROJECT_DIR/past_topics.json" "$RECEIPT_FILE" \

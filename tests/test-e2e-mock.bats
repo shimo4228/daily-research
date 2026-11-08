@@ -215,6 +215,11 @@ if [[ "$PROTOCOL" == *repo-research-protocol.md || "$PROTOCOL" == *ecosystem-res
       "$DR_DATE" "$TRACK" "$1" "$report_json" "$TRACK" "$REASON_CODE" "$TRACK" > "$RECEIPT"
   }
 
+  # pending.md 追記 seam (H02): .pending_add_<track> があれば state の pending.md に追記する
+  if [ -f "$MOCK_HOME_DIR/.pending_add_$TRACK" ] && [ -n "$RECEIPT" ]; then
+    cat "$MOCK_HOME_DIR/.pending_add_$TRACK" >> "${RECEIPT%/runs/*}/pending.md"
+  fi
+
   case "$SCENARIO" in
     noreport) ;;   # success を返すが何も書かない (成功化け → receipt gate が捕捉すべき)
     receipt-missing)
@@ -249,6 +254,8 @@ if [[ "$PROTOCOL" == *repo-research-protocol.md || "$PROTOCOL" == *ecosystem-res
         article|brief)
           if [ "$STATE" = "brief" ]; then
             printf -- '---\nkind: brief\n---\n\n# mock brief for %s\n' "$TRACK" > "$REPORT_DIR/$REPORT_NAME"
+          elif [ -f "$MOCK_HOME_DIR/.report_$TRACK" ]; then
+            cp "$MOCK_HOME_DIR/.report_$TRACK" "$REPORT_DIR/$REPORT_NAME"
           else
             echo "# mock report for $TRACK" > "$REPORT_DIR/$REPORT_NAME"
           fi
@@ -1156,6 +1163,43 @@ PY
   run run_script
   [ "$status" -eq 0 ]
   refute_grep -q "pending.md is empty" <<< "$(get_log)"
+}
+
+@test "E2E pending: an article run that adds a pending item warns; a hold run does not (H02)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  mkdir -p "$MOCK_PROJECT/state/$PICKED"
+  printf -- '# pending\n\n- **既存の問い**\n  - 状態: pending\n' > "$MOCK_PROJECT/state/$PICKED/pending.md"
+  printf -- '- **足された問い**\n### 経過メモ（2026-08-13）\n' > "$MOCK_HOME/.pending_add_$PICKED"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  local log_content
+  log_content=$(get_log)
+  echo "$log_content" | grep -q "Line $PICKED pending.md: items 1→3, chars "
+  echo "$log_content" | grep -q "WARN: Line $PICKED pending.md の項目が article の run で 2 件増えた"
+
+  # hold の run は保留の問いを足す (WARN なし)
+  echo hold > "$MOCK_HOME/.state_$PICKED"
+  rm -rf "$MOCK_PROJECT/logs" "$MOCK_PROJECT/state/$PICKED/runs"
+  mkdir -p "$MOCK_PROJECT/logs"
+  run run_script
+  [ "$status" -eq 0 ]
+  log_content=$(get_log)
+  echo "$log_content" | grep -q "Line $PICKED pending.md: items 3→5, chars "
+  refute_grep -q "pending.md の項目が" <<< "$log_content"
+}
+
+@test "E2E pending: items added up to the report's dated opportunities do not warn (H02)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  printf -- '- **締切のある機会**\n' > "$MOCK_HOME/.pending_add_$PICKED"
+  printf -- '# mock report\n\n本文\n\n## 機会メモ\n\n- **何を**: x\n- **失効日**: 2026-09-01\n\n## ソース\n' > "$MOCK_HOME/.report_$PICKED"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  local log_content
+  log_content=$(get_log)
+  echo "$log_content" | grep -q "Line $PICKED pending.md: items 0→1, chars 0→"
+  refute_grep -q "pending.md の項目が" <<< "$log_content"
 }
 
 @test "E2E gate: a report without a run receipt fails the line" {

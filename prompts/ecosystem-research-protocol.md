@@ -242,9 +242,13 @@ run は失敗扱いになるので、state 更新より先に置く。quiet / ho
 
 `pending.md` と `watched-sources.md` を更新する（`brief.md` は運用者が書く静的な文書で、読むだけ）。
 
-1. `pending.md`: 機会メモと保留の問いの正本。各項目に 状態（`pending` / `resolved` / `contradicted` /
-   `expired` / `unverifiable`）/ 判定 source / 更新条件 / 期限。`expired` は「検討できる期間が過ぎた」で
-   あって「予測が外れた」ではない。曖昧な未来を無理に二値にしない。
+1. `pending.md`: 機会メモと保留の問いの正本。1 項目は 1 つの保留の問いか 1 つの機会で、状態（`pending` /
+   `resolved` / `contradicted` / `expired` / `unverifiable`）/ 判定 source / 更新条件 / 期限 を持つ。
+   `expired` は「検討できる期間が過ぎた」であって「予測が外れた」ではない。曖昧な未来を無理に二値にしない。
+
+   項目を足すのは、hold の run の保留の問いと、記事の機会メモに載せた日付付き締切の機会だけ。ほかの run は
+   既存項目の状態・判定 source・更新条件を書き換える。run ごとの経過と観測の置き場は記事・根拠ファイル・
+   receipt（`pending.md` は次の run の選定前に読まれるので、経過が載ると次の問いが前日の続きに寄る）。
 2. `watched-sources.md`: **watchlist の正本**。次の表で持つ（無ければこの見出し行から作る）:
 
    `| 名前 | canonical URL | 種別 | 初出日 | last-attempt | last-seen | 最後に報告した意味のある変化 | 状態 |`
@@ -285,3 +289,5 @@ run は失敗扱いになるので、state 更新より先に置く。quiet / ho
 - SIFT と横断確認: Caulfield 2019、Wineburg & McGrew 2017。
 - estimative language: ODNI ICD 203（2015）。
 - 問いの形の候補・停止規則・根拠ファイル・4 つの終わり方・pending の状態: ADR-0017。
+- `pending.md` に足す項目の制限: 運用の観測（2026-11、article の run の経過メモで `pending.md` が膨らみ、
+  選定前の読込を占めた）。

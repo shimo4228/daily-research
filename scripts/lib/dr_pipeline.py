@@ -1018,6 +1018,51 @@ def _sum_vdiff(vdiffs: list[dict[str, object]]) -> dict[str, int]:
     return total
 
 
+# --- pending-stats <pending_path> [report_path]: pending.md の項目数・字数と、記事の機会メモの項目数 ---
+# stdout: "items<TAB>chars<TAB>memo_items"。SH が呼1 の前後に回し、hold 以外の run で items の増分が
+# memo_items (記事の機会メモ = 日付付き締切の機会の数) を超えたら WARN にする (両プロトコル Step 6:
+# 項目を足すのは hold の問いと日付付き締切の機会だけ)。
+# 項目 = 「### 」「#### 」の見出し行・「- **」で始まる箇条・表のデータ行 (見出し行と区切り行を除く)。
+# pending.md の書式は line ごとに違う (箇条 / 見出し / 表) ので 3 つとも数える。「## 」の節見出しと
+# 平の箇条 (状態更新の行) は数えない。ファイルが無ければ 0。
+_TABLE_SEP_RE = re.compile(r"^\|[\s:|-]+\|?\s*$")
+_MEMO_ITEM_RE = re.compile(r"^\s*- \*\*何を\*\*", re.MULTILINE)
+
+
+def _pending_items(text: str) -> int:
+    lines = text.splitlines()
+    n = 0
+    for i, ln in enumerate(lines):
+        if ln.startswith("|"):
+            nxt = lines[i + 1] if i + 1 < len(lines) else ""
+            if not _TABLE_SEP_RE.match(ln) and not _TABLE_SEP_RE.match(nxt):
+                n += 1
+        elif ln.startswith(("### ", "#### ", "- **")):
+            n += 1
+    return n
+
+
+def cmd_pending_stats(argv: list[str]) -> int:
+    if not argv:
+        print("usage: pending-stats <pending_path> [report_path]", file=sys.stderr)
+        return 64
+
+    def read(path: str) -> str:
+        try:
+            with open(path, encoding="utf-8") as f:
+                return f.read()
+        except (OSError, UnicodeDecodeError):
+            return ""
+
+    text = read(argv[0])
+    memo_items = 0
+    if len(argv) >= 2 and argv[1]:
+        _, memo, _ = _note_parts(read(argv[1]))
+        memo_items = len(_MEMO_ITEM_RE.findall(memo))
+    print(f"{_pending_items(text)}\t{len(text)}\t{memo_items}")
+    return 0
+
+
 # --- config-get <config_path> <section.key> [default]: config の 1 値を出力 ---
 # 値が無い・config が読めない場合は default (省略時は空行)。bool は true/false。
 def cmd_config_get(argv: list[str]) -> int:
@@ -1944,6 +1989,7 @@ COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "receipt-read": cmd_receipt_read,
     "verify-read": cmd_verify_read,
     "verify-diff": cmd_verify_diff,
+    "pending-stats": cmd_pending_stats,
     "config-get": cmd_config_get,
     "searches": cmd_searches,
     "turns-near-cap": cmd_turns_near_cap,

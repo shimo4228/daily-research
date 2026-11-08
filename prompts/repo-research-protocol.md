@@ -182,9 +182,13 @@ run は失敗扱いになるので、state 更新より先に置く。quiet / ho
 
 `pending.md` だけを更新する（`brief.md` は運用者が書く静的な文書で、読むだけ）。
 
-`pending.md` は機会メモと保留の問いの正本。各項目に 状態（`pending` / `resolved` / `contradicted` /
-`expired` / `unverifiable`）/ 判定 source / 更新条件 / 期限。`expired` は「検討できる期間が過ぎた」で
-あって「予測が外れた」ではない。曖昧な未来を無理に二値にしない。
+`pending.md` は機会メモと保留の問いの正本。1 項目は 1 つの保留の問いか 1 つの機会で、状態（`pending` /
+`resolved` / `contradicted` / `expired` / `unverifiable`）/ 判定 source / 更新条件 / 期限 を持つ。`expired` は
+「検討できる期間が過ぎた」であって「予測が外れた」ではない。曖昧な未来を無理に二値にしない。
+
+項目を足すのは、hold の run の保留の問いと、記事の機会メモに載せた日付付き締切の機会だけ。ほかの run は既存
+項目の状態・判定 source・更新条件を書き換える。run ごとの経過と観測の置き場は記事・根拠ファイル・receipt
+（`pending.md` は次の run の選定前に読まれるので、経過が載ると次の問いが前日の続きに寄る）。
 
 ### 完了報告
 
@@ -209,3 +213,5 @@ run は失敗扱いになるので、state 更新より先に置く。quiet / ho
 - estimative language: ODNI ICD 203（2015）。
 - 「探索範囲で見つからなかった」語法: K-Dense hypothesis-generation（2026-07）。
 - 固定見出しの撤去と問い候補の自由記述は**編集判断**（運用者 2026-09-14）であり、論文の実証ではない。
+- `pending.md` に足す項目の制限: 運用の観測（2026-11、article の run の経過メモで `pending.md` が膨らみ、
+  選定前の読込を占めた）。

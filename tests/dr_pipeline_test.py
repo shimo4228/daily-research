@@ -1568,6 +1568,64 @@ def test_turns_near_cap_usage(monkeypatch, capsys, args):
     assert rc == 64 and err
 
 
+# --- pending-stats: pending.md の項目数・字数と、記事の機会メモの項目数 (hillclimb H02) ---
+
+PENDING_MD = (
+    "# pending — x\n\n機会と保留の正本。\n\n## 保留の問い\n\n"
+    "### P1: 一つ目（2026-11-01 追加）\n- 問い: a\n- 状態: pending\n\n"
+    "- **二つ目の問い**（2026-11-02 追加）\n  - 状態: pending\n"
+    "- **問い**: 三つ目\n\n"
+    "## 状態更新（2026-11-03）\n\n- 一つ目 → **resolved**\n\n"
+    "## 機会\n\n| 項目 | 状態 | 判定 source | 更新条件 | 期限 |\n|---|---|---|---|---|\n"
+    "| 四つ目 | pending | x | y | 2026-12-01 |\n| 五つ目 | pending | x | y | 2026-12-02 |\n"
+)
+
+
+@pytest.mark.unit
+def test_pending_stats_counts_items_in_each_format(monkeypatch, capsys, tmp_path):
+    p = tmp_path / "pending.md"
+    p.write_text(PENDING_MD)
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["pending-stats", str(p)])
+    assert rc == 0
+    # ### 見出し 1 + 太字で始まる箇条 2 + 表のデータ行 2 (見出し行・区切り行・## 節・平の箇条は数えない)
+    assert out.strip() == f"5\t{len(PENDING_MD)}\t0"
+
+
+@pytest.mark.unit
+def test_pending_stats_missing_file_is_zero(monkeypatch, capsys, tmp_path):
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["pending-stats", str(tmp_path / "nope.md")])
+    assert rc == 0 and out.strip() == "0\t0\t0"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "memo,expected",
+    [
+        ("## 機会メモ\n\nなし\n\n", 0),
+        ("## 機会メモ\n\n- **何を**: a\n- **どこで**: b\n\n- **何を**: c\n\n", 2),
+        ("", 0),  # brief は機会メモ節を省略してよい
+    ],
+)
+def test_pending_stats_counts_dated_opportunities_in_report(
+    monkeypatch, capsys, tmp_path, memo, expected
+):
+    p = tmp_path / "pending.md"
+    p.write_text("")
+    r = tmp_path / "note.md"
+    r.write_text(
+        "# 題\n\n本文の **何を**: は数えない\n\n" + memo + "## ソース\n- [a](https://a.com)\n"
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["pending-stats", str(p), str(r)])
+    assert rc == 0
+    assert out.strip().split("\t")[2] == str(expected)
+
+
+@pytest.mark.unit
+def test_pending_stats_usage(monkeypatch, capsys):
+    rc, _, err = run_cmd(monkeypatch, capsys, ["pending-stats"])
+    assert rc == 64 and err
+
+
 # --- config-get ---
 
 
