@@ -992,9 +992,36 @@ def test_expect_check_verdicts(monkeypatch, capsys, tmp_path):
     assert lines[0].startswith("ACHIEVED\t")  # max turns = 18 <= 18
     assert lines[1].startswith("NOT_ACHIEVED\t")
     assert lines[2].startswith("ACHIEVED\t")  # 1/4 = 0.25
-    assert lines[3].startswith("ACHIEVED\t")  # 07-28 より後は 0 record でも count=0
+    # 07-28 より後は 0 record — 件数の metric も他の metric と同じくデータ不足 (0 件を「0 回」と読まない)
+    assert lines[3].startswith("INSUFFICIENT_DATA\t")
     assert lines[4].startswith("INSUFFICIENT_DATA\t")
     assert lines[5].startswith("INVALID\t")
+
+
+@pytest.mark.unit
+def test_expect_check_count_metrics_need_records(monkeypatch, capsys, tmp_path):
+    # lint_hard_count は lint を持つ record だけを数える。lint の無い record しか無い窓はデータ不足
+    metrics = tmp_path / "metrics.jsonl"
+    recs = [
+        {"date": "2026-07-25", "final_class": "OK", "lint": {"hard_fail": 2}},
+        {"date": "2026-07-26", "final_class": "E_NO_REPORT"},
+    ]
+    metrics.write_text("\n".join(json.dumps(r) for r in recs) + "\n")
+    stdin = (
+        "2026-07-24\tlint_hard_count <= 2\n"
+        "2026-07-25\tlint_hard_count == 0\n"
+        "2026-07-26\tlint_hard_count == 0\n"
+        "2026-07-24\tno_report_count == 1\n"
+        "2026-07-26\tno_report_count == 0\n"
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["expect-check", str(metrics)], stdin)
+    assert rc == 0
+    lines = out.strip().splitlines()
+    assert lines[0].startswith("ACHIEVED\t")  # hard 2 <= 2
+    assert lines[1].startswith("INSUFFICIENT_DATA\t")  # 07-26 の record は lint を持たない
+    assert lines[2].startswith("INSUFFICIENT_DATA\t")  # 07-26 より後は 0 record
+    assert lines[3].startswith("ACHIEVED\t")
+    assert lines[4].startswith("INSUFFICIENT_DATA\t")
 
 
 # === dispatcher ===

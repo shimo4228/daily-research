@@ -1870,10 +1870,12 @@ def cmd_expect_check(argv: list[str]) -> int:
         if name == "report_count_min":
             vals = [r.get("report_count", 0) for r in recs]
             return min(vals) if vals else None
+        # 件数の metric も、数える record が無ければデータ不足 (0 件の窓を「0 回」として ACHIEVED にしない)
         if name == "no_report_count":
-            return sum(1 for r in recs if r.get("final_class") == "E_NO_REPORT")
+            return sum(1 for r in recs if r.get("final_class") == "E_NO_REPORT") if recs else None
         if name == "lint_hard_count":
-            return sum((r.get("lint") or {}).get("hard_fail", 0) for r in recs)
+            lints = [r["lint"] for r in recs if isinstance(r.get("lint"), dict)]
+            return sum(lt.get("hard_fail", 0) for lt in lints) if lints else None
         states = [r["line_states"] for r in recs if isinstance(r.get("line_states"), dict)]
         if name == "quiet_rate":
             quiet = sum(s.get("quiet", 0) + s.get("hold", 0) for s in states)
