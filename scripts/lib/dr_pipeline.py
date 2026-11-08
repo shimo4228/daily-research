@@ -9,15 +9,19 @@ subcommand に置き換える parser-of-record。test も本モジュールだ�
 依存:      stdlib のみ (json / tomllib / re / collections)。pip 依存なし。
            config.toml 解析に python>=3.11 の tomllib を使う (lib/env.sh が homebrew の
            python3 を PATH の先頭に置く)。
+型:        関数の境界は全件注釈する (ruff ANN、tests 除く)。JSON / TOML 由来の値は検証する
+           まで object / dict[str, object] で受け、Any は使わない — 中身の検査は本文の
+           isinstance と try/except が持つ。
 """
 
 import json
 import re
 import sys
 import tomllib
+from collections.abc import Callable
 
 
-def _result_dict(raw):
+def _result_dict(raw: object) -> object:
     """claude -p の出力が array (stream/json) なら result イベントを、
     dict ならそのまま返す。result が無ければ {}。"""
     if isinstance(raw, list):
@@ -38,12 +42,12 @@ _TRACK_MODES = (MODE_REPO, MODE_ECOSYSTEM)
 _ECOSYSTEM_FORBIDDEN_KEYS = ("repos", "context_files")
 
 
-def _track_mode(track_cfg):
+def _track_mode(track_cfg: dict[str, object]) -> object:
     """line の mode を返す。_load_tracks が enum 検証済みの値だけを通す。"""
     return track_cfg.get("mode", MODE_REPO)
 
 
-def _lines_per_day(cfg):
+def _lines_per_day(cfg: dict[str, object]) -> int:
     """[general].lines_per_day (1 日に走らせる輪番 line 数、ADR-0017)。既定 1。
     int >= 1 のみ許す — bool は int の subclass なので明示的に除く
     (lines_per_day = true が 1 として黙って通る事故を防ぐ)。"""
@@ -53,7 +57,7 @@ def _lines_per_day(cfg):
     return k
 
 
-def _load_tracks(config_path):
+def _load_tracks(config_path: str) -> tuple[dict[str, object], dict[str, object]]:
     """config.toml を読み (cfg, tracks) を返す。旧 schema (tracks.X 直下に
     target_repo) を検出したら ValueError — 再編後のコードが旧 config のまま
     朝の実行を迎えて静かに誤動作する事故を防ぐ。"""
@@ -99,14 +103,14 @@ def _load_tracks(config_path):
     return cfg, tracks
 
 
-def _track_repos(track_cfg):
+def _track_repos(track_cfg: dict[str, object]) -> list[object]:
     """line 定義の repos 配列を返す。無ければ []。repo mode で repos が空の line は
     行を出さない (実行されない)。repo を持たない line は mode = "ecosystem" で宣言する。"""
     repos = track_cfg.get("repos", [])
     return repos if isinstance(repos, list) else []
 
 
-def _track_rows(tracks):
+def _track_rows(tracks: dict[str, object]) -> list[tuple[str, object, object, bool]]:
     """全 line の (track, key, target_repo, daily) 行を config 記述順で返す。
     tracks / rotation-pick が共有する行構築の正本 — 輪番の単位・順序は
     この関数が定義する (二重実装で周期が黙って乖離するのを防ぐ)。
@@ -127,7 +131,7 @@ def _track_rows(tracks):
     return rows
 
 
-def _searches(d):
+def _searches(d: object) -> int:
     """claude -p result dict から Web 検索回数を返す。
     実出力 (2026-09 時点) は WebSearch を modelUsage.<model>.webSearchRequests に
     計上し usage.server_tool_use.web_search_requests は 0 のまま — server_tool_use
@@ -137,7 +141,7 @@ def _searches(d):
     if not isinstance(d, dict):
         return 0
 
-    def _int(v):
+    def _int(v: object) -> int:
         return v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else 0
 
     tc = d.get("tool_counts")
@@ -154,7 +158,7 @@ def _searches(d):
 
 # --- searches: stdin の claude -p JSON から検索回数を 1 行で出力 (quiet-suspect 判定用) ---
 # 解析失敗は 0 (常に rc 0)。
-def cmd_searches(argv):
+def cmd_searches(argv: list[str]) -> int:
     try:
         print(_searches(json.loads(sys.stdin.read() or "null")))
     except (ValueError, AttributeError, TypeError):  # 非 JSON / 想定外の型
@@ -169,7 +173,7 @@ def cmd_searches(argv):
 _CREDIT_RE = re.compile(r"credit balance|insufficient.{0,20}credit", re.IGNORECASE)
 
 
-def _error_kind(d):
+def _error_kind(d: dict[str, object]) -> str:
     if d.get("subtype") == "error_max_budget_usd":
         return "budget"
     code = d.get("api_error_status")
@@ -180,7 +184,7 @@ def _error_kind(d):
     return ""
 
 
-def cmd_error_fields(argv):
+def cmd_error_fields(argv: list[str]) -> int:
     try:
         d = json.loads(sys.stdin.read() or "null")
         d = _result_dict(d) or {}
@@ -193,7 +197,7 @@ def cmd_error_fields(argv):
 
 
 # --- log-summary <label>: claude -p JSON からサマリー行を出力 ---
-def cmd_log_summary(argv):
+def cmd_log_summary(argv: list[str]) -> int:
     label = argv[0] if argv else "?"
     try:
         raw = json.loads(sys.stdin.read())
@@ -214,7 +218,7 @@ def cmd_log_summary(argv):
 
 
 # --- vault-path [config_path]: config.toml の [general].vault_path を出力 ---
-def cmd_vault_path(argv):
+def cmd_vault_path(argv: list[str]) -> int:
     config_path = argv[0] if argv else "config.toml"
     with open(config_path, "rb") as f:
         print(tomllib.load(f).get("general", {}).get("vault_path", ""))
@@ -223,7 +227,7 @@ def cmd_vault_path(argv):
 
 # --- report-dir [config_path]: レポート出力先 {vault_path}/{output_dir} を出力 ---
 # どちらか欠けている config では空文字を出力する (呼び出し側はゲートを skip する)。
-def cmd_report_dir(argv):
+def cmd_report_dir(argv: list[str]) -> int:
     config_path = argv[0] if argv else "config.toml"
     with open(config_path, "rb") as f:
         general = tomllib.load(f).get("general", {})
@@ -240,7 +244,7 @@ def cmd_report_dir(argv):
 DEFAULT_TEMPLATE = "templates/report-template.md"
 
 
-def cmd_template_path(argv):
+def cmd_template_path(argv: list[str]) -> int:
     if len(argv) < 2:
         print("usage: template-path <config_path> <track>", file=sys.stderr)
         return 64
@@ -259,7 +263,7 @@ def cmd_template_path(argv):
 
 
 # --- tracks [config_path]: "line<TAB>repo_key<TAB>target_repo" を出力 (1 repo 1 行) ---
-def cmd_tracks(argv):
+def cmd_tracks(argv: list[str]) -> int:
     config_path = argv[0] if argv else "config.toml"
     try:
         _, tracks = _load_tracks(config_path)
@@ -284,7 +288,7 @@ def cmd_tracks(argv):
 # 記述順 (tomllib は挿入順を保持する)。
 # 注意: 輪番の単位は line ではなく repos 行 — 現行 config は 1 line = 1 repo なので
 # 一致するが、1 line に複数 repos を書くとその line の頻度が上がる。
-def cmd_rotation_pick(argv):
+def cmd_rotation_pick(argv: list[str]) -> int:
     from datetime import date as _date
 
     if len(argv) < 2:
@@ -319,7 +323,7 @@ def cmd_rotation_pick(argv):
 
 
 # --- past-themes [past_topics_path] [config_path]: line 別直近 10 件の履歴を出力 ---
-def cmd_past_themes(argv):
+def cmd_past_themes(argv: list[str]) -> int:
     from collections import defaultdict
 
     past_path = argv[0] if len(argv) >= 1 else "past_topics.json"
@@ -377,7 +381,7 @@ def cmd_past_themes(argv):
 # --- line-brief <config_path> <track>: per-repo 実行 (ADR-0008) のプロンプト注入用に
 #     line 定義 (name / focus / sources / self_signals) を整形出力。context_files は
 #     冒頭で読む文脈ではなく、テーマ選定後に読む候補として別節に出す (ADR-0017) ---
-def cmd_line_brief(argv):
+def cmd_line_brief(argv: list[str]) -> int:
     if len(argv) < 2:
         print("usage: line-brief <config_path> <track>", file=sys.stderr)
         return 64
@@ -448,13 +452,13 @@ REASON_CODES = ("no_new_evidence", "thin_material", "fetch_failed", "carry_over"
 _CTRL_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
-def cmd_receipt_read(argv):
+def cmd_receipt_read(argv: list[str]) -> int:
     if len(argv) < 3:
         print("usage: receipt-read <path> <date> <track>", file=sys.stderr)
         return 64
     path, date_s, track = argv[:3]
 
-    def bad(msg):
+    def bad(msg: str) -> int:
         print(f"receipt-read: {msg}", file=sys.stderr)
         return 1
 
@@ -499,7 +503,7 @@ PAST_TOPIC_KEYS = ("date", "track", "title", "slug", "question", "answer_scope")
 _PAST_TOPIC_FIELD_MAX = 300
 
 
-def cmd_past_topics_append(argv):
+def cmd_past_topics_append(argv: list[str]) -> int:
     import os
     import tempfile
 
@@ -512,7 +516,7 @@ def cmd_past_topics_append(argv):
     past_path, receipt_path, date_s, track = argv[:4]
     report = argv[4] if len(argv) >= 5 else ""
 
-    def bad(msg):
+    def bad(msg: str) -> int:
         print(f"past-topics-append: {msg}", file=sys.stderr)
         return 1
 
@@ -530,7 +534,7 @@ def cmd_past_topics_append(argv):
     if not isinstance(rec, dict):
         return bad("receipt is not a JSON object")
 
-    def field(name):
+    def field(name: str) -> str:
         v = rec.get(name)
         if v is None or v == "":
             print(f"past-topics-append: WARN receipt has no {name}", file=sys.stderr)
@@ -581,7 +585,7 @@ REPO_ACTIVITY_MAX_LINES = 30
 REPO_ACTIVITY_MAX_CHARS = 2000
 
 
-def cmd_repo_activity(argv):
+def cmd_repo_activity(argv: list[str]) -> int:
     import subprocess
 
     if not argv:
@@ -640,11 +644,11 @@ def cmd_repo_activity(argv):
 VERIFY_KEYS = ("supported", "partial", "unsupported", "unverifiable", "edits")
 
 
-def _nonneg_int(v):
+def _nonneg_int(v: object) -> int:
     return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else 0
 
 
-def cmd_verify_read(argv):
+def cmd_verify_read(argv: list[str]) -> int:
     path = argv[0] if argv else ""
     d = None
     if path:
@@ -662,7 +666,7 @@ def cmd_verify_read(argv):
 
 # --- config-get <config_path> <section.key> [default]: config の 1 値を出力 ---
 # 値が無い・config が読めない場合は default (省略時は空行)。bool は true/false。
-def cmd_config_get(argv):
+def cmd_config_get(argv: list[str]) -> int:
     if len(argv) < 2:
         print("usage: config-get <config_path> <section.key> [default]", file=sys.stderr)
         return 64
@@ -694,7 +698,7 @@ def cmd_config_get(argv):
 # LLM による品質再採点や自動改変は行わない。
 
 
-def _pass_metrics(d):
+def _pass_metrics(d: object) -> dict[str, float]:
     """claude -p result JSON から 1 pass 分の metric dict を抽出する。"""
     d = _result_dict(d) or {}
     return {
@@ -707,7 +711,7 @@ def _pass_metrics(d):
     }
 
 
-def _load_metrics(metrics_path, include_test=False):
+def _load_metrics(metrics_path: str, include_test: bool = False) -> list[dict[str, object]]:
     """metrics.jsonl を list[dict] で返す。壊れた行は skip (収集は non-fatal)。
 
     source == "test" (DR_FORCE_TRACK / DR_ONLY_TRACK の試験 run) は既定で除く —
@@ -734,11 +738,13 @@ def _load_metrics(metrics_path, include_test=False):
     return records
 
 
-def _sum_pass_metrics(dicts):
+def _sum_pass_metrics(dicts: list[dict[str, float]]) -> dict[str, float] | None:
     """複数 run の _pass_metrics dict を合算する (per-repo 実行の pass2 集約)。"""
     if not dicts:
         return None
-    total = {k: 0 for k in ("cost", "turns", "duration_s", "tokens_in", "tokens_out", "searches")}
+    total: dict[str, float] = {
+        k: 0 for k in ("cost", "turns", "duration_s", "tokens_in", "tokens_out", "searches")
+    }
     for d in dicts:
         for k in total:
             total[k] += d.get(k, 0)
@@ -746,7 +752,7 @@ def _sum_pass_metrics(dicts):
     return total
 
 
-def _total_cost(record):
+def _total_cost(record: dict[str, object]) -> float:
     """record の pass1 / pass2 / clarity_pass から total_cost を合算する
     (live = metrics-append と rescue = metrics-backfill の共通定義)。"""
     return round(
@@ -770,7 +776,7 @@ LINE_STATE_KEYS = (
 )
 
 
-def _sum_verification(verifies):
+def _sum_verification(verifies: list[dict[str, object]]) -> dict[str, int] | None:
     """VERIFY 行群を合算する。行が無ければ None (呼2 が走らなかった日)。"""
     if not verifies:
         return None
@@ -793,7 +799,7 @@ def _sum_verification(verifies):
 # レコード互換のため旧フィールド名 fallback_used に記録する。
 # clarity_pass (ADR-0010): verdict やスコアは保存しない (in-loop 型 — 消費は
 # run 内で完結し、ここは発動事実のみ)。
-def cmd_metrics_append(argv):
+def cmd_metrics_append(argv: list[str]) -> int:
     from datetime import datetime
 
     if len(argv) < 5:
@@ -897,7 +903,7 @@ _SUMMARY_RE = re.compile(
 # --- metrics-backfill <metrics_path> <logs_dir>: 既存ログの SUMMARY 行から過去分を投入 ---
 # ログは 30 日ローテーションで消えるため、残存分を JSONL へ救済するワンショット。
 # 既存 metrics の (date, ts) と重複する run は skip する (再実行安全)。
-def cmd_metrics_backfill(argv):
+def cmd_metrics_backfill(argv: list[str]) -> int:
     import os
 
     if len(argv) < 2:
@@ -995,7 +1001,7 @@ def cmd_metrics_backfill(argv):
     return 0
 
 
-def _frontmatter_kind(text):
+def _frontmatter_kind(text: str) -> str:
     """先頭 YAML frontmatter の kind: を返す (無ければ article)。"""
     m = re.match(r"---\n(.*?)\n---", text, re.DOTALL)
     if m:
@@ -1014,7 +1020,7 @@ def _frontmatter_kind(text):
 # 必須節 (機会メモ) と本文長の soft を免除し、hard と出典数 soft は article と同じ。
 # 必須節は自由形式レポート (ADR-0009) の機械検査対象 — 機会メモのみ
 # (ソース節は hard 判定として別途検査)。本文の記述規律は人間 consumer が判断する。
-def cmd_report_lint(argv):
+def cmd_report_lint(argv: list[str]) -> int:
     import os
 
     if len(argv) < 2:
@@ -1103,7 +1109,7 @@ def cmd_report_lint(argv):
 # ingest 時に wiki/concept/*.md へ残る「FLAGGED」「一次未照合」注記を、
 # 同じ行ブロック内の [[<report-stem>]] リンクでレポート・line に逆引きする。
 # ingest 率は 98% で判別力がないため、品質信号はこの注記密度を使う (ADR-0006)。
-def cmd_wiki_quality_scan(argv):
+def cmd_wiki_quality_scan(argv: list[str]) -> int:
     import os
     from collections import defaultdict
     from datetime import date, timedelta
@@ -1132,7 +1138,7 @@ def cmd_wiki_quality_scan(argv):
     except (FileNotFoundError, ValueError):
         pass
 
-    def line_of_stem(stem):
+    def line_of_stem(stem: str) -> str:
         rest = stem[11:]  # "YYYY-MM-DD_" を除去
         for k in known_tracks:
             if rest == k or rest.startswith(k + "_"):
@@ -1189,7 +1195,7 @@ def cmd_wiki_quality_scan(argv):
 
 # --- review-age <state_path>: 前回 /dr-review からの経過日数を出力 ---
 # state ファイル (.notes/dr-review-state.json) が無ければ "never" を出力する。
-def cmd_review_age(argv):
+def cmd_review_age(argv: list[str]) -> int:
     from datetime import date
 
     if len(argv) < 1:
@@ -1213,20 +1219,20 @@ def cmd_review_age(argv):
 #   lint_hard_count / quiet_rate / receipt_count_min / unsupported_rate /
 #   unverifiable_rate / clarity_ok_rate (ADR-0017。line_states / verification /
 #   clarity_pass が None の record は分母から除く)
-def cmd_expect_check(argv):
+def cmd_expect_check(argv: list[str]) -> int:
     if len(argv) < 1:
         print("usage: expect-check <metrics_path>  (expects on stdin)", file=sys.stderr)
         return 64
     records = _load_metrics(argv[0])
 
-    def percentile(vals, p):
+    def percentile(vals: list[float], p: int) -> float | None:
         vals = sorted(vals)
         if not vals:
             return None
         i = min(len(vals) - 1, max(0, round(p / 100 * (len(vals) - 1))))
         return vals[i]
 
-    def metric_value(name, recs):
+    def metric_value(name: str, recs: list[dict[str, object]]) -> float | None:
         m = re.fullmatch(r"(pass1|pass2)_turns_(p50|p90|max)", name)
         if m:
             vals = [r[m.group(1)]["turns"] for r in recs if r.get(m.group(1))]
@@ -1277,7 +1283,7 @@ def cmd_expect_check(argv):
             return sum(1 for c in cps if c.get("ok")) / len(cps) if cps else None
         return None
 
-    def receipts(s):
+    def receipts(s: dict[str, int]) -> int:
         return sum(s.get(k, 0) for k in ("article", "brief", "quiet", "hold"))
 
     OPS = {
@@ -1333,7 +1339,7 @@ _BILLING_DEFAULTS = {
 }
 
 
-def _billing(cfg):
+def _billing(cfg: dict[str, object]) -> dict[str, str | float]:
     import os
 
     b = dict(_BILLING_DEFAULTS)
@@ -1364,7 +1370,7 @@ def _billing(cfg):
 
 # --- billing-config <config_path>: [billing] を検証して 1 行 TSV で出力 ---
 # mode \t env_file \t monthly_cap \t daily_cap \t call1_max \t call2_max。不正は rc 2。
-def cmd_billing_config(argv):
+def cmd_billing_config(argv: list[str]) -> int:
     if not argv:
         print("usage: billing-config <config_path>", file=sys.stderr)
         return 64
@@ -1389,7 +1395,7 @@ def cmd_billing_config(argv):
 # --- env-key <env_file>: env ファイルの ANTHROPIC_API_KEY の値を出力 ---
 # KEY=VALUE / export KEY=VALUE、前後の引用符を外す。無い・空・読めないは rc 1 (値は出さない)。
 # 呼ぶ側は出力を変数に取るだけで、ログにもエラー文にも値を載せない。
-def cmd_env_key(argv):
+def cmd_env_key(argv: list[str]) -> int:
     if not argv:
         print("usage: env-key <env_file>", file=sys.stderr)
         return 64
@@ -1413,7 +1419,7 @@ def cmd_env_key(argv):
     return 0
 
 
-def _spend_totals(ledger, date_s):
+def _spend_totals(ledger: str, date_s: str) -> tuple[float, float, int]:
     """(month_total, day_total, skipped_lines)。読めない行は数えて返す — 黙って捨てると
     その費用が累計から消え、上限の判定が甘くなる。台帳が無いのは 0 円 (初回)。"""
     month, day, skipped = 0.0, 0.0, 0
@@ -1443,7 +1449,7 @@ def _spend_totals(ledger, date_s):
 # JSON に total_cost_usd が無い (timeout で kill された・解析失敗) ときは、その呼び出しが使えた
 # 上限額 fallback_usd を "estimated": true 付きで記録する — 0 円にすると、使ったかもしれない額が
 # 累計から消えて上限の判定が甘くなる。追記した費用を出力。書けなければ rc 1。
-def cmd_spend_add(argv):
+def cmd_spend_add(argv: list[str]) -> int:
     import datetime
     import os
 
@@ -1481,7 +1487,7 @@ def cmd_spend_add(argv):
 # --- spend-gate <ledger> <date> <monthly_cap> <daily_cap> <reserve> ---
 # 次の line を始めてよいか。"ok|stop \t month_total \t day_total" を出力し、stop は rc 1。
 # 台帳が読めない・読めない行がある場合は rc 2 (上限を判定できない — 呼ぶ側は止める)。
-def cmd_spend_gate(argv):
+def cmd_spend_gate(argv: list[str]) -> int:
     if len(argv) < 5:
         print(
             "usage: spend-gate <ledger> <date> <monthly_cap> <daily_cap> <reserve>", file=sys.stderr
@@ -1503,7 +1509,7 @@ def cmd_spend_gate(argv):
     return 0 if ok else 1
 
 
-COMMANDS = {
+COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "error-fields": cmd_error_fields,
     "log-summary": cmd_log_summary,
     "vault-path": cmd_vault_path,
@@ -1532,7 +1538,7 @@ COMMANDS = {
 }
 
 
-def main(argv):
+def main(argv: list[str]) -> int:
     if not argv or argv[0] not in COMMANDS:
         print(f"usage: dr_pipeline.py <{' | '.join(COMMANDS)}> [args]", file=sys.stderr)
         return 64
