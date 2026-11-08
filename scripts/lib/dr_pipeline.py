@@ -2618,9 +2618,16 @@ AUDIT_NOTE_MAX_CHARS = 100_000
 AUDIT_EVIDENCE_MAX_CHARS = 60_000  # 根拠ファイルはここで切る (地図としてだけ使う)
 AUDIT_SENTENCE_MAX = 1000  # 候補の文の長さの上限 (それより長い候補は形が壊れているとみなす)
 AUDIT_FIELD_MAX = 500  # 記録だけに使う欄 (claim・引用・正しい値) の長さの上限
-# 置き換えで増減してよい字数: max(AUDIT_DELTA_MIN, 元の文の字数 × AUDIT_DELTA_RATIO)。最小限の訂正だけを通す
-AUDIT_DELTA_MIN = 40
-AUDIT_DELTA_RATIO = 0.5
+# 置き換えの規則 (_audit_replace) の値。試験 run (2026-11-08) で適用された 9 件は、文の最短が 21 字、編集距離の
+# 最大が 31 字の文で 17 (限定を書き足す訂正) と 107 字の文で 17 で、全件が下の値の内側にある
+AUDIT_SENTENCE_MIN = 15  # これより短い文 (1〜2 字の断片など) は置き換えない
+# 置き換えの編集距離 (字単位の Levenshtein) の上限: max(AUDIT_EDIT_MIN, 元の文の字数 × AUDIT_EDIT_RATIO)
+AUDIT_EDIT_MIN = 24
+AUDIT_EDIT_RATIO = 0.3
+# 置き換えでノート全体の出現数が増えてはいけない記号。vault の Obsidian で実行・埋め込み・隠し・HTML になる
+# 書式の入口: inline code と Dataview の inline JS (`$=…`)、HTML タグと comment、wikilink と埋め込み・画像、
+# %% の comment、HTML エンティティ (&#47; で URL を隠す)
+AUDIT_MARKUP_TOKENS = ("`", "<", ">", "[[", "![", "%", "$=", "&")
 AUDIT_CONFIDENCE = ("high", "medium", "low")  # 第 2 段に送る順
 AUDIT_VERDICTS = ("contradicts", "consistent", "unverifiable")
 # AUDIT 行 (audit-apply の 1 行目) の件数の欄。metrics の verification に audit_<key> で合算する
@@ -2642,7 +2649,11 @@ _AUDIT_MODEL_RE = re.compile(r"[A-Za-z0-9._\[\]-]{1,64}")
 _AUDIT_URL_RE = re.compile(r"https?://[^\s<>\"'`]{1,2040}")
 _AUDIT_CID_RE = re.compile(r"D[0-9]{1,3}")
 _AUDIT_FENCE_RE = re.compile(r"```(?:json)?[ \t]*\n(.*?)```", re.DOTALL)
-_MD_LINK_RE = re.compile(r"\[[^\]\n]*\]\([^)\n]*\)")
+# 置き換えの前後でノート全体を比べる対象 (_audit_replace)。URL は scheme の大文字小文字を問わず、空白・制御文字・
+# 引用符・<>・`・markdown link の閉じ括弧 ) ]・ASCII の外の文字 (URL の直後に続く日本語) で切る
+_ANY_URL_RE = re.compile(r"(?i:https?)://[^\x00-\x20\"'<>`)\]\x7f-\U0010ffff]+")
+_MD_LINK_TARGET_RE = re.compile(r"\[[^\]\n]*\]\(([^)\n]*)\)")
+_HEADING_LINE_RE = re.compile(r"^#{1,6}[ \t]", re.MULTILINE)
 
 AUDIT_PROMPT = """以下のノートを、システムプロンプトに追記された照合監査プロトコルに従って監査してください。
 
@@ -3018,40 +3029,93 @@ def cmd_audit_confirm_record(argv: list[str]) -> int:
     return 0
 
 
+def _edit_distance(a: str, b: str, cap: int) -> int:
+    """a と b の字単位の Levenshtein 距離。cap を超えると分かった時点で cap + 1 を返す。"""
+    if abs(len(a) - len(b)) > cap:
+        return cap + 1
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        if min(cur) > cap:
+            return cap + 1
+        prev = cur
+    return min(prev[-1], cap + 1)
+
+
+def _hidden_chars(s: str) -> int:
+    """表示されない書式文字 (ゼロ幅・bidi の制御・BOM などの Cf) と行・段落の区切り文字 (Zl / Zp) の数。"""
+    import unicodedata
+
+    return sum(1 for ch in s if unicodedata.category(ch) in ("Cf", "Zl", "Zp"))
+
+
+def _audit_fragment_reject(sentence: str, replacement: str) -> str | None:
+    """文と置き換え文だけで決まる規則 (_audit_replace の前半)。違反した規則の名前か None。"""
+    import unicodedata
+
+    if len(sentence) < AUDIT_SENTENCE_MIN:
+        return "short"
+    if replacement.count("\n") != sentence.count("\n"):
+        return "newline"
+    if any(unicodedata.category(ch) == "Cc" and ch != "\n" for ch in replacement):
+        return "control"
+    if _hidden_chars(replacement) > _hidden_chars(sentence):
+        return "invisible"
+    cap = int(max(AUDIT_EDIT_MIN, len(sentence) * AUDIT_EDIT_RATIO))
+    if _edit_distance(sentence, replacement, cap) > cap:
+        return "edit_distance"
+    return None
+
+
+def _note_markup(text: str) -> tuple[tuple[str, object], ...]:
+    """置き換えの前後で一致しなければならないノート全体の形 (規則の名前, 値)。URL と link 先は HTML
+    エンティティを戻してから取る (&#47; などで隠した URL も数える)。"""
+    import html
+
+    plain = html.unescape(text)
+    fixed_heads = len(_TAIL_MEMO_RE.findall(text)) + len(_TAIL_SOURCES_RE.findall(text))
+    return (
+        ("url_changed", sorted(_ANY_URL_RE.findall(plain))),
+        ("link_changed", _MD_LINK_TARGET_RE.findall(plain)),
+        ("emphasis_changed", (text.count("**"), text.count("`"))),
+        ("heading_changed", (len(_HEADING_LINE_RE.findall(text)), fixed_heads)),
+    )
+
+
 def _audit_replace(text: str, sentence: str, replacement: str) -> tuple[str | None, str | None]:
-    """確定した候補 1 件をノートに当てる。(置き換えた全文, None) か (None, 拒否の理由)。規則:
-    empty / unchanged = 置き換え文が空・元と同じ / newline = 改行の数が変わる / control = 改行以外の制御文字 /
-    url_changed・link_changed = 文中の URL の多重集合か markdown link の数が変わる (link を消す・足す置き換え) /
-    length = 字数の増減が max(AUDIT_DELTA_MIN, 元の字数 × AUDIT_DELTA_RATIO) を超える /
+    """確定した候補 1 件をノートに当てる。(置き換えた全文, None) か (None, 拒否の理由)。規則 (この順に見る):
+    empty / unchanged = 置き換え文が空・元と同じ /
     not_found・outside_body・ambiguous = 文が本文 (_report_body_span: frontmatter・題・機会メモ・ソース節の外) に
     ちょうど 1 回現れない (outside_body は本文の外にだけある) /
-    sections_changed = 置き換え後に frontmatter・機会メモ・ソース節が変わる (末尾固定節の見出しを作る置き換え)。"""
-    from collections import Counter
-
+    short = 文が AUDIT_SENTENCE_MIN 字より短い / newline = 改行の数が変わる / control = 改行以外の制御文字 /
+    invisible = ゼロ幅・bidi などの見えない文字が増える /
+    edit_distance = 編集距離が max(AUDIT_EDIT_MIN, 元の字数 × AUDIT_EDIT_RATIO) を超える /
+    markup = ノート全体で AUDIT_MARKUP_TOKENS のどれかが増える /
+    以下はノート全体の前後の比較 (断片の境界をまたぐ link・強調・見出しの破壊も拾う):
+    url_changed = URL の多重集合が変わる / link_changed = markdown link の link 先の並びが変わる /
+    emphasis_changed = ** か ` の数が変わる (対が崩れる) /
+    heading_changed = 見出し行の数か、末尾固定節と同じ見出し (## 機会メモ / ## ソース) の行の数が変わる
+    (_tail_split は最後の一致を固定節とみなすので、本文に同じ見出しを作る置き換えはここで止める)。"""
     if not replacement.strip():
         return None, "empty"
     if replacement == sentence:
         return None, "unchanged"
-    if replacement.count("\n") != sentence.count("\n"):
-        return None, "newline"
-    if _CTRL_RE.search(replacement.replace("\n", "")):
-        return None, "control"
-    if Counter(_URL_RE.findall(sentence)) != Counter(_URL_RE.findall(replacement)):
-        return None, "url_changed"
-    if len(_MD_LINK_RE.findall(sentence)) != len(_MD_LINK_RE.findall(replacement)):
-        return None, "link_changed"
-    if abs(len(replacement) - len(sentence)) > max(
-        AUDIT_DELTA_MIN, len(sentence) * AUDIT_DELTA_RATIO
-    ):
-        return None, "length"
     start, end = _report_body_span(text)
     body = text[start:end]
     n = body.count(sentence)
     if n != 1:
         return None, "ambiguous" if n > 1 else ("outside_body" if sentence in text else "not_found")
+    why = _audit_fragment_reject(sentence, replacement)
+    if why:
+        return None, why
     new = text[:start] + body.replace(sentence, replacement, 1) + text[end:]
-    if _note_parts(new) != _note_parts(text):
-        return None, "sections_changed"
+    if any(new.count(tok) > text.count(tok) for tok in AUDIT_MARKUP_TOKENS):
+        return None, "markup"
+    for (name, before), (_, after) in zip(_note_markup(text), _note_markup(new), strict=True):
+        if before != after:
+            return None, name
     return new, None
 
 

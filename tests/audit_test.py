@@ -5,7 +5,8 @@ SH は claude を 2 段で呼び、dr_pipeline.py の audit-* が prompt の組�
 食い違いとした候補 (confirmed) だけを audit-apply が _audit_replace の規則で置き換える。ここが検査する
 invariant:
 - 置き換えは本文にちょうど 1 回現れる文だけ。frontmatter・題・機会メモ・ソース節は変わらない
-- 置き換えは URL と markdown link を消さない・足さない。字数の増減に上限がある。空・改行の増減は拒否
+- 置き換えはノート全体の URL・link 先・強調と inline code の対・見出しを変えない。実行・埋め込み・HTML になる
+  記号と見えない文字を足さない。文の最小長と編集距離の上限がある。空・改行の増減は拒否
 - 第 2 段の prompt に第 1 段の理由と正しい値は入らない
 - どの段の失敗でもノートは呼2 の後のまま (audit-apply は常に rc 0)
 """
@@ -30,7 +31,7 @@ kind: article
 同じ文が 2 回ある。
 同じ文が 2 回ある。
 第 2 四半期の売上は前年より伸びた（https://example.com/q2）。
-締切の話はここでは扱わない。
+締切の話はこのノートでは扱わない。
 
 ## 機会メモ
 
@@ -157,7 +158,7 @@ def test_replace_once_in_body_keeps_fixed_sections():
         (
             S_REPORT,
             S_REPORT + "これは訂正の範囲を超えて段落を書き足すための長い追記で、" * 3,
-            "length",
+            "edit_distance",
         ),
         ("存在しない文。", "直した文。", "not_found"),
         ("欧州の 3 か国の資料", "欧州の 4 か国の資料", "outside_body"),
@@ -165,6 +166,28 @@ def test_replace_once_in_body_keeps_fixed_sections():
         ("kind: article", "kind: brief", "outside_body"),
         ("# 監査のテスト", "# 監査の題", "outside_body"),
         ("同じ文が 2 回ある。", "同じ文が 1 回ある。", "ambiguous"),
+        # 1 字の断片で語を差し替える
+        ("売", "買", "short"),
+        (S_REPORT, S_REPORT.replace("報告書は", "報告書は\x85"), "control"),
+        (S_REPORT, S_REPORT.replace("3", "4​"), "invisible"),
+        (S_REPORT, S_REPORT.replace("報告書", "‮報告書"), "invisible"),
+        # vault で実行・埋め込み・HTML になる書式を足す
+        (S_REPORT, S_REPORT.replace("3", "`$=dv.x`"), "markup"),
+        (S_REPORT, S_REPORT.replace("3", "$=dv.x"), "markup"),
+        (S_REPORT, S_REPORT.replace("3", "<img src=x>"), "markup"),
+        (S_REPORT, S_REPORT.replace("3", "&#60;b&#62;"), "markup"),
+        (S_REPORT, S_REPORT.replace("3", "[[秘密]]"), "markup"),
+        (S_REPORT, S_REPORT.replace("3", "![[x]]"), "markup"),
+        (S_REPORT, S_REPORT.replace("3", "%% x %%"), "markup"),
+        (S_STUDY, S_STUDY.replace(") として", ")<!----> として"), "markup"),
+        # URL は大文字の scheme でも数え、link 先のすり替えも URL の変化として止める
+        (S_REPORT, S_REPORT.replace("欧州の 3 か国", "HTTPS://evil.example"), "url_changed"),
+        (S_STUDY, S_STUDY.replace("https://example.com/", "HTTPS://exampl.com/"), "url_changed"),
+        # 断片が link をまたぐ: [ を外すと URL は残っても link が壊れる
+        ("調査は [観察研究](https://exa", "調査は 観察研究 (https://exa", "link_changed"),
+        # 本文に固定節と同じ見出しを作る (このノートは機会メモ・ソースの両節を持つ)
+        ("締切の話はこのノートでは扱わない。", "## 機会メモ", "heading_changed"),
+        ("締切の話はこのノートでは扱わない。", "## ソース", "heading_changed"),
     ],
 )
 def test_replace_rejects_with_named_reason(sentence, replacement, reason):
@@ -173,20 +196,100 @@ def test_replace_rejects_with_named_reason(sentence, replacement, reason):
 
 
 @pytest.mark.unit
-def test_replace_that_would_create_a_fixed_section_is_rejected():
-    note = NOTE.replace("## 機会メモ\n\n- 公募の締切は 2026-12-01（失効日 2026-12-01）。\n\n", "")
-    new, why = dr_pipeline._audit_replace(note, "締切の話はここでは扱わない。", "## 機会メモ")
-    assert (new, why) == (None, "sections_changed")
+@pytest.mark.parametrize(
+    ("line", "sentence", "replacement", "reason"),
+    [
+        # 対の片方だけを外す
+        (
+            "報告書は **2026-10-01** に欧州の 3 か国で公開された。",
+            "**2026-10-01** に欧州の 3 か国",
+            "2026-10-01** に欧州の 4 か国",
+            "emphasis_changed",
+        ),
+        (
+            "`v1.2` は 2026-10-01 に公開された版である。",
+            "`v1.2` は 2026-10-01 に公開された",
+            "v1.2` は 2026-10-02 に公開された",
+            "emphasis_changed",
+        ),
+        # 元からある & を使い回して HTML エンティティで URL を隠す (& の数は増えない)
+        (
+            "報告書は A &amp; B 社が 2026-10-01 に公開した資料である。",
+            "報告書は A &amp; B 社が 2026-10-01 に公開した",
+            "報告書は https:&#47;/e.x 社が 2026-10-01 に公開した",
+            "url_changed",
+        ),
+        # 本文の見出しを固定節の見出しに変える: 見出し行の数は同じでも、固定節と同じ見出しが 2 つになる
+        (
+            "## ソースの読み方について補足",
+            "## ソースの読み方について補足",
+            "## ソース",
+            "heading_changed",
+        ),
+    ],
+)
+def test_replace_compares_the_whole_note(line, sentence, replacement, reason):
+    note = NOTE.replace(S_REPORT, line)
+    new, why = dr_pipeline._audit_replace(note, sentence, replacement)
+    assert (new, why) == (None, reason)
 
 
 @pytest.mark.unit
-def test_replace_length_cap_scales_with_the_sentence():
-    # 短い文は AUDIT_DELTA_MIN 字まで増やせる
-    short = "報告書は 2026-10-01 に欧州の 3 か国で公開された。"
-    ok = short[:-1] + "（" + "あ" * (dr_pipeline.AUDIT_DELTA_MIN - 2) + "）。"
+def test_replace_that_would_create_a_fixed_section_is_rejected():
+    note = NOTE.replace("## 機会メモ\n\n- 公募の締切は 2026-12-01（失効日 2026-12-01）。\n\n", "")
+    new, why = dr_pipeline._audit_replace(note, "締切の話はこのノートでは扱わない。", "## 機会メモ")
+    assert (new, why) == (None, "heading_changed")
+
+
+@pytest.mark.unit
+def test_replace_minimum_sentence_length():
+    s = "欧州の 3 か国で公開された。"
+    assert len(s) == dr_pipeline.AUDIT_SENTENCE_MIN
+    assert dr_pipeline._audit_replace(NOTE, s, s.replace("3", "4"))[1] is None
+    assert dr_pipeline._audit_replace(NOTE, s[1:], s[1:].replace("3", "4"))[1] == "short"
+
+
+@pytest.mark.unit
+def test_replace_edit_cap_scales_with_the_sentence():
+    # 短い文は AUDIT_EDIT_MIN 字まで書き換えられる (限定を書き足す訂正)
+    short = S_REPORT
+    assert len(short) * dr_pipeline.AUDIT_EDIT_RATIO < dr_pipeline.AUDIT_EDIT_MIN
+    ok = short[:-1] + "（" + "あ" * (dr_pipeline.AUDIT_EDIT_MIN - 2) + "）。"
     assert dr_pipeline._audit_replace(NOTE, short, ok)[1] is None
-    over = short[:-1] + "（" + "あ" * (dr_pipeline.AUDIT_DELTA_MIN - 1) + "）。"
-    assert dr_pipeline._audit_replace(NOTE, short, over)[1] == "length"
+    over = short[:-1] + "（" + "あ" * (dr_pipeline.AUDIT_EDIT_MIN - 1) + "）。"
+    assert dr_pipeline._audit_replace(NOTE, short, over)[1] == "edit_distance"
+    # 長い文は字数 × AUDIT_EDIT_RATIO まで。置き換え (挿入でなく) も 1 字 1 つに数える
+    long_s = "長" * 200 + "。"
+    note = NOTE.replace(S_REPORT, long_s)
+    cap = int(len(long_s) * dr_pipeline.AUDIT_EDIT_RATIO)
+    ok = "短" * cap + long_s[cap:]
+    assert dr_pipeline._audit_replace(note, long_s, ok)[1] is None
+    over = "短" * (cap + 1) + long_s[cap + 1 :]
+    assert dr_pipeline._audit_replace(note, long_s, over)[1] == "edit_distance"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("a", "b", "cap", "dist"),
+    [
+        ("kitten", "sitting", 10, 3),
+        ("", "abc", 10, 3),
+        ("abc", "abc", 0, 0),
+        ("abcdef", "uvwxyz", 3, 4),  # cap を超えたら cap + 1
+        ("a", "abcdef", 2, 3),  # 長さの差だけで cap を超える
+    ],
+)
+def test_edit_distance(a, b, cap, dist):
+    assert dr_pipeline._edit_distance(a, b, cap) == dist
+
+
+@pytest.mark.unit
+def test_replace_keeps_percent_and_existing_markup_counts():
+    # 元からある記号の数を増やさない訂正は通る (割合の訂正・リンクの文言の訂正)
+    note = NOTE.replace(S_REPORT, "報告書は回答者の 52% が 2026-10-01 に同意したとした。")
+    s = "報告書は回答者の 52% が 2026-10-01 に同意したとした。"
+    new, why = dr_pipeline._audit_replace(note, s, s.replace("52%", "48%"))
+    assert why is None and "48%" in new
 
 
 @pytest.mark.unit
