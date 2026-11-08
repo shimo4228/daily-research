@@ -61,10 +61,21 @@ done
 # CLAUDE_TIMEOUT は daily-research.sh 自身が run_claude に付ける (持ち込みではない)
 env | grep -E '^(ANTHROPIC|CLAUDE)' | grep -v '^CLAUDE_TIMEOUT=' >> "$H/.leaked_env" || true
 if [ "$FORMAT" = "stream-json" ]; then
-  echo "{\"type\":\"system\",\"subtype\":\"init\",\"apiKeySource\":\"$(cat "$H/.key_source")\"}"
+  # 課金経路の probe: cwd と flag を記録し、init の後は「応答の生成」(sleep) に入る。probe が init で
+  # 止めれば .probe_completed は書かれない。.key_cwd の dir で起動されたときだけ key の経路を名乗る
+  printf '%s\t%s\n' "$(pwd -P)" "$*" >> "$H/.probes"
+  KS=$(cat "$H/.key_source")
+  if [ -f "$H/.key_cwd" ] && [ "$(pwd -P)" = "$(cat "$H/.key_cwd")" ]; then KS=ANTHROPIC_API_KEY; fi
+  echo "{\"type\":\"system\",\"subtype\":\"init\",\"apiKeySource\":\"$KS\"}"
+  sleep 20
   echo '{"type":"result","is_error":false}'
+  touch "$H/.probe_completed"
   exit 0
 fi
+# 本番の result JSON の OAuth の印 (.no_oauth_marker があると呼1 の result から外す)
+MARK=',"credential_expires_at":"2026-12-01T00:00:00Z"'
+CALL1_MARK=$MARK
+[ -f "$H/.no_oauth_marker" ] && CALL1_MARK=""
 case "$PROTOCOL" in
   *research-protocol.md)
     TRACK=$(printf '%s\n' "$PROMPT" | sed -n 's/^- line (track): //p' | head -1)
@@ -76,7 +87,7 @@ case "$PROTOCOL" in
     printf '| C1 | p | u | d | l | e | s | o | p | 本文確認済 |\n' > "$RUNS/$DATE.md"
     printf '{"date":"%s","line":"%s","status":"article","report":"%s","question":"新しい問い","reason":"","reason_code":"unspecified","answer_scope":"a","title":"t"}' \
       "$DATE" "$TRACK" "$NOTE" > "$RUNS/$DATE.json"
-    echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.5,"num_turns":20,"duration_ms":1000,"usage":{"input_tokens":10,"output_tokens":100}}'
+    echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.5,"num_turns":20,"duration_ms":1000,"usage":{"input_tokens":10,"output_tokens":100}'"$CALL1_MARK"'}'
     ;;
   *verification-protocol.md)
     NOTE=$(printf '%s\n' "$PROMPT" | sed -n 's/^対象ファイル (原稿): //p')
@@ -84,10 +95,10 @@ case "$PROTOCOL" in
     sleep 3  # sandbox-run の原稿の写し (1 秒ごとの監視) が先に取れること
     echo "呼2 の改稿" >> "$NOTE"
     echo '{"supported": 1, "partial": 0, "unsupported": 0, "unverifiable": 0, "edits": 1}' > "$VERIFY"
-    echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.1,"num_turns":5,"duration_ms":1000,"usage":{"input_tokens":5,"output_tokens":50}}'
+    echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.1,"num_turns":5,"duration_ms":1000,"usage":{"input_tokens":5,"output_tokens":50}'"$MARK"'}'
     ;;
   *)
-    echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.001,"num_turns":1}'
+    echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.001,"num_turns":1'"$MARK"'}'
     ;;
 esac
 MOCK
@@ -117,6 +128,20 @@ run_sandbox() {
   grep -q "display notification" "$OUT/notifications.log"
   # 掃除した環境: ANTHROPIC_* / CLAUDE* は claude に届かない
   [ ! -s "$MOCK_HOME/.leaked_env" ]
+  # 課金経路の probe: 本番の 3 条件 (呼1 = 接地 repo + safe mode / 呼2 = PROJECT_DIR + safe mode /
+  # auth probe = PROJECT_DIR) で 1 回ずつ。どれも init で止めた (応答の生成まで走っていない)
+  [ ! -f "$MOCK_HOME/.probe_completed" ]
+  [ "$(wc -l < "$MOCK_HOME/.probes" | tr -d ' ')" = "3" ]
+  local proj repo
+  proj="$(cd "$OUT" && pwd -P)/sandbox/project"
+  repo="$(cd "$REPO" && pwd -P)"
+  [ "$(sed -n 1p "$MOCK_HOME/.probes" | cut -f1)" = "$repo" ]
+  sed -n 1p "$MOCK_HOME/.probes" | grep -q -- '--safe-mode'
+  [ "$(sed -n 2p "$MOCK_HOME/.probes" | cut -f1)" = "$proj" ]
+  sed -n 2p "$MOCK_HOME/.probes" | grep -q -- '--safe-mode'
+  [ "$(sed -n 3p "$MOCK_HOME/.probes" | cut -f1)" = "$proj" ]
+  refute_grep -q -- '--safe-mode' <<< "$(sed -n 3p "$MOCK_HOME/.probes")"
+  python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert [r["ok"] for r in m["call_auth"]] == [True, True], m["call_auth"]' "$OUT/meta.json"
   # 当日の古い receipt は写さない。本物側の vault・state は無変更
   [ -z "$(ls -A "$MOCK_HOME/real-vault/daily-research")" ]
   grep -q '"stale": true' "$FAKE_MAIN/state/demo/runs/2026-08-13.json"
@@ -131,6 +156,24 @@ run_sandbox() {
   run_sandbox
   [ "$status" -eq 2 ]
   [ ! -f "$OUT/sandbox/project/logs/2026-08-13.log" ]
+  # 最初の probe で止め、応答の生成まで走らせていない・残りの probe は起動しない
+  [ ! -f "$MOCK_HOME/.probe_completed" ]
+  [ "$(wc -l < "$MOCK_HOME/.probes" | tr -d ' ')" = "1" ]
+}
+
+@test "sandbox-run: a key supplied only in call 1's cwd (the target repo) is caught before the run" {
+  (cd "$REPO" && pwd -P) > "$MOCK_HOME/.key_cwd"
+  run_sandbox
+  [ "$status" -eq 2 ]
+  [ ! -f "$OUT/sandbox/project/logs/2026-08-13.log" ]
+  grep -q $'^auth_probe_call1\tANTHROPIC_API_KEY' "$OUT/sandbox/meta.tsv"
+}
+
+@test "sandbox-run: a call result without the OAuth marker makes the run invalid" {
+  touch "$MOCK_HOME/.no_oauth_marker"
+  run_sandbox
+  [ "$status" -eq 2 ]
+  python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert m["valid"] is False and [r["ok"] for r in m["call_auth"]] == [False, True], m["call_auth"]' "$OUT/meta.json"
 }
 
 @test "sandbox-run: refuses a non-empty output dir and a missing line" {

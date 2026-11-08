@@ -100,11 +100,11 @@ def test_line_history_includes_aliases_in_date_order():
 LOG = """[2026-11-08 05:00:01] === Starting daily research ===
 [2026-11-08 05:00:01] Billing: subscription (Max plan OAuth)
 [2026-11-08 05:00:09] === Line: desire (/repos/desire) ===
-{"type":"result","is_error":true,"num_turns":3}
+{"type":"result","is_error":true,"num_turns":3,"credential_expires_at":"2026-12-01T00:00:00Z"}
 [2026-11-08 05:01:00] WARN: Line desire failed (E_FATAL, exit 1) — retrying once
-{"type":"result","is_error":false,"num_turns":28,"total_cost_usd":0.8}
+{"type":"result","is_error":false,"num_turns":28,"total_cost_usd":0.8,"credential_expires_at":"2026-12-01T00:00:00Z"}
 [2026-11-08 05:13:43] === Clarity pass: 2026-11-08_desire_x.md ===
-{"type":"result","is_error":false,"num_turns":8}
+{"type":"result","is_error":false,"num_turns":8,"credential_expires_at":"2026-12-01T00:00:00Z"}
 """
 
 
@@ -119,17 +119,66 @@ def test_parse_log_splits_call1_attempts_and_call2():
 
 
 @pytest.mark.unit
-def test_api_key_source_reads_the_init_event():
+def test_init_auth_source_reads_only_the_init_event():
     init = {"type": "system", "subtype": "init", sandbox_lib.INIT_AUTH_FIELD: "none"}
-    stream = json.dumps(init) + '\n{"type":"result"}\n'
-    assert sandbox_lib.api_key_source(stream) == "none"
-    assert sandbox_lib.api_key_source("not json\n") == ""
+    assert sandbox_lib.init_auth_source(json.dumps(init) + "\n") == "none"
+    assert sandbox_lib.init_auth_source('{"type":"result"}') is None
+    assert sandbox_lib.init_auth_source("not json") is None
+
+
+def _fake_cli(tmp_path, body):
+    cli = tmp_path / "fake-claude"
+    cli.write_text("#!/bin/bash\n" + body, encoding="utf-8")
+    cli.chmod(0o755)
+    return str(cli)
+
+
+@pytest.mark.unit
+def test_auth_probe_stops_at_init_without_waiting_for_the_result(tmp_path):
+    """init を読んだら止める: 応答の生成 (sleep の後の result と完了印) まで走らせない。cwd は渡したもの。"""
+    work = tmp_path / "work"
+    work.mkdir()
+    done = tmp_path / "completed"
+    init = json.dumps({"type": "system", "subtype": "init", sandbox_lib.INIT_AUTH_FIELD: "none"})
+    # 子 (sleep) を先に起こして pid を残す — group ごと止まり、孤児が残らないことも見る
+    cli = _fake_cli(
+        tmp_path,
+        f"pwd -P > '{tmp_path}/cwd'\nsleep 20 &\necho $! > '{tmp_path}/child'\n"
+        f"echo '{init}'\nwait\necho '{{\"type\":\"result\"}}'\ntouch '{done}'\n",
+    )
+    t0 = time.monotonic()
+    assert sandbox_lib.auth_probe([cli], str(work), timeout_s=10) == ("none", "init")
+    assert time.monotonic() - t0 < 8
+    assert not done.exists()
+    assert (tmp_path / "cwd").read_text().strip() == str(work.resolve())
+    child = int((tmp_path / "child").read_text())
+    for _ in range(40):
+        try:
+            os.kill(child, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    else:
+        pytest.fail(f"the probe left its child {child} running")
+
+
+@pytest.mark.unit
+def test_auth_probe_times_out_and_reports_a_missing_init(tmp_path):
+    t0 = time.monotonic()
+    assert sandbox_lib.auth_probe([_fake_cli(tmp_path, "sleep 20\n")], str(tmp_path), 1) == (
+        "",
+        "timeout",
+    )
+    assert time.monotonic() - t0 < 6
+    quiet = _fake_cli(tmp_path, "echo not-json\n")
+    assert sandbox_lib.auth_probe([quiet], str(tmp_path), 5) == ("", "exited-without-init")
+    assert sandbox_lib.cmd_auth_probe(["--cwd", str(tmp_path)]) == 64
 
 
 # === collect ===
 
 
-def _fake_run(tmp_path, billing_line="subscription (Max plan OAuth)", auth_source="none"):
+def _fake_run(tmp_path, billing_line="subscription (Max plan OAuth)", auth_source="none", log=LOG):
     """sandbox の run 後の状態を作る。(args, marker の後に書いた本物側の dir) を返す。"""
     proj, out, report = tmp_path / "proj", tmp_path / "out", tmp_path / "vault" / "dr"
     real_report = tmp_path / "real" / "dr"
@@ -139,7 +188,7 @@ def _fake_run(tmp_path, billing_line="subscription (Max plan OAuth)", auth_sourc
     marker.touch()
     old = time.time() - 60
     os.utime(marker, (old, old))
-    log = LOG.replace("subscription (Max plan OAuth)", billing_line)
+    log = log.replace("subscription (Max plan OAuth)", billing_line)
     (proj / "logs" / "2026-11-08.log").write_text(log, encoding="utf-8")
     runs = proj / "state" / "desire" / "runs"
     (runs / "2026-11-08.json").write_text('{"status": "brief"}', encoding="utf-8")
@@ -176,19 +225,29 @@ def test_collect_gathers_artifacts_and_validates(tmp_path):
         assert (out / name).is_file(), name
     assert json.loads((out / "metrics.json").read_text())["date"] == "2026-11-08"
     assert json.loads((out / "meta.json").read_text())["billing_ok"] is True
+    assert [r["call"] for r in meta["call_auth"]] == ["call1#1", "call1#2", "call2#1"]
+    assert all(r["ok"] for r in meta["call_auth"])
+
+
+_SUB = "subscription (Max plan OAuth)"
+_MARK = ',"credential_expires_at":"2026-12-01T00:00:00Z"'
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    "billing_line,key_source",
+    "billing_line,key_source,log",
     [
-        ("api (key from /x/env; caps …)", "none"),
-        ("subscription (Max plan OAuth)", "ANTHROPIC_API_KEY"),
+        ("api (key from /x/env; caps …)", "none", LOG),
+        (_SUB, "ANTHROPIC_API_KEY", LOG),
+        # 呼2 の result に OAuth の印が無い (= key の経路で走った呼び出し)
+        (_SUB, "none", LOG.replace('"num_turns":8' + _MARK, '"num_turns":8')),
+        # result が key の経路を名乗る版
+        (_SUB, "none", LOG.replace('"num_turns":3', '"num_turns":3,"apiKeySource":"x"')),
     ],
-    ids=["log-says-api", "probe-saw-a-key"],
+    ids=["log-says-api", "probe-saw-a-key", "result-without-oauth-marker", "result-names-a-key"],
 )
-def test_collect_marks_a_non_subscription_run_invalid(tmp_path, billing_line, key_source):
-    args, _ = _fake_run(tmp_path, billing_line, key_source)
+def test_collect_marks_a_non_subscription_run_invalid(tmp_path, billing_line, key_source, log):
+    args, _ = _fake_run(tmp_path, billing_line, key_source, log)
     rc, meta = sandbox_lib.collect(args)
     assert rc == sandbox_lib.RC_BILLING_INVALID
     assert meta["valid"] is False

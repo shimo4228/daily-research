@@ -7,8 +7,8 @@ sandbox-run.sh は本番の scripts/daily-research.sh を、run ごとに作る 
 - rewrite-config: MAIN の config.toml を写し、[billing] mode と [general] vault_path だけを書き換える。
   書き換え後を tomllib で読み直し、その 2 値以外が元と一致することを検査する (一致しなければ書かない)
 - line-history: past_topics.json から 1 line 分 (aliases を含む) の履歴を抜き出す (eval の重複判定用)
-- api-key-source: claude -p --output-format stream-json の init event から apiKeySource を出す
-  ("none" = OAuth = サブスク。key の経路なら "ANTHROPIC_API_KEY" 等)
+- auth-probe: claude -p --output-format stream-json を起動し、init event の apiKeySource を読んだ時点で
+  止める ("none" = OAuth = サブスク。key の経路なら "ANTHROPIC_API_KEY" 等)。timeout 付き
 - collect: run 後の成果物を出力 dir に集め、meta.json を書き、課金経路と隔離を検査する
 
 本番の scripts/lib/ は import しない — 試す側のコード (git ref / 作業ツリー) が変わっても、道具の
@@ -134,30 +134,149 @@ def cmd_line_history(argv):
     return 0
 
 
-# --- api-key-source -------------------------------------------------------------------
+# --- auth-probe -----------------------------------------------------------------------
 
 # claude の stream-json init event で認証の経路を表すキー ("none" = OAuth)
 INIT_AUTH_FIELD = "apiKeySource"
+# 呼び出しの result JSON にだけ出る OAuth の印。as-of 2026-11-08 (claude 2.1.319) の実測: api 課金の
+# 本番 result 64 件 (2026-10-30〜11-08 のログ) に 0 件、サブスクの sandbox result 4 件に 4 件。
+# 版が変わって消えたら、collect は run を無効の側に倒す (課金経路を確かめられない run を有効にしない)
+OAUTH_RESULT_FIELD = "credential_expires_at"
+AUTH_PROBE_TIMEOUT_S = 60
 
 
-def api_key_source(stream_text):
-    """stream-json 出力の init event の INIT_AUTH_FIELD の値。見つからなければ ""。"""
-    for raw in stream_text.splitlines():
-        raw = raw.strip()
-        if not raw.startswith("{"):
-            continue
+def init_auth_source(raw):
+    """stream-json の 1 行が init event なら INIT_AUTH_FIELD の値 (str)、そうでなければ None。"""
+    raw = raw.strip()
+    if not raw.startswith("{"):
+        return None
+    try:
+        d = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(d, dict) and d.get("type") == "system" and d.get("subtype") == "init":
+        return str(d.get(INIT_AUTH_FIELD, ""))
+    return None
+
+
+def _stop_group(proc):
+    """proc の process group (start_new_session で作ったもの) を止める: SIGTERM → leader を最大 3 秒待つ →
+    group の残りを SIGKILL。leader が止まった後も SIGKILL を送るのは、SIGTERM と同時に fork された子が
+    signal を受けずに group に残るから (実測: mock の sleep が孤児で残った)。"""
+    import signal
+    import subprocess
+
+    def signal_group(sig):
         try:
-            d = json.loads(raw)
-        except json.JSONDecodeError:
-            continue
-        if d.get("type") == "system" and d.get("subtype") == "init":
-            return str(d.get(INIT_AUTH_FIELD, ""))
-    return ""
+            os.killpg(proc.pid, sig)
+        except (ProcessLookupError, PermissionError):
+            pass  # ESRCH = group が空。macOS は zombie だけの group に EPERM を返す
+
+    if proc.poll() is None:
+        signal_group(signal.SIGTERM)
+        try:
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            pass
+    signal_group(signal.SIGKILL)
+    proc.wait()
 
 
-def cmd_api_key_source(argv):
-    print(api_key_source(sys.stdin.read()))
+def auth_probe(cmd, cwd, timeout_s=AUTH_PROBE_TIMEOUT_S):
+    """cmd (claude -p … --output-format stream-json --verbose) を cwd で起動し、最初の init event の
+    INIT_AUTH_FIELD を読んだ時点で process group ごと止める。init はセッションの最初の event で、
+    model の応答 (result) を待たない — key が混じった環境でも、拒否の前に 1 回分の応答を生成させない。
+    timeout_s までに init が来なければ止める。戻り値は (value, reason)、reason は
+    "init" / "timeout" / "exited-without-init"。"""
+    import queue
+    import subprocess
+    import threading
+    import time
+
+    proc = subprocess.Popen(
+        cmd,
+        cwd=cwd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        text=True,
+        errors="replace",
+    )
+    lines = queue.Queue()
+
+    def pump():
+        for raw in proc.stdout:
+            lines.put(raw)
+        lines.put(None)
+
+    threading.Thread(target=pump, daemon=True).start()
+    deadline = time.monotonic() + timeout_s
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return "", "timeout"
+            try:
+                raw = lines.get(timeout=remaining)
+            except queue.Empty:
+                return "", "timeout"
+            if raw is None:
+                return "", "exited-without-init"
+            value = init_auth_source(raw)
+            if value is not None:
+                return value, "init"
+    finally:
+        _stop_group(proc)
+
+
+def cmd_auth_probe(argv):
+    """auth-probe --cwd <dir> [--timeout <s>] -- <cmd…>。stdout に "value<TAB>reason" を 1 行出す。"""
+    usage = "usage: auth-probe --cwd <dir> [--timeout <seconds>] -- <command…>"
+    if "--" not in argv:
+        print(usage, file=sys.stderr)
+        return 64
+    i = argv.index("--")
+    opts, cmd = argv[:i], argv[i + 1 :]
+    cwd, timeout_s = None, float(AUTH_PROBE_TIMEOUT_S)
+    it = iter(opts)
+    for flag in it:
+        if flag == "--cwd":
+            cwd = next(it, None)
+        elif flag == "--timeout":
+            timeout_s = float(next(it, "0") or 0)
+        else:
+            print(usage, file=sys.stderr)
+            return 64
+    if not cmd or not cwd or not os.path.isdir(cwd) or timeout_s <= 0:
+        print(usage, file=sys.stderr)
+        return 64
+    try:
+        value, reason = auth_probe(cmd, cwd, timeout_s)
+    except OSError as e:
+        value, reason = "", f"spawn-failed ({type(e).__name__})"
+    print(f"{value}\t{reason}")
     return 0
+
+
+def call_auth(parsed):
+    """呼1 / 呼2 の result JSON ごとの課金経路の印。ok = INIT_AUTH_FIELD が無いか "none"、かつ
+    OAUTH_RESULT_FIELD がある。本番の呼び出しは --output-format json なので init event は残らず、
+    result に INIT_AUTH_FIELD が出る版でだけそれも見る。"""
+    rows = []
+    for call in ("call1", "call2"):
+        for i, d in enumerate(parsed[call], 1):
+            source = d.get(INIT_AUTH_FIELD)
+            marker = OAUTH_RESULT_FIELD in d
+            rows.append(
+                {
+                    "call": f"{call}#{i}",
+                    INIT_AUTH_FIELD: source,
+                    "oauth_marker": marker,
+                    "ok": source in (None, "none") and marker,
+                }
+            )
+    return rows
 
 
 # --- collect --------------------------------------------------------------------------
@@ -333,12 +452,17 @@ def _check_isolation(a, meta):
 
 def collect(a):
     """run 後の集約。戻り値は (rc, meta)。rc: 0 = 有効 / 2 = 課金経路が subscription と確認できない /
-    4 = 隔離の外に新しい file。meta.json は rc に関わらず書く。"""
+    4 = 隔離の外に新しい file。meta.json は rc に関わらず書く。
+    課金経路は 3 つの独立な証拠の積: config 由来のログ行 (Billing:)・事前 probe の init event・
+    呼び出しごとの result JSON の印 (call_auth)。"""
     meta = _read_meta_tsv(a.get("meta_tsv"))
     _collect_artifacts(a, meta)
     parsed = _collect_calls(a, meta)
+    meta["call_auth"] = call_auth(parsed)
     billing_ok = (
-        parsed["billing"] == [BILLING_SUBSCRIPTION] and meta.get("api_key_source") == "none"
+        parsed["billing"] == [BILLING_SUBSCRIPTION]
+        and meta.get("api_key_source") == "none"
+        and all(r["ok"] for r in meta["call_auth"])
     )
     meta["billing_ok"] = billing_ok
     isolation_ok = _check_isolation(a, meta)
@@ -393,7 +517,7 @@ def cmd_collect(argv):
 COMMANDS = {
     "rewrite-config": cmd_rewrite_config,
     "line-history": cmd_line_history,
-    "api-key-source": cmd_api_key_source,
+    "auth-probe": cmd_auth_probe,
     "collect": cmd_collect,
 }
 

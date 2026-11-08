@@ -18,8 +18,10 @@
 #   (lib/sandbox_lib.py rewrite-config が他の値の一致を検査する)。実行前に billing-config で再検査する
 # - 実行環境は env -i で HOME / USER / LOGNAME / LANG / TMPDIR / PATH と試験 seam だけ (ANTHROPIC_* と
 #   CLAUDE* を持ち込まない)。osascript は shim が受けて <out>/notifications.log に残す
-# - 実行前に stream-json の init event で apiKeySource = none (OAuth) を確かめ、実行後にログの
-#   "Billing: subscription" を確かめる。どちらかが欠ければ結果は無効 (exit 2)
+# - 実行前に、本番の呼1 / 呼2 / auth probe と同じ cwd・flag で claude を起動し、stream-json の init event で
+#   apiKeySource = none (OAuth) を確かめる (init で止めて応答を待たない)。実行後にログの
+#   "Billing: subscription" と、呼び出しごとの result JSON の OAuth の印を確かめる。どれかが欠ければ
+#   結果は無効 (exit 2)
 # - 実行後、本物の vault のレポート dir・MAIN の state / logs / past_topics / metrics / config・接地 repo に
 #   run 開始より新しい file が無いことを確かめる (あれば exit 4)
 #
@@ -193,15 +195,37 @@ if [ "$PREPARE_ONLY" = "1" ]; then
   exit 0
 fi
 
-# 課金経路の事前確認: 同じ環境で安い 1 turn を stream-json で呼び、init event の apiKeySource を見る
-PROBE=$(cd "$SANDBOX" && "${CLEAN_ENV[@]}" "$CLAUDE_BIN" -p ok --max-turns 1 --model haiku \
-  --output-format stream-json --verbose --no-session-persistence < /dev/null 2>/dev/null) || true
-AUTH_SOURCE=$(printf '%s' "$PROBE" | "$PY" "$SANDBOX_PY" api-key-source)
+# 課金経路の事前確認。key は env だけでなく cwd の .claude/settings*.json (env / apiKeyHelper) からも
+# 入るので、本番が claude を起動する 3 つの条件をそれぞれ probe する:
+#   call1    = 呼1 の cwd (repo line は接地 repo、ecosystem line は state/<line>) + --safe-mode
+#   call2    = 呼2 の cwd (PROJECT_DIR) + --safe-mode
+#   dr_probe = daily-research.sh 自身の auth probe (cwd = PROJECT_DIR、--safe-mode なし)
+# auth-probe は stream-json の init event を読んだ時点で claude を止め、応答を待たない (timeout 付き)。
+# 最初に none 以外を見た probe で止め、残りは起動しない
+if [ "$LINE_MODE" = "ecosystem" ]; then CALL1_CWD="$PROJ/state/$LINE"; else CALL1_CWD="$TARGET_REPO"; fi
+[ -d "$CALL1_CWD" ] || die "call 1 cwd does not exist: $CALL1_CWD"
+PROBE_TIMEOUT_S=60
+AUTH_SOURCE=none
+probe_auth() {  # $1 = label, $2 = cwd, $3… = 本番の呼び出しと揃える flag
+  local label=$1 cwd=$2 res value reason
+  shift 2
+  [ "$AUTH_SOURCE" = "none" ] || return 0
+  res=$("${CLEAN_ENV[@]}" "$PY" "$SANDBOX_PY" auth-probe --cwd "$cwd" --timeout "$PROBE_TIMEOUT_S" -- \
+    "$CLAUDE_BIN" -p ok --max-turns 1 --model haiku ${1+"$@"} \
+    --output-format stream-json --verbose --no-session-persistence) || res=""
+  value=${res%%$'\t'*}
+  reason=${res#*$'\t'}
+  meta "auth_probe_$label" "$value ($reason) cwd=$cwd"
+  if [ "$value" != "none" ]; then
+    AUTH_SOURCE=${value:-unknown}
+    echo "sandbox-run: probe $label (cwd $cwd): apiKeySource is '$AUTH_SOURCE' ($reason), not none (OAuth) — refusing to run" >&2
+  fi
+}
+probe_auth call1 "$CALL1_CWD" --safe-mode
+probe_auth call2 "$PROJ" --safe-mode
+probe_auth dr_probe "$PROJ"
 meta api_key_source "$AUTH_SOURCE"
-if [ "$AUTH_SOURCE" != "none" ]; then
-  echo "sandbox-run: apiKeySource is '${AUTH_SOURCE:-unknown}', not none (OAuth) — refusing to run" >&2
-  exit 2
-fi
+[ "$AUTH_SOURCE" = "none" ] || exit 2
 
 # === 実行 ===
 MARKER="$SANDBOX/.run-start"
