@@ -327,10 +327,73 @@ def test_split_note_and_body_metrics(tmp_path):
 
 
 @pytest.mark.unit
-def test_date_re_ignores_ranges_and_percentages():
-    assert not eval_run.DATE_RE.search("差は 10-20% の範囲")
-    assert eval_run.DATE_RE.search("11 月 4 日に公開")
-    assert eval_run.DATE_RE.search("released Nov 4, 2026")
+@pytest.mark.parametrize(
+    "text",
+    [
+        "差は 10-20% の範囲",
+        "1500-3000 件の投稿",
+        "10-20 倍に増えた",
+        "10-12件",
+        "Market 2026 report",
+    ],
+)
+def test_date_re_ignores_ranges_and_non_dates(text):
+    assert not eval_run.DATE_RE.search(text)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "text",
+    [
+        "2026-11-04 に公開",
+        "2026/11/4 の記事",
+        "2026 年 11 月の発表",
+        "11 月 4 日に公開",
+        "09-03 の system card",
+        "released Nov 4, 2026",
+        "on 4 November 2026",
+        "（May 2026）",
+    ],
+)
+def test_date_re_finds_dates(text):
+    assert eval_run.DATE_RE.search(text)
+
+
+@pytest.mark.unit
+def test_should_counts_prescriptions_but_not_adjectival_idioms():
+    should = eval_run.FORBIDDEN["should"]
+    assert len(should.findall("驚くべき速さで、恐るべき規模。然るべき手続きと来るべき変化")) == 0
+    assert len(should.findall("導入すべきだ。見直すべき点がある")) == 2
+
+
+@pytest.mark.unit
+def test_calls_metrics_sums_every_attempt(tmp_path):
+    a1 = {"total_cost_usd": 0.5, "num_turns": 3, "is_error": True, "usage": {"output_tokens": 10}}
+    a2 = {
+        "total_cost_usd": 0.81,
+        "num_turns": 28,
+        "is_error": False,
+        "usage": {"output_tokens": 90},
+    }
+    (tmp_path / "call1.attempt1.json").write_text(json.dumps(a1), encoding="utf-8")
+    (tmp_path / "call1.json").write_text(json.dumps(a2), encoding="utf-8")
+    m = eval_run.calls_metrics(eval_run.call_results(str(tmp_path), "call1"))
+    assert m["attempts"] == 2 and m["cost_usd"] == 1.31 and m["turns"] == 31
+    assert m["output_tokens"] == 100 and m["is_error"] is False
+    assert eval_run.calls_metrics(eval_run.call_results(str(tmp_path), "call2")) is None
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("draft_state,expect", [("clean", True), ("after-clarity-start", False)])
+def test_evaluate_uses_the_draft_only_when_it_was_taken_before_call2(tmp_path, draft_state, expect):
+    note = "2026-11-08_desire_x.md"
+    meta = {"date": "2026-11-08", "line": "desire", "note_name": note, "draft": draft_state}
+    (tmp_path / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    (tmp_path / note).write_text(NOTE + "\n追記\n", encoding="utf-8")
+    (tmp_path / "draft.md").write_text(NOTE, encoding="utf-8")
+    r = eval_run.evaluate(str(tmp_path))
+    assert (r["draft_vs_final"] is not None) is expect
+    assert (r["draft"] is not None) is expect
 
 
 @pytest.mark.unit

@@ -28,18 +28,30 @@ sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 import dr_pipeline  # noqa: E402 — 同じ checkout の parser-of-record (searches・receipt の契約)
 
 # 本文の段落が日付を持つか (ISO / スラッシュ / 年月日 / 月日 / 英語の月名)。as-of の付与は
-# 両プロトコルの大原則「すべての claim に as-of 日付を付ける」(repo 大原則 4 / ecosystem 大原則 3)
-_MONTHS = r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?"
+# 両プロトコルの大原則「すべての claim に as-of 日付を付ける」(repo 大原則 4 / ecosystem 大原則 3)。
+# 年は 19xx / 20xx、月は 1-12、日は 1-31 に限る (「1500-3000」のような数の範囲を日付と数えない)
+_MONTHS = (
+    r"(?<![A-Za-z])(?:January|February|March|April|May|June|July|August|September|October"
+    r"|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec)\.?"
+)
+_YEAR = r"(?<!\d)(?:19|20)\d{2}"
+_MON = r"(?:1[0-2]|0?[1-9])"
+_DAY = r"(?:3[01]|[12]\d|0?[1-9])"
+# MM-DD の直後に倍率・単位・百分率が来るのは数の範囲 (「10-20 倍」「10-12 件」)
+_NOT_A_RANGE = (
+    r"(?![\d.%\-])(?!\s*(?:倍|%|％|件|回|人|本|個|社|円|ドル|字|行|語|分|秒|時間|日間|週|か月|ヶ月"
+    r"|年|歳|点|ページ|×|x(?![A-Za-z])))"
+)
 DATE_RE = re.compile(
-    r"\d{4}\s*-\s*\d{1,2}(?:\s*-\s*\d{1,2})?"
-    r"|\d{4}\s*/\s*\d{1,2}(?:\s*/\s*\d{1,2})?"
-    r"|\d{4}\s*年\s*\d{1,2}\s*月"
-    r"|\d{1,2}\s*月\s*\d{1,2}\s*日"
+    rf"{_YEAR}\s*-\s*{_MON}(?:\s*-\s*{_DAY})?(?!\d)"
+    rf"|{_YEAR}\s*/\s*{_MON}(?:\s*/\s*{_DAY})?(?!\d)"
+    rf"|{_YEAR}\s*年\s*{_MON}\s*月"
+    rf"|(?<!\d){_MON}\s*月\s*{_DAY}\s*日"
     # 年を略した MM-DD (ノートは同年の日付を "09-03" と書く)。範囲・小数・百分率は除く
-    r"|(?<![\d.\-])(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?![\d.%\-])"
-    rf"|{_MONTHS}\s+\d{{1,2}},?\s+\d{{4}}"
-    rf"|\d{{1,2}}\s+{_MONTHS}\s+\d{{4}}"
-    rf"|{_MONTHS}\s+\d{{4}}"
+    rf"|(?<![\d.\-])(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]){_NOT_A_RANGE}"
+    rf"|{_MONTHS}\s+\d{{1,2}},?\s+(?:19|20)\d{{2}}(?!\d)"
+    rf"|(?<!\d)\d{{1,2}}\s+{_MONTHS}\s+(?:19|20)\d{{2}}(?!\d)"
+    rf"|{_MONTHS}\s+(?:19|20)\d{{2}}(?!\d)"
 )
 MIN_PARAGRAPH_CHARS = 30  # これより短い段落 (見出しの続き・1 語の行) は付与率の分母に入れない
 
@@ -48,7 +60,10 @@ MIN_PARAGRAPH_CHARS = 30  # これより短い段落 (見出しの続き・1 語
 # - no_precedent: 「『先行例なし』『誰もやっていない』と断定しない」(Step 4 の 7 / 8)
 # - ghost_ref: 「座標だけの参照（『指針(b)』『N 日前のレポート』『watchlist の 3 番』）は書かない」(文体規律 3)
 FORBIDDEN = {
-    "should": re.compile(r"べき"),
+    # 連体の慣用 (驚くべき・恐るべき・然るべき・来るべき 等) は勧告ではないので数えない
+    "should": re.compile(
+        r"(?<!驚く)(?<!恐る)(?<!然る)(?<!しかる)(?<!来る)(?<!記念す)(?<!特筆す)(?<!愛す)(?<!憎む)べき"
+    ),
     "request": re.compile(r"してください|して下さい|ご検討|ご承認|承認を(?:お願い|求め)"),
     "no_precedent": re.compile(
         r"先行例(?:は|が)?(?:なし|ない|無い)|誰もやっていない|前例(?:は|が)?(?:なし|ない|無い)"
@@ -196,6 +211,48 @@ def call_metrics(d):
         "subtype": d.get("subtype"),
         "models": sorted((d.get("modelUsage") or {}).keys()),
     }
+
+
+_SUMMED_CALL_KEYS = (
+    "cost_usd",
+    "turns",
+    "duration_s",
+    "input_tokens",
+    "output_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+    "searches",
+    "permission_denials",
+)
+
+
+def calls_metrics(results):
+    """同じ呼び出しの全 attempt (retry を含む) の合算。費用・turns・token・検索・denial は足し、
+    is_error / subtype は最後の attempt のもの。retry の日に 1 回目の費用を落とさない。"""
+    per = [m for m in (call_metrics(d) for d in results) if m]
+    if not per:
+        return None
+    total = dict(per[-1])
+    for k in _SUMMED_CALL_KEYS:
+        total[k] = sum(m[k] for m in per)
+    total["cost_usd"] = round(total["cost_usd"], 4)
+    total["denied_tools"] = sorted({t for m in per for t in m["denied_tools"]})
+    total["models"] = sorted({x for m in per for x in m["models"]})
+    total["attempts"] = len(per)
+    return total
+
+
+def call_results(out_dir, name):
+    """sandbox_lib collect が書いた <name>.attempt<i>.json (i 昇順) と <name>.json (最後の attempt)。"""
+    found = []
+    i = 1
+    while (d := _load_json(os.path.join(out_dir, f"{name}.attempt{i}.json"))) is not None:
+        found.append(d)
+        i += 1
+    last = _load_json(os.path.join(out_dir, f"{name}.json"))
+    if last is not None:
+        found.append(last)
+    return found
 
 
 def verify_metrics(d):
@@ -369,6 +426,8 @@ def evaluate(out_dir, links=False):
     config = config if os.path.isfile(config) else None
     note_name = meta.get("note_name")
     receipt = receipt_metrics(p("receipt.json"), date, line, note_name)
+    # 原稿の写しは呼2 の開始前に取れたときだけ呼1 の出力として使う (meta.draft は collect の判定)
+    draft_ok = meta.get("draft") == "clean" and os.path.isfile(p("draft.md"))
     result = {
         "dir": os.path.abspath(out_dir),
         "line": line,
@@ -396,12 +455,12 @@ def evaluate(out_dir, links=False):
         "note": analyze_note(p(note_name), date, config)
         if note_name and os.path.isfile(p(note_name))
         else None,
-        "draft": analyze_note(p("draft.md"), date, config)
-        if os.path.isfile(p("draft.md"))
+        "draft": analyze_note(p("draft.md"), date, config) if draft_ok else None,
+        "draft_vs_final": draft_vs_final(p("draft.md"), p(note_name))
+        if draft_ok and note_name
         else None,
-        "draft_vs_final": draft_vs_final(p("draft.md"), p(note_name)) if note_name else None,
-        "call1": call_metrics(_load_json(p("call1.json"))),
-        "call2": call_metrics(_load_json(p("call2.json"))),
+        "call1": calls_metrics(call_results(out_dir, "call1")),
+        "call2": calls_metrics(call_results(out_dir, "call2")),
         "verify": verify_metrics(_load_json(p("verify.json"))),
         "evidence": evidence_metrics(p("evidence.md")),
         "novelty": novelty(receipt.get("question"), _load_json(p("past_topics.line.json")) or []),
