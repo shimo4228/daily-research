@@ -873,3 +873,246 @@ def test_repo_activity_char_cap_drops_line_that_would_exceed(monkeypatch, capsys
     assert len(out.splitlines()) == 19
     assert len(out) == 1900
     assert "- o00 " not in out
+
+
+# === tracks / rotation-pick の行構築と、config 不正の診断 ===
+
+
+@pytest.mark.unit
+def test_tracks_ecosystem_line_before_repo_lines_keeps_all_rows(monkeypatch, capsys, tmp_path):
+    # ecosystem line の行を出した後も、続く line の行を出し続ける (記述順は config 次第)
+    cfg = _write(
+        tmp_path,
+        "c.toml",
+        '[tracks.eco]\nmode = "ecosystem"\n'
+        '[tracks.a]\n[[tracks.a.repos]]\nkey = "a"\ntarget_repo = "/r/a"\n'
+        '[tracks.b]\n[[tracks.b.repos]]\nkey = "b"\ntarget_repo = "/r/b"\n',
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["tracks", cfg])
+    assert rc == 0
+    assert out == "eco\teco\t\na\ta\t/r/a\nb\tb\t/r/b\n"
+
+
+@pytest.mark.unit
+def test_tracks_half_specified_repo_entry_is_not_a_row(monkeypatch, capsys, tmp_path):
+    # key と target_repo の片方しか無い entry は行にしない ("None" を target_repo にしない)
+    cfg = _write(
+        tmp_path,
+        "c.toml",
+        '[tracks.a]\n[[tracks.a.repos]]\nkey = "a"\n'
+        '[[tracks.a.repos]]\ntarget_repo = "/r/x"\n'
+        '[[tracks.a.repos]]\nkey = "a2"\ntarget_repo = "/r/a2"\n',
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["tracks", cfg])
+    assert rc == 0
+    assert out == "a\ta2\t/r/a2\n"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["tracks", "{cfg}"],
+        ["rotation-pick", "{cfg}", "2026-11-02"],
+        ["line-brief", "{cfg}", "authorship"],
+        ["template-path", "{cfg}", "authorship"],
+        ["past-themes", "{past}", "{cfg}"],
+    ],
+    ids=lambda a: a[0],
+)
+def test_config_schema_error_reaches_the_log(monkeypatch, capsys, tmp_path, args):
+    # daily-research.sh はどの呼び出しも stderr を LOG_FILE に足す。旧 schema の config で朝を
+    # 迎えたとき、移行の手順が書かれた 1 行が log に残る
+    cfg = str(FIXTURES / "config-old-schema.toml")
+    past = str(tmp_path / "none.json")
+    argv = [a.format(cfg=cfg, past=past) for a in args]
+    rc, out, err = run_cmd(monkeypatch, capsys, argv)
+    assert rc == 1
+    assert out == ""
+    assert err == (
+        "config uses the legacy schema: target_repo directly under [tracks.authorship]. "
+        "Migrate to [[tracks.authorship.repos]] entries (see config.example.toml)\n"
+    )
+
+
+@pytest.mark.unit
+def test_rotation_pick_no_lines_message(monkeypatch, capsys):
+    rc, out, err = run_cmd(
+        monkeypatch,
+        capsys,
+        ["rotation-pick", str(FIXTURES / "config-no-tracks.toml"), "2026-11-02"],
+    )
+    assert rc == 1 and out == ""
+    assert err == "rotation-pick: no lines in config\n"
+
+
+# === past-themes: 呼1 のプロンプトに入る問いの履歴 ===
+
+PAST_HEADER = (
+    "=== 過去テーマ履歴 (line 別直近 10 件、問い単位) ===\n"
+    "各行は「問い — 答えの範囲 (answer_scope)」。判定は問い単位で行う:\n"
+    "- 同じ問い + 同じ答え = 再選定禁止\n"
+    "- 同じ問い + 新証拠 = 更新として可 (何が新しい証拠かを本文に書く)\n"
+    "- 同じ topic + 別の問い = 可\n"
+    "\n"
+)
+
+
+def _topics_file(path, topics):
+    path.write_text(json.dumps({"version": 1, "topics": topics}), encoding="utf-8")
+    return str(path)
+
+
+@pytest.mark.unit
+def test_past_themes_default_paths_are_cwd_files(monkeypatch, capsys, tmp_path):
+    # daily-research.sh は引数なしで呼ぶ (cwd = PROJECT_DIR の past_topics.json と config.toml)
+    (tmp_path / "config.toml").write_text(pathlib.Path(CONFIG).read_text(), encoding="utf-8")
+    _topics_file(
+        tmp_path / "past_topics.json",
+        [{"track": "authorship", "date": "2026-09-01", "question": "Q?"}],
+    )
+    monkeypatch.chdir(tmp_path)
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["past-themes"])
+    assert rc == 0
+    assert out == PAST_HEADER + "Track: authorship\n  - 2026-09-01 Q?\n\n"
+
+
+@pytest.mark.unit
+def test_past_themes_explicit_past_path_wins_over_cwd(monkeypatch, capsys, tmp_path):
+    (tmp_path / "config.toml").write_text(pathlib.Path(CONFIG).read_text(), encoding="utf-8")
+    _topics_file(tmp_path / "past_topics.json", [{"track": "authorship", "question": "DECOY"}])
+    (tmp_path / "sub").mkdir()
+    real = _topics_file(tmp_path / "sub" / "p.json", [{"track": "authorship", "question": "REAL"}])
+    monkeypatch.chdir(tmp_path)
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["past-themes", real])
+    assert rc == 0
+    assert "REAL" in out and "DECOY" not in out
+
+
+@pytest.mark.unit
+def test_past_themes_file_without_topics_is_header_only(monkeypatch, capsys, tmp_path):
+    past = tmp_path / "p.json"
+    past.write_text('{"version": 1}', encoding="utf-8")
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["past-themes", str(past), CONFIG])
+    assert rc == 0
+    assert out == PAST_HEADER
+
+
+@pytest.mark.unit
+def test_past_themes_entry_rendering(monkeypatch, capsys, tmp_path):
+    past = _topics_file(
+        tmp_path / "p.json",
+        [
+            {"track": "authorship", "date": "2026-09-02", "question": "Q2", "answer_scope": "S2"},
+            {"track": "authorship", "question": "Q-undated"},
+            {"track": "authorship", "date": "2026-09-01", "title": "T1"},
+            # 問いも題も空の entry (問いを残さなかった run) は履歴に出さない
+            {"track": "authorship", "date": "2026-09-03", "title": "", "question": ""},
+        ],
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["past-themes", past, CONFIG])
+    assert rc == 0
+    # date 昇順 (date 無しは先頭、表示は ?)。answer_scope があるときだけ " — " を付ける。
+    # aliases を持たない line の見出しに「旧 track」注記を付けない
+    assert out == PAST_HEADER + (
+        "Track: authorship\n  - ? Q-undated\n  - 2026-09-01 T1\n  - 2026-09-02 Q2 — S2\n\n"
+    )
+
+
+@pytest.mark.unit
+def test_past_themes_keeps_latest_ten_per_line(monkeypatch, capsys, tmp_path):
+    days = [7, 1, 11, 3, 9, 5, 2, 10, 4, 8, 6]
+    past = _topics_file(
+        tmp_path / "p.json",
+        [{"track": "authorship", "date": f"2026-09-{d:02d}", "question": f"q{d}"} for d in days],
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["past-themes", past, CONFIG])
+    assert rc == 0
+    lines = out[len(PAST_HEADER) :].splitlines()
+    assert lines[0] == "Track: authorship"
+    assert lines[1:-1] == [f"  - 2026-09-{d:02d} q{d}" for d in range(2, 12)]
+
+
+@pytest.mark.unit
+def test_past_themes_truncates_at_120_chars(monkeypatch, capsys, tmp_path):
+    past = _topics_file(
+        tmp_path / "p.json",
+        [
+            {"track": "authorship", "date": "2026-09-01", "question": "a" * 120},
+            {
+                "track": "authorship",
+                "date": "2026-09-02",
+                "question": "b" * 121,
+                "answer_scope": "s" * 121,
+            },
+        ],
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["past-themes", past, CONFIG])
+    assert rc == 0
+    lines = out[len(PAST_HEADER) :].splitlines()
+    # ちょうど 120 字は省略記号なし。121 字は 120 字 + 「…」。answer_scope は 120 字で切る
+    assert lines[1] == "  - 2026-09-01 " + "a" * 120
+    assert lines[2] == "  - 2026-09-02 " + "b" * 120 + "…" + " — " + "s" * 120
+
+
+# === line-brief: 呼1 のプロンプトに入る line 定義 ===
+# プロトコルは「Line 定義」「選定後に読む候補」「自己シグナル」「Step 3b」をこの出力の名前で指す。
+# 文言を変えるときはプロトコル側の参照と合わせてここを直す。
+
+
+@pytest.mark.unit
+def test_line_brief_repo_line_exact(monkeypatch, capsys):
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["line-brief", CONFIG, "akc"])
+    assert rc == 0
+    assert out == (
+        "## Line 定義 (config)\n"
+        "\n"
+        "- name: AKC Line\n"
+        "- focus: AKC line focus\n"
+        "- 探索の起点 (sources):\n"
+        "  - fixture-source-a\n"
+        "  - fixture-source-b\n"
+        "- 自己シグナル (自己汚染ガード — これらに合致する成果物を「外部シグナル」\n"
+        "  として数えない。第三者による言及・採用の観測は正当):\n"
+        "  - github.com/example-author\n"
+        "  - Example Author\n"
+        "\n"
+        "## 選定後に読む候補 (Step 3b)\n"
+        "\n"
+        "テーマ (問い) を選んだ後、含意の前提確認に関係するものだけを読む。\n"
+        "存在しないものは skip してよい。\n"
+        "- .notes/TASKS.md\n"
+        "- docs/inspiration.md\n"
+    )
+
+
+@pytest.mark.unit
+def test_line_brief_ecosystem_line_exact(monkeypatch, capsys):
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["line-brief", str(FIXTURES / "config-ecosystem.toml"), "eco"]
+    )
+    assert rc == 0
+    assert out == (
+        "## Line 定義 (config)\n"
+        "\n"
+        "- mode: ecosystem (接地 repo なし — 観測対象は外部エコシステムの変化そのもの)\n"
+        "- name: Ecosystem Line\n"
+        "- focus: Ecosystem line focus\n"
+        "- 探索の起点 (sources):\n"
+        "  - fixture-eco-source\n"
+        "- 自己シグナル (自己汚染ガード — これらに合致する成果物を「外部シグナル」\n"
+        "  として数えない。第三者による言及・採用の観測は正当):\n"
+        "  - github.com/example-author\n"
+    )
+
+
+@pytest.mark.unit
+def test_line_brief_without_general_table(monkeypatch, capsys, tmp_path):
+    cfg = _write(
+        tmp_path,
+        "c.toml",
+        '[tracks.a]\nname = "A"\nfocus = "F"\n[[tracks.a.repos]]\nkey = "a"\ntarget_repo = "/r"\n',
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["line-brief", cfg, "a"])
+    assert rc == 0
+    assert out == "## Line 定義 (config)\n\n- name: A\n- focus: F\n"
