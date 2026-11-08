@@ -54,6 +54,7 @@ daily-research/
 │   ├── dev_tools_test.py              # pytest for scripts/dev/ (config rewrite, collect, eval metrics)
 │   ├── dr_pipeline_test.py            # pytest for dr_pipeline.py (dev-only, .venv)
 │   ├── dr_pipeline_strength_test.py   # pytest pinning the dr_pipeline.py behaviors mutation testing found unguarded
+│   ├── clarity_scan_test.py           # pytest for clarity-scan (call 2's pre-pass) and its CSCAN metrics
 │   ├── audit_test.py                  # pytest for call 3's deterministic side (replacement rules, state, AUDIT metrics)
 │   ├── test_helper.bash               # shared bats helpers (refute_grep — write negative grep assertions with it, never `! grep`)
 │   └── fixtures/                      # configs and result JSONs for the tests; verify-golden/ = manual call-2 check (its README)

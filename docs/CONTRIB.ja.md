@@ -54,6 +54,7 @@ daily-research/
 │   ├── dev_tools_test.py              # scripts/dev/ の pytest（config の書き換え、集約、eval の指標）
 │   ├── dr_pipeline_test.py            # dr_pipeline.py の pytest（dev 専用、.venv）
 │   ├── dr_pipeline_strength_test.py   # mutation testing が見逃しを見つけた dr_pipeline.py の振る舞いを固定する pytest
+│   ├── clarity_scan_test.py           # clarity-scan（呼2 の前処理）と CSCAN の計測の pytest
 │   ├── audit_test.py                  # 呼3 の決定論の側（置き換えの規則・状態・AUDIT の計測）の pytest
 │   ├── test_helper.bash               # bats 共通 helper（refute_grep — grep の否定 assertion は `! grep` でなくこれで書く）
 │   └── fixtures/                      # テスト用の config と result JSON。verify-golden/ = 呼2 の手動確認（その README）
