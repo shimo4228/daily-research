@@ -288,7 +288,16 @@ if [[ "$PROTOCOL" == *verification-protocol.md ]]; then
     [ -n "$VERIFY" ] && printf '{"supported": 3, "partial": 1, "unsupported": 0, "unverifiable": 1, "edits": 2}\n' > "$VERIFY"
   fi
 
-  echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.02,"num_turns":2,"duration_ms":8000,"usage":{"input_tokens":1500,"output_tokens":300}}]'
+  # 改稿 seam (H07): .clarity_post があれば原稿をその内容で置き換え、.clarity_result があれば
+  # その本文を result (完了報告) に載せる
+  NOTE=$(printf '%s\n' "$PROMPT" | sed -n 's/^対象ファイル (原稿): //p' | head -1)
+  [ -f "$MOCK_HOME_DIR/.clarity_post" ] && [ -n "$NOTE" ] && cp "$MOCK_HOME_DIR/.clarity_post" "$NOTE"
+  RESULT_FILE="$MOCK_HOME_DIR/.clarity_result"
+  [ -f "$RESULT_FILE" ] || RESULT_FILE=/dev/null
+  python3 -c '
+import json, sys
+print(json.dumps([{"type": "assistant", "message": {"content": []}}, {"type": "result", "subtype": "success", "is_error": False, "total_cost_usd": 0.02, "num_turns": 2, "duration_ms": 8000, "usage": {"input_tokens": 1500, "output_tokens": 300}, "result": open(sys.argv[1]).read()}]))
+' "$RESULT_FILE"
   exit 0
 fi
 
@@ -1016,8 +1025,52 @@ exec(sys.stdin.read())
   assert_metrics << 'PY'
 assert rec["final_class"] == "OK", rec
 assert rec["line_states"] == {"article": 1, "brief": 0, "quiet": 0, "hold": 0, "mismatch": 0, "suspect": 0, "unverified": 0}, rec
-assert rec["verification"] == {"supported": 3, "partial": 1, "unsupported": 0, "unverifiable": 1, "edits": 2, "lines_verified": 1}, rec
+base = {k: rec["verification"][k] for k in ("supported", "partial", "unsupported", "unverifiable", "edits", "lines_verified")}
+assert base == {"supported": 3, "partial": 1, "unsupported": 0, "unverifiable": 1, "edits": 2, "lines_verified": 1}, rec
+assert rec["verification"]["diff_lines"] == 1 and rec["verification"]["diff_spans"] == 0, rec
 PY
+}
+
+@test "E2E clarity: a pre-verify copy and verify-diff record call 2's real edits and flag self-report errors (H07)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  printf -- '---\nkind: article\n---\n\n# mock report for %s\n\n書き換えた文。\n\n## ソース\n- [n](https://new.example/x)\n' "$PICKED" > "$MOCK_HOME/.clarity_post"
+  printf -- '- 検証: 5 件 (supported 4 / partial 1 / unsupported 0 / unverifiable 0)、訂正 span 2\n- 修正 span 合計: 2\n' > "$MOCK_HOME/.clarity_result"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  local log_content pre="$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.pre-verify.md"
+  log_content=$(get_log)
+
+  # 改稿前の写しは呼1 が書いた原稿そのもの (呼2 の後も残る)
+  [ "$(cat "$pre")" = "# mock report for $PICKED" ]
+  grep -q "書き換えた文" "$MOCK_HOME/mock-vault/daily-research/${DR_DATE}_${PICKED}_mock-report.md"
+  echo "$log_content" | grep -q "VERIFY_DIFF $PICKED: {\"diff_spans\": "
+  # verify.json (supported 3 / unverifiable 1) と完了報告 (supported 4 / unverifiable 0) の食い違い
+  echo "$log_content" | grep -q "WARN: Line $PICKED clarity pass: verify.json と完了報告の件数が食い違う (supported 3≠4, unverifiable 1≠0)"
+  echo "$log_content" | grep -q "WARN: Line $PICKED clarity pass: frontmatter が改稿された"
+  echo "$log_content" | grep -q "WARN: Line $PICKED clarity pass: 原稿に無かった URL が 1 件増えた"
+  # 写しはモデルの書き込み先ではない: 呼2 の allow にもプロンプトにも現れない (呼1 の allow も不変)
+  refute_grep -q "pre-verify" "$MOCK_HOME/.allowed_clarity"
+  refute_grep -q "pre-verify" "$MOCK_HOME/.prompt_clarity"
+  refute_grep -q "pre-verify" "$MOCK_HOME/.prompt_$PICKED"
+  refute_grep -q "pre-verify" "$MOCK_HOME/.allowed_$PICKED"
+  assert_metrics << 'PY'
+v = rec["verification"]
+assert v["diff_lines"] == 1 and v["diff_spans"] >= 1, v
+assert v["diff_report_mismatch"] == 1 and v["diff_frontmatter_changed"] == 1 and v["diff_new_urls"] == 1, v
+PY
+}
+
+@test "E2E clarity: an unchanged note gives a zero diff and no clarity WARN (H07)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  local log_content
+  log_content=$(get_log)
+  echo "$log_content" | grep -q "VERIFY_DIFF $PICKED: {\"diff_spans\": 0, "
+  refute_grep -q "clarity pass: " <<< "$log_content"
+  [ -f "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.pre-verify.md" ]
 }
 
 @test "E2E states: brief passes the gate, gets verified, and is labelled (brief)" {

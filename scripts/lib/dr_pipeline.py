@@ -778,6 +778,223 @@ def cmd_verify_read(argv: list[str]) -> int:
     return 0
 
 
+# --- verify-diff <pre_path> <post_path> [verify_json_path]: 呼2 の改稿を決定論で記録する ---
+# SH が呼2 の前に原稿を runs/<date>.pre-verify.md へ写し (呼1 の後に SH が書く。呼2 の書き込み先ではない)、
+# 呼2 の後にこの subcommand で改稿後の原稿と比べる。stdin は呼2 の claude -p result JSON (空でよい)。
+# stdout: 1 行目 = JSON 1 行、2 行目以降 = WARN の本文 (1 行 1 件、model 由来の文字列を含まない)。
+#   diff_spans                 変更された連続範囲の数 (文単位 = 。！？ と改行で切り、空白を除いて比べる)
+#   diff_chars_added / _removed 変更範囲の中の文字単位の増減 (ファイル全体)
+#   diff_sentences_removed     消えた文の数 (delete の文 + replace で減った文)
+#   diff_frontmatter_changed / diff_memo_changed / diff_sources_changed
+#                              verification プロトコルの禁止事項。ソース節は「(未解決 …)」の付記を除いて比べる
+#   diff_unresolved_marks_added 「(未解決 …)」の付記の増分 (unverifiable の唯一の許可編集)
+#   diff_new_urls / new_urls   改稿前に無かった URL (禁止事項)。一覧は最大 10 件
+#   diff_numbers_added / _removed / numbers_added / numbers_removed
+#                              frontmatter と付記を除いた数字 token の多重集合の差 (Step B の訂正で動きうる)
+#   reported                   完了報告の「検証: N 件 (supported a / partial b / …)」と「修正 span 合計」。読めなければ null
+#   diff_report_mismatch / mismatch  verify.json と reported の件数の食い違い (自己申告の誤り)
+# pre / post が読めなければ rc 1 (stdout 空)。verify.json が無い・壊れていれば比較しない。
+VDIFF_SUM_KEYS = (
+    "diff_spans",
+    "diff_chars_added",
+    "diff_chars_removed",
+    "diff_sentences_removed",
+    "diff_frontmatter_changed",
+    "diff_memo_changed",
+    "diff_sources_changed",
+    "diff_unresolved_marks_added",
+    "diff_new_urls",
+    "diff_numbers_added",
+    "diff_numbers_removed",
+    "diff_report_mismatch",
+)
+_VDIFF_LIST_MAX = 10
+_VDIFF_ITEM_MAX = 200
+_URL_RE = re.compile(r"https?://[^\s)\]>\"'`]+")
+_NUMBER_TOKEN_RE = re.compile(r"\d+(?:[.,:/-]\d+)*")
+_UNRESOLVED_MARK_RE = re.compile(r"[ \t]*[（(]未解決[^）)\n]*[）)]")
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？])|\n")
+_REPORTED_RE = re.compile(
+    r"検証[:：]\s*(\d+)\s*件\s*[(（]\s*supported\s*(\d+)\s*/\s*partial\s*(\d+)\s*/\s*"
+    r"unsupported\s*(\d+)\s*/\s*unverifiable\s*(\d+)"
+)
+_REPORTED_EDITS_RE = re.compile(r"修正 span 合計[:：]\s*(\d+|無変更)")
+
+
+def _note_parts(text: str) -> tuple[str, str, str]:
+    """(frontmatter, 機会メモ節, ソース節) を返す。無い節は空文字。"""
+    m = _FRONTMATTER_RE.match(text)
+    fm = m.group(0) if m else ""
+    rest = text[len(fm) :]
+    src_at = rest.find("\n## ソース")
+    memo_at = rest.find("\n## 機会メモ")
+    sources = rest[src_at:] if src_at >= 0 else ""
+    memo = ""
+    if memo_at >= 0:
+        memo = rest[memo_at : src_at if src_at > memo_at else len(rest)]
+    return fm, memo, sources
+
+
+def _clip_list(items: list[str]) -> list[str]:
+    return [_CTRL_RE.sub(" ", str(x))[:_VDIFF_ITEM_MAX] for x in items[:_VDIFF_LIST_MAX]]
+
+
+def _sentence_diff(pre: str, post: str) -> tuple[int, int, int, int]:
+    """文単位の差分 (spans, chars_added, chars_removed, sentences_removed)。"""
+    import difflib
+
+    def units(t: str) -> list[str]:
+        return [u.strip() for u in _SENTENCE_SPLIT_RE.split(t) if u and u.strip()]
+
+    a, b = units(pre), units(post)
+    spans = added = removed = sentences_removed = 0
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+        if tag == "equal":
+            continue
+        spans += 1
+        sentences_removed += max(0, (i2 - i1) - (j2 - j1))
+        old, new = "".join(a[i1:i2]), "".join(b[j1:j2])
+        for ctag, c1, c2, d1, d2 in difflib.SequenceMatcher(
+            None, old, new, autojunk=False
+        ).get_opcodes():
+            if ctag != "equal":
+                removed += c2 - c1
+                added += d2 - d1
+    return spans, added, removed, sentences_removed
+
+
+def _reported_counts(raw: str) -> dict[str, int | None] | None:
+    """呼2 の完了報告から件数を読む。読めなければ None。"""
+    try:
+        d = _result_dict(json.loads(raw or "null")) or {}
+    except (ValueError, TypeError):
+        return None
+    text = d.get("result") if isinstance(d, dict) else None
+    m = _REPORTED_RE.search(text) if isinstance(text, str) else None
+    if not m:
+        return None
+    total, sup, par, uns, unv = (int(g) for g in m.groups())
+    em = _REPORTED_EDITS_RE.search(text)
+    edits = None if not em else (0 if em.group(1) == "無変更" else int(em.group(1)))
+    return {
+        "total": total,
+        "supported": sup,
+        "partial": par,
+        "unsupported": uns,
+        "unverifiable": unv,
+        "edits": edits,
+    }
+
+
+def _report_mismatch(
+    verify: dict[str, int] | None, reported: dict[str, int | None] | None
+) -> list[str]:
+    """verify.json と完了報告の食い違いを "key verify≠reported" の list で返す。"""
+    if verify is None or reported is None:
+        return []
+    out = [
+        f"{k} {verify[k]}≠{reported[k]}"
+        for k in ("supported", "partial", "unsupported", "unverifiable")
+        if verify[k] != reported[k]
+    ]
+    vtotal = sum(verify[k] for k in ("supported", "partial", "unsupported", "unverifiable"))
+    if vtotal != reported["total"]:
+        out.append(f"total {vtotal}≠{reported['total']}")
+    if reported["edits"] is not None and verify["edits"] != reported["edits"]:
+        out.append(f"edits {verify['edits']}≠{reported['edits']}")
+    return out
+
+
+def cmd_verify_diff(argv: list[str]) -> int:
+    from collections import Counter
+
+    if len(argv) < 2:
+        print("usage: verify-diff <pre_path> <post_path> [verify_json_path]", file=sys.stderr)
+        return 64
+    pre_path, post_path = argv[:2]
+    verify_path = argv[2] if len(argv) >= 3 else ""
+    try:
+        with open(pre_path, encoding="utf-8") as f:
+            pre = f.read()
+        with open(post_path, encoding="utf-8") as f:
+            post = f.read()
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"verify-diff: {e}", file=sys.stderr)
+        return 1
+    verify = None
+    if verify_path:
+        try:
+            with open(verify_path) as f:
+                vd = json.load(f)
+            if isinstance(vd, dict):
+                verify = {k: _nonneg_int(vd.get(k)) for k in VERIFY_KEYS}
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            verify = None
+
+    spans, added, removed, sentences_removed = _sentence_diff(pre, post)
+    pre_fm, pre_memo, pre_src = _note_parts(pre)
+    post_fm, post_memo, post_src = _note_parts(post)
+
+    def unmarked(t: str) -> str:
+        return _UNRESOLVED_MARK_RE.sub("", t)
+
+    def numbers(t: str, fm: str) -> Counter[str]:
+        return Counter(_NUMBER_TOKEN_RE.findall(unmarked(t[len(fm) :])))
+
+    pre_urls = set(_URL_RE.findall(pre))
+    new_urls = sorted({u for u in _URL_RE.findall(post) if u not in pre_urls})
+    n_pre, n_post = numbers(pre, pre_fm), numbers(post, post_fm)
+    nums_added = sorted((n_post - n_pre).elements())
+    nums_removed = sorted((n_pre - n_post).elements())
+    reported = _reported_counts(sys.stdin.read())
+    mismatch = _report_mismatch(verify, reported)
+
+    out = {
+        "diff_spans": spans,
+        "diff_chars_added": added,
+        "diff_chars_removed": removed,
+        "diff_sentences_removed": sentences_removed,
+        "diff_frontmatter_changed": pre_fm != post_fm,
+        "diff_memo_changed": pre_memo.strip() != post_memo.strip(),
+        "diff_sources_changed": unmarked(pre_src).strip() != unmarked(post_src).strip(),
+        "diff_unresolved_marks_added": max(
+            0, len(_UNRESOLVED_MARK_RE.findall(post)) - len(_UNRESOLVED_MARK_RE.findall(pre))
+        ),
+        "diff_new_urls": len(new_urls),
+        "diff_numbers_added": len(nums_added),
+        "diff_numbers_removed": len(nums_removed),
+        "diff_report_mismatch": bool(mismatch),
+        "new_urls": _clip_list(new_urls),
+        "numbers_added": _clip_list(nums_added),
+        "numbers_removed": _clip_list(nums_removed),
+        "reported": reported,
+        "mismatch": mismatch,
+    }
+    print(json.dumps(out, ensure_ascii=False))
+    if mismatch:
+        print(f"verify.json と完了報告の件数が食い違う ({', '.join(mismatch)})")
+    if out["diff_frontmatter_changed"]:
+        print("frontmatter が改稿された (呼2 の禁止事項)")
+    if out["diff_memo_changed"]:
+        print("機会メモ節が改稿された (呼2 の禁止事項)")
+    if out["diff_sources_changed"]:
+        print("ソース節が未解決の付記以外で改稿された (呼2 の禁止事項)")
+    if new_urls:
+        print(f"原稿に無かった URL が {len(new_urls)} 件増えた (呼2 の禁止事項)")
+    return 0
+
+
+def _sum_vdiff(vdiffs: list[dict[str, object]]) -> dict[str, int]:
+    """VDIFF 行群の diff_* を合算する (bool は 0/1)。diff_lines = 行数。一覧は log にだけ残す。"""
+    total = {k: 0 for k in VDIFF_SUM_KEYS}
+    for v in vdiffs:
+        for k in VDIFF_SUM_KEYS:
+            x = v.get(k)
+            total[k] += int(x) if isinstance(x, bool) else _nonneg_int(x)
+    total["diff_lines"] = len(vdiffs)
+    return total
+
+
 # --- config-get <config_path> <section.key> [default]: config の 1 値を出力 ---
 # 値が無い・config が読めない場合は default (省略時は空行)。bool は true/false。
 def cmd_config_get(argv: list[str]) -> int:
@@ -908,6 +1125,8 @@ def _sum_verification(verifies: list[dict[str, object]]) -> dict[str, int] | Non
 #                        LINE_STATE_KEYS のいずれかで 1 つずつ加算 (article / brief /
 #                        quiet / hold が本体、mismatch / suspect / unverified は重ね計上)
 #   VERIFY\t{json}       — verify-read の出力。5 key を合算、lines_verified = ran の数
+#   VDIFF\t{json}        — verify-diff の 1 行目。diff_* を verification に合算、diff_lines = 行数
+#                        (VDIFF 行が無い日は verification に diff_* を足さない — 旧 record と同じ形)
 # ラベル不明・payload 破損の行は skip (収集は non-fatal)。
 # pass1 は per-repo 化で廃止 (None 固定)。第 5 引数はリトライ発生の有無で、
 # レコード互換のため旧フィールド名 fallback_used に記録する。
@@ -929,13 +1148,20 @@ def cmd_metrics_append(argv: list[str]) -> int:
 
     runs, lint, clarities = [], None, []
     line_states = {k: 0 for k in LINE_STATE_KEYS}
-    verifies = []
+    verifies, vdiffs = [], []
     for line in sys.stdin.read().split("\n"):
         line = line.strip()
         if not line:
             continue
         label, _, payload = line.partition("\t")
-        if label == "STATE":
+        if label == "VDIFF":
+            try:
+                v = json.loads(payload)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(v, dict):
+                vdiffs.append(v)
+        elif label == "STATE":
             for token in payload.split("\t")[1:]:
                 if token in line_states:
                     line_states[token] += 1
@@ -998,6 +1224,8 @@ def cmd_metrics_append(argv: list[str]) -> int:
         "line_states": line_states,
         "verification": _sum_verification(verifies),
     }
+    if record["verification"] is not None and vdiffs:
+        record["verification"].update(_sum_vdiff(vdiffs))
     record["total_cost"] = _total_cost(record)
     with open(metrics_path, "a") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -1692,6 +1920,7 @@ COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "line-brief": cmd_line_brief,
     "receipt-read": cmd_receipt_read,
     "verify-read": cmd_verify_read,
+    "verify-diff": cmd_verify_diff,
     "config-get": cmd_config_get,
     "searches": cmd_searches,
     "metrics-append": cmd_metrics_append,

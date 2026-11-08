@@ -1318,6 +1318,187 @@ def test_verify_read_coerces_bad_values_to_zero(monkeypatch, capsys, tmp_path):
     }
 
 
+# --- verify-diff: 呼2 の改稿を改稿前の写しと決定論で比べる (hillclimb H07) ---
+
+PRE_NOTE = (
+    "---\ndate: 2026-11-01\nkind: article\nsources: 2\n---\n\n# 題\n\n"
+    "最初の文は 2026-11-01 の出来事である。二つ目の文は 40% の改善を報告した。\n"
+    "三つ目の文は残る。\n四つ目の文は消される。\n\n"
+    "## 機会メモ\n\nなし\n\n"
+    "## ソース\n\n- [a](https://a.example/x)\n- [b](https://b.example/y)\n"
+)
+
+
+def _vdiff(monkeypatch, capsys, tmp_path, post, verify=None, stdin=""):
+    pre_p = tmp_path / "pre.md"
+    post_p = tmp_path / "post.md"
+    pre_p.write_text(PRE_NOTE)
+    post_p.write_text(post)
+    args = ["verify-diff", str(pre_p), str(post_p)]
+    if verify is not None:
+        v = tmp_path / "v.json"
+        v.write_text(json.dumps(verify))
+        args.append(str(v))
+    rc, out, err = run_cmd(monkeypatch, capsys, args, stdin)
+    lines = out.splitlines()
+    return rc, json.loads(lines[0]), lines[1:], err
+
+
+@pytest.mark.unit
+def test_verify_diff_unchanged_note_is_all_zero(monkeypatch, capsys, tmp_path):
+    rc, d, warns, _ = _vdiff(monkeypatch, capsys, tmp_path, PRE_NOTE)
+    assert rc == 0
+    assert d["diff_spans"] == 0 and d["diff_chars_added"] == 0 and d["diff_chars_removed"] == 0
+    assert d["diff_frontmatter_changed"] is False
+    assert d["diff_memo_changed"] is False and d["diff_sources_changed"] is False
+    assert d["diff_new_urls"] == 0 and d["diff_numbers_added"] == 0
+    assert d["reported"] is None and d["diff_report_mismatch"] is False
+    assert warns == []
+
+
+@pytest.mark.unit
+def test_verify_diff_counts_spans_sentences_and_numbers(monkeypatch, capsys, tmp_path):
+    post = PRE_NOTE.replace("40% の改善を報告した", "10% の改善を特定条件で報告した").replace(
+        "四つ目の文は消される。\n", ""
+    )
+    rc, d, warns, _ = _vdiff(monkeypatch, capsys, tmp_path, post)
+    assert rc == 0
+    assert d["diff_spans"] == 2  # 文の書き換え 1 + (変わらない文を挟んで) 文の削除 1
+    assert d["diff_sentences_removed"] == 1
+    assert d["diff_chars_added"] > 0 and d["diff_chars_removed"] > 0
+    assert d["diff_numbers_added"] == 1 and d["numbers_added"] == ["10"]
+    assert d["diff_numbers_removed"] == 1 and d["numbers_removed"] == ["40"]
+    assert d["diff_frontmatter_changed"] is False and d["diff_sources_changed"] is False
+    assert warns == []  # 本文の改稿は禁止事項ではない
+
+
+@pytest.mark.unit
+def test_verify_diff_unresolved_mark_is_the_only_allowed_sources_edit(
+    monkeypatch, capsys, tmp_path
+):
+    post = PRE_NOTE.replace("(https://b.example/y)", "(https://b.example/y) (未解決 2026-11-01)")
+    _, d, warns, _ = _vdiff(monkeypatch, capsys, tmp_path, post)
+    assert d["diff_sources_changed"] is False
+    assert d["diff_unresolved_marks_added"] == 1
+    assert d["diff_numbers_added"] == 0  # 付記の日付は数字 token に数えない
+    assert warns == []
+
+
+@pytest.mark.unit
+def test_verify_diff_flags_forbidden_edits(monkeypatch, capsys, tmp_path):
+    post = (
+        PRE_NOTE.replace("sources: 2", "sources: 3")
+        .replace("なし\n", "- **何を**: 足された機会\n")
+        .replace(
+            "- [b](https://b.example/y)\n",
+            "- [b](https://b.example/y)\n- [c](https://c.example/z)\n",
+        )
+    )
+    _, d, warns, _ = _vdiff(monkeypatch, capsys, tmp_path, post)
+    assert d["diff_frontmatter_changed"] is True
+    assert d["diff_memo_changed"] is True
+    assert d["diff_sources_changed"] is True
+    assert d["diff_new_urls"] == 1 and d["new_urls"] == ["https://c.example/z"]
+    assert len(warns) == 4
+    assert all("禁止事項" in w for w in warns)
+
+
+@pytest.mark.unit
+def test_verify_diff_detects_self_report_mismatch_2026_11_01(monkeypatch, capsys, tmp_path):
+    # 回帰 (2026-11-01 の live run): verify.json は supported 4、完了報告は supported 5 / 計 6 件
+    verify = {"supported": 4, "partial": 1, "unsupported": 0, "unverifiable": 0, "edits": 2}
+    result = (
+        "## Verification + Clarity Complete\n- Report: x.md\n"
+        "- 検証: 6 件 (supported 5 / partial 1 / unsupported 0 / unverifiable 0)、訂正 span 2、削除文 0\n"
+        "  - 判定は 6 件ですが、verify.json には 5 / 1 のうち supported 4 と記録しています。\n"
+        "- つまずき検出: 0 件\n- 修正 span 合計: 2 件 (Step B のみ)\n"
+    )
+    stdin = json.dumps([{"type": "result", "result": result}])
+    _, d, warns, _ = _vdiff(monkeypatch, capsys, tmp_path, PRE_NOTE, verify, stdin)
+    assert d["reported"] == {
+        "total": 6,
+        "supported": 5,
+        "partial": 1,
+        "unsupported": 0,
+        "unverifiable": 0,
+        "edits": 2,
+    }
+    assert d["diff_report_mismatch"] is True
+    assert d["mismatch"] == ["supported 4≠5", "total 5≠6"]
+    assert len(warns) == 1 and "食い違う" in warns[0]
+
+
+@pytest.mark.unit
+def test_verify_diff_matching_report_and_no_change_report(monkeypatch, capsys, tmp_path):
+    verify = {"supported": 3, "partial": 0, "unsupported": 0, "unverifiable": 0, "edits": 0}
+    result = (
+        "- 検証: 3 件 (supported 3 / partial 0 / unsupported 0 / unverifiable 0)\n"
+        "- 修正 span 合計: 無変更\n"
+    )
+    _, d, warns, _ = _vdiff(
+        monkeypatch, capsys, tmp_path, PRE_NOTE, verify, json.dumps({"result": result})
+    )
+    assert d["reported"]["edits"] == 0
+    assert d["diff_report_mismatch"] is False and warns == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("stdin", ["", "not json", '{"result": "書式の違う完了報告"}'])
+def test_verify_diff_unparsable_report_is_not_a_mismatch(monkeypatch, capsys, tmp_path, stdin):
+    verify = {"supported": 3, "partial": 0, "unsupported": 0, "unverifiable": 0, "edits": 0}
+    rc, d, warns, _ = _vdiff(monkeypatch, capsys, tmp_path, PRE_NOTE, verify, stdin)
+    assert rc == 0
+    assert d["reported"] is None and d["diff_report_mismatch"] is False and warns == []
+
+
+@pytest.mark.unit
+def test_verify_diff_missing_file_errors(monkeypatch, capsys, tmp_path):
+    rc, out, err = run_cmd(
+        monkeypatch, capsys, ["verify-diff", str(tmp_path / "nope.md"), str(tmp_path / "x.md")]
+    )
+    assert rc == 1 and out == "" and "verify-diff" in err
+    rc, _, _ = run_cmd(monkeypatch, capsys, ["verify-diff", "only-one"])
+    assert rc == 64
+
+
+@pytest.mark.unit
+def test_metrics_append_sums_vdiff_into_verification(monkeypatch, capsys, tmp_path):
+    metrics = tmp_path / "metrics.jsonl"
+    v = '{"supported": 3, "partial": 1, "unsupported": 0, "unverifiable": 0, "edits": 2, "ran": true}'
+    d1 = json.dumps(
+        {
+            "diff_spans": 2,
+            "diff_chars_added": 10,
+            "diff_chars_removed": 4,
+            "diff_sentences_removed": 1,
+            "diff_frontmatter_changed": False,
+            "diff_memo_changed": True,
+            "diff_sources_changed": False,
+            "diff_unresolved_marks_added": 1,
+            "diff_new_urls": 0,
+            "diff_numbers_added": 1,
+            "diff_numbers_removed": 1,
+            "diff_report_mismatch": True,
+            "new_urls": [],
+            "reported": None,
+        }
+    )
+    d2 = json.dumps({"diff_spans": 1, "diff_report_mismatch": False, "diff_memo_changed": False})
+    stdin = f"VERIFY\t{v}\nVDIFF\t{d1}\nVERIFY\t{v}\nVDIFF\t{d2}\nVDIFF\tnot-json\n"
+    rc, _, _ = run_cmd(
+        monkeypatch, capsys, ["metrics-append", str(metrics), "2026-11-01", "OK", "2", "0"], stdin
+    )
+    assert rc == 0
+    ver = json.loads(metrics.read_text())["verification"]
+    assert ver["supported"] == 6 and ver["lines_verified"] == 2
+    assert ver["diff_lines"] == 2
+    assert ver["diff_spans"] == 3
+    assert ver["diff_memo_changed"] == 1
+    assert ver["diff_report_mismatch"] == 1
+    assert ver["diff_chars_added"] == 10
+    assert "new_urls" not in ver and "reported" not in ver  # 一覧は log にだけ残す
+
+
 # --- searches (quiet-suspect の入力) ---
 
 

@@ -415,6 +415,19 @@ precommit_fixture_commit() {
   grep -qF 'rm -f "$VERIFY_PATH"' "$SCRIPT"
 }
 
+@test "the pre-verify copy is written by the orchestrator between call 1 and call 2, never by the model (H07)" {
+  grep -qF 'PRE_VERIFY_PATH="$STATE_DIR/runs/${DATE}.pre-verify.md"' "$SCRIPT"
+  grep -qF 'cp "$CLARITY_NOTE" "$PRE_VERIFY_PATH"' "$SCRIPT"
+  grep -q 'python3 "\$DR_PY" verify-diff' "$SCRIPT"
+  grep -q '"VDIFF"' "$SCRIPT"
+  # 書き込み先の正本と呼2 の allow に写しを足さない
+  refute_grep -q 'PRE_VERIFY' <<< "$(grep 'WRITE_PATHS' "$SCRIPT")"
+  refute_grep -q 'PRE_VERIFY' <<< "$(grep -- '--allowedTools' "$SCRIPT")"
+  # cp は呼1 の後 (receipt gate より後)、呼2 の起動より前
+  awk '/^RECEIPT_FILE=\$\(find_run_receipt\)/{g=NR} /cp "\$CLARITY_NOTE" "\$PRE_VERIFY_PATH"/{c=NR}
+       /CLARITY_JSON=\$\(CLAUDE_TIMEOUT=1200/{r=NR} END{exit !(g && c && r && g<c && c<r)}' "$SCRIPT"
+}
+
 @test "config.example.toml documents lines_per_day and [verification]" {
   grep -qE '^lines_per_day = [0-9]+' "$PROJECT_DIR/config.example.toml"
   grep -qx '\[verification\]' "$PROJECT_DIR/config.example.toml"

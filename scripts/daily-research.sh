@@ -287,7 +287,7 @@ fi
 
 FAILED_LINES=""       # ctl-015 (receipt gate) に落ちた line (空 = 全 line 成功)
 OK_LINES=""
-METRICS_STDIN=""      # metrics-append へ渡す RUN / CLARITY / STATE / VERIFY 行の蓄積 (1 日 1 レコード)
+METRICS_STDIN=""      # metrics-append へ渡す RUN / CLARITY / STATE / VERIFY / VDIFF 行の蓄積 (1 日 1 レコード)
 AUTH_ABORT=0          # 401 検出 — 残 line は中断するが、完走済み line の集計は捨てない
 BILLING_ABORT=0       # 429 / クレジット切れ — 同上 (再試行で踏み抜かない、rules: debugging.md)
 BUDGET_STOP=0         # API 支出の上限 (月・日) に届いた — 残 line を始めない
@@ -323,6 +323,9 @@ log "=== Line: $TRACK (${TARGET_REPO:-no target repo}) ==="
 STATE_DIR="$PROJECT_DIR/state/$TRACK"
 RECEIPT_PATH="$STATE_DIR/runs/${DATE}.json"
 VERIFY_PATH="$STATE_DIR/runs/${DATE}.verify.json"
+# 呼2 の改稿前の写し (verify-diff の入力)。SH が呼1 の終了後・呼2 の前に cp で書く — 呼1 の runs/** の
+# 書き込み権は中身に効かず (cp が上書きする)、呼2 の allow は原稿と verify.json だけ。モデルの書き込み先ではない
+PRE_VERIFY_PATH="$STATE_DIR/runs/${DATE}.pre-verify.md"
 mkdir -p "$STATE_DIR/runs"
 
 # 実行形は [tracks.<x>].mode が決める (ADR-0018)。line 名では分岐しない。
@@ -668,6 +671,12 @@ if [ -n "$CLARITY_NOTE" ]; then
   log "=== Clarity pass: $(basename "$CLARITY_NOTE") ==="
   # 前回 run の verify.json を今回の結果と取り違えない (読み取りも run スコープに限る)
   rm -f "$VERIFY_PATH"
+  PRE_VERIFY_OK=0
+  if cp "$CLARITY_NOTE" "$PRE_VERIFY_PATH" 2>> "$LOG_FILE"; then
+    PRE_VERIFY_OK=1
+  else
+    log "WARN: Line $TRACK pre-verify copy failed — call 2 edits will not be diffed"
+  fi
   CLARITY_PROMPT="以下のレポートを、システムプロンプトに追記された verification プロトコルに従って
 clarity 改稿し、最後に主要な主張を原典で照合してください。
 
@@ -723,10 +732,30 @@ clarity 改稿し、最後に主要な主張を原典で照合してください
   fi
 
   # 検証結果 (verify-read は欠損・破損でも全零 + ran:false の 1 行 JSON を返す)
-  VERIFY_JSON=$(python3 "$DR_PY" verify-read "$(find_run_file "$STATE_DIR/runs" "${DATE}.verify.json")" 2>> "$LOG_FILE") \
+  VERIFY_FOUND=$(find_run_file "$STATE_DIR/runs" "${DATE}.verify.json")
+  VERIFY_JSON=$(python3 "$DR_PY" verify-read "$VERIFY_FOUND" 2>> "$LOG_FILE") \
     || VERIFY_JSON='{"supported": 0, "partial": 0, "unsupported": 0, "unverifiable": 0, "edits": 0, "ran": false}'
   log "VERIFY $TRACK: $VERIFY_JSON"
   METRICS_STDIN+="VERIFY"$'\t'"$VERIFY_JSON"$'\n'
+  # 呼2 の実改稿量 (verify.json の edits と完了報告は自己申告)。改稿前の写しと比べ、verification
+  # プロトコルの禁止事項 (frontmatter・機会メモ・ソース節・新規 URL) と、verify.json と完了報告の件数の
+  # 食い違いを WARN にする。出力の 1 行目が JSON、2 行目以降が WARN の本文。呼2 の失敗時も部分改稿を測る
+  if [ "$PRE_VERIFY_OK" = "1" ]; then
+    VDIFF_OUT=$(printf '%s' "$CLARITY_JSON" | python3 "$DR_PY" verify-diff "$PRE_VERIFY_PATH" "$CLARITY_NOTE" "$VERIFY_FOUND" 2>> "$LOG_FILE") \
+      || VDIFF_OUT=""
+    VDIFF_JSON=${VDIFF_OUT%%$'\n'*}
+    if [ -n "$VDIFF_JSON" ]; then
+      log "VERIFY_DIFF $TRACK: $VDIFF_JSON"
+      METRICS_STDIN+="VDIFF"$'\t'"$VDIFF_JSON"$'\n'
+      if [ "$VDIFF_OUT" != "$VDIFF_JSON" ]; then
+        while IFS= read -r _vw; do
+          [ -n "$_vw" ] && log "WARN: Line $TRACK clarity pass: $_vw"
+        done <<< "${VDIFF_OUT#*$'\n'}"
+      fi
+    else
+      log "WARN: Line $TRACK verify-diff could not run (non-fatal)"
+    fi
+  fi
   if [ "$CLARITY_CLASS" != "OK" ] || printf '%s' "$VERIFY_JSON" | grep -q '"ran": false'; then
     log "WARN: Line $TRACK is unverified (clarity=$CLARITY_CLASS, verify.json missing or unreadable counts as unverified)"
     METRICS_STDIN+="STATE"$'\t'"$TRACK"$'\t'"unverified"$'\n'
@@ -862,7 +891,7 @@ fi
 # === 自己改善ループの計測 (ADR-0006): run 記録の永続化 + review リマインダー ===
 # logs/ は 30 日ローテーションで消えるため、metrics.jsonl (gitignore) に恒久保存する。
 # 収集は non-fatal — 計測の失敗で生成ジョブの成否を変えない。
-# stdin framing は "LABEL\t[meta\t]payload" で統一 (RUN / LINT / CLARITY / STATE / VERIFY)。
+# stdin framing は "LABEL\t[meta\t]payload" で統一 (RUN / LINT / CLARITY / STATE / VERIFY / VDIFF)。
 # dr_pipeline 側がラベルで判別し pass2 等に写像する (レコード形は旧来互換 —
 # expect-check / /dr-review が消費)。1 日複数 line の RUN / CLARITY / STATE / VERIFY は
 # METRICS_STDIN に蓄積済みで、dr_pipeline が 1 レコードへ合算する。
