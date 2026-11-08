@@ -915,8 +915,12 @@ if [ -n "$CLARITY_NOTE" ]; then
     log "WARN: Line $TRACK clarity-scan failed — call 2 runs without machine candidates"
     CLARITY_HINTS=""
   fi
-  # 前回 run の verify.json を今回の結果と取り違えない (読み取りも run スコープに限る)
-  rm -f "$VERIFY_PATH"
+  # 前回 run の verify.json を今回の結果と取り違えない (読み取りも run スコープに限る)。runs/** は呼1 の書き込み先で、
+  # path に dir が居座ると rm -f が失敗し、set -Ee の下で run ごと落ちる — if で受けて WARN だけにする (呼2 は
+  # その path に書けず、verify-read が読めないので line は未検証になる)
+  if ! rm -f "$VERIFY_PATH" 2>> "$LOG_FILE"; then
+    log "WARN: Line $TRACK verify.json path could not be cleared ($VERIFY_PATH) — this line will read as unverified"
+  fi
   # 写しの path に dir が先にあると cp は中へ写して成功を返す (verify-diff は rc 1 で外れる)。rm -rf してから
   # 写し、通常ファイルであることを確かめる。置き場の dir が symlink なら link だけを外して作り直す。link が
   # 外れずに残ったら写しを作らない — rm -rf "$PRE_VERIFY_PATH" が link をたどって state の外の <date>.md を消す。

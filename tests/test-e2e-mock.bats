@@ -1656,6 +1656,21 @@ PY
   [ ! -f "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.verify.json" ]
 }
 
+@test "E2E states: a directory on the verify.json path is logged and the line reads as unverified (run still OK)" {
+  # runs/** は呼1 の書き込み先。dir が居座ると rm -f が失敗し、set -Ee の下で run ごと落ちていた
+  echo "verify-missing" > "$MOCK_HOME/.mock_scenario"
+  mkdir -p "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.verify.json/x"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  local log_content
+  log_content=$(get_log)
+  echo "$log_content" | grep -q "WARN: Line $PICKED verify.json path could not be cleared"
+  echo "$log_content" | grep -q "VERIFY $PICKED: {.*\"ran\": false}"
+  echo "$log_content" | grep -q "Line $PICKED is unverified"
+  echo "$log_content" | grep -q "=== Completed successfully ==="
+}
+
 @test "E2E states: clarity failure counts as unverified in metrics" {
   echo "clarity-fail" > "$MOCK_HOME/.mock_scenario"
 

@@ -190,6 +190,7 @@ launchctl list | grep daily-research
 | `VERIFY_DIFF <track>: {...}` | 呼2 が実際に変えた量。script が呼2 の前に書く改稿前の写し `state/<line>/pre-verify/{date}.md` と比べる: 変更範囲の数・字数の増減・消えた文・数字の増減・新しい URL・frontmatter / 機会メモ / ソース節の変更の有無。metrics の `verification` に合算する |
 | `WARN: Line <track> clarity pass: …` | verify-diff が verification プロトコルの禁止事項（frontmatter、機会メモ、`(未解決 …)` の付記以外のソース節、原稿に無かった URL）の改稿か、`verify.json` と呼2 の完了報告の件数の食い違いを見つけた |
 | `WARN: Line <track> pre-verify copy failed — …` / `WARN: Line <track> verify-diff could not run (non-fatal)` | 改稿前の写しを書けなかったか比べられなかった。呼2 の結果は残り、改稿の差分だけが記録されない |
+| `WARN: Line <track> verify.json path could not be cleared (…)` | `state/<line>/runs/{date}.verify.json` にファイルでないもの（dir）が居座っている。呼2 は結果を書けず、そのラインは `unverified` として計上する。run は続く。手で消す |
 | `WARN: report lint hard fail (ctl-016): ...` | 決定論 lint がソース節不在・出典 0 件を検出 |
 | `WARN: clarity pass failed ...` | 呼2（検証 + clarity）の失敗 (fail-open — run 全体は成功のまま、そのラインは `unverified` として計上) |
 | `Audit pass: on (model <m>, effort high, ADR-0020)` | `[audit] enabled = true`。article ごとに呼2 の後で呼3 が走る |
