@@ -534,6 +534,21 @@ ECO_TEMPLATE="$PROJECT_DIR/templates/report-template-ecosystem.md"
   refute_grep -qi 'jev' "$ECO_TEMPLATE"
 }
 
+@test "templates carry the body-heading cap and the year-first date rule as writing rules (H10/H20)" {
+  local T
+  # edge は本文に固定節を持つので見出しの上限は default / ecosystem だけ
+  for T in "$PROJECT_DIR/templates/report-template.md" "$ECO_TEMPLATE"; do
+    grep -qF '本文の見出し（`##` / `###`）は内容に合わせて 2 個まで' "$T"
+    grep -q '記述規律は 4 点' "$T"
+  done
+  grep -q '記述規律は 5 点' "$PROJECT_DIR/templates/report-template-edge.md"
+  for T in "$PROJECT_DIR/templates/report-template.md" "$ECO_TEMPLATE" \
+           "$PROJECT_DIR/templates/report-template-edge.md"; do
+    grep -q '日付は段落の初出で YYYY-MM-DD' "$T"
+    grep -q '同じ段落の 2 回目以降は MM-DD でよい' "$T"
+  done
+}
+
 @test "config.example.toml: the ecosystem example line matches the implemented schema" {
   local EX="$PROJECT_DIR/config.example.toml" PY="$PROJECT_DIR/scripts/lib/dr_pipeline.py"
   local rows brief
