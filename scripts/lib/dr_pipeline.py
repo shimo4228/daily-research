@@ -1392,9 +1392,24 @@ _SUMMARY_RE = re.compile(
 )
 
 
+# 試験 seam の run がログに残す行 (producer = scripts/daily-research.sh の
+# "DR_FORCE_TRACK seam: …" / "DR_ONLY_TRACK seam: …" の log)。backfill はこの行で試験 run を見分ける
+_SEAM_LOG_RE = re.compile(r"\] DR_(?:FORCE|ONLY)_TRACK seam: ")
+
+
+def _backfill_kind(source: object) -> str:
+    """record の source → 重複判定の種別 "live" | "test"。backfill と source の無い旧 record は
+    metrics-append の live run と同じ種別 (試験 run の rescue は source "test" で書く)。"""
+    return "test" if source == "test" else "live"
+
+
 # --- metrics-backfill <metrics_path> <logs_dir>: 既存ログの SUMMARY 行から過去分を投入 ---
 # ログは 30 日ローテーションで消えるため、残存分を JSONL へ救済するワンショット。
-# 既存 metrics の (date, ts) と重複する run は skip する (再実行安全)。
+# 重複の判定は (date, 種別)。種別はログの run が試験 seam の行を持てば test、無ければ live で、
+# 既存 metrics に同じ (date, 種別) の record が 1 件でもあれば、その日のその種別の run は書かない
+# (再実行安全)。ts では照合しない — live の record の ts は metrics-append を呼んだ時刻、ログから
+# 読む ts は最後の SUMMARY 行の時刻で、同じ run でも一致しない。書く record の source は live なら
+# "backfill"、test なら "test" (_load_metrics の既定が本番の集計から除く)。
 def cmd_metrics_backfill(argv: list[str]) -> int:
     import os
 
@@ -1404,7 +1419,8 @@ def cmd_metrics_backfill(argv: list[str]) -> int:
     metrics_path, logs_dir = argv[:2]
 
     existing = {
-        (r.get("date"), r.get("ts")) for r in _load_metrics(metrics_path, include_test=True)
+        (r.get("date"), _backfill_kind(r.get("source")))
+        for r in _load_metrics(metrics_path, include_test=True)
     }
     appended = 0
 
@@ -1438,6 +1454,9 @@ def cmd_metrics_backfill(argv: list[str]) -> int:
                         runs.append(run)
                         continue
                     if run is None:
+                        continue
+                    if _SEAM_LOG_RE.search(line):
+                        run["source"] = "test"
                         continue
                     m = _SUMMARY_RE.search(line)
                     if m:
@@ -1486,7 +1505,7 @@ def cmd_metrics_backfill(argv: list[str]) -> int:
                 if run["pass1"] is None and run["pass2"] is None:
                     continue  # SUMMARY 行のない中断 run はデータなし
                 run["total_cost"] = _total_cost(run)
-                if (run["date"], run["ts"]) in existing:
+                if (run["date"], _backfill_kind(run["source"])) in existing:
                     continue
                 out.write(json.dumps(run, ensure_ascii=False) + "\n")
                 appended += 1

@@ -748,7 +748,7 @@ def test_metrics_append_clarity_all_ok_is_ok(monkeypatch, capsys, tmp_path):
 @pytest.mark.unit
 def test_metrics_append_record_keys_and_empty_report_count(monkeypatch, capsys, tmp_path):
     rec, _ = _metrics(monkeypatch, capsys, tmp_path, "", report_count="", extra=("test",))
-    # backfill の重複判定は (date, ts)、集計は source で本番 run を選ぶ
+    # backfill の重複判定は (date, source が test か否か)、集計は source で本番 run を選ぶ
     assert set(rec) == {
         "date",
         "ts",

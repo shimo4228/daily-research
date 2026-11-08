@@ -694,6 +694,75 @@ def test_metrics_backfill_clarity_warn_without_summary(monkeypatch, capsys, tmp_
     assert rec["total_cost"] == pytest.approx(8.0)  # cost 不明分は合算しない
 
 
+# live の 05:00 run と、同じ日の DR_FORCE_TRACK の試験 run。ログの seam 行は daily-research.sh が書く
+BACKFILL_LOG_LIVE_AND_TEST = """\
+[2026-10-30 05:00:00] === Starting daily research ===
+[2026-10-30 05:10:00] SUMMARY Run(akc): cost=$1.0000 turns=10 duration=100s tokens_in=100 tokens_out=200 searches=5
+[2026-10-30 05:18:58] SUMMARY Clarity: cost=$0.1000 turns=2 duration=60s tokens_in=10 tokens_out=20
+[2026-10-30 05:18:58] === Completed successfully ===
+[2026-10-30 19:37:35] === Starting daily research ===
+[2026-10-30 19:37:43] DR_FORCE_TRACK seam: line akc を輪番外で実行 (test run)
+[2026-10-30 19:43:00] SUMMARY Run(akc): cost=$2.0000 turns=20 duration=300s tokens_in=30 tokens_out=40 searches=6
+[2026-10-30 19:44:39] === Completed successfully ===
+"""
+
+
+@pytest.mark.unit
+def test_metrics_backfill_skips_runs_metrics_append_already_recorded(monkeypatch, capsys, tmp_path):
+    # live の record の ts は metrics-append を呼んだ時刻 (05:25:09)、ログから読む ts は最後の SUMMARY 行の
+    # 時刻 (05:18:58) で一致しない。(date, ts) で照合すると live run が source "backfill" でもう 1 行増え、
+    # _load_metrics が両方を本番 run として数えていた (2026-10-29〜11-08 の 13 run で再現)
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "2026-10-30.log").write_text(BACKFILL_LOG_LIVE_AND_TEST)
+    metrics = tmp_path / "metrics.jsonl"
+    metrics.write_text(
+        json.dumps({"date": "2026-10-30", "ts": "2026-10-30T05:25:09", "source": "live"})
+        + "\n"
+        + json.dumps({"date": "2026-10-30", "ts": "2026-10-30T19:45:01", "source": "test"})
+        + "\n"
+    )
+    before = metrics.read_text()
+
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)])
+    assert rc == 0
+    assert "backfilled 0 run(s)" in out
+    assert metrics.read_text() == before
+
+
+@pytest.mark.unit
+def test_metrics_backfill_matches_live_and_test_runs_by_source(monkeypatch, capsys, tmp_path):
+    # 同じ日の試験 run の record は live run を覆わない。record の無い試験 run は source "test" で
+    # 書く — "backfill" で書くと _load_metrics が本番 run として数える
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "2026-10-30.log").write_text(BACKFILL_LOG_LIVE_AND_TEST)
+    metrics = tmp_path / "metrics.jsonl"
+    metrics.write_text(
+        json.dumps({"date": "2026-10-30", "ts": "2026-10-30T19:45:01", "source": "test"}) + "\n"
+    )
+
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)])
+    assert rc == 0
+    assert "backfilled 1 run(s)" in out
+    rec = json.loads(metrics.read_text().splitlines()[1])
+    assert rec["source"] == "backfill"
+    assert rec["pass2"]["cost"] == pytest.approx(1.0)  # 05:00 の live run
+
+    # 試験 run だけが record を持たない日: 試験 run は source "test" で入り、本番の集計に入らない
+    metrics.write_text(
+        json.dumps({"date": "2026-10-30", "ts": "2026-10-30T05:25:09", "source": "live"}) + "\n"
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)])
+    assert "backfilled 1 run(s)" in out
+    rec = json.loads(metrics.read_text().splitlines()[1])
+    assert rec["source"] == "test"
+    assert rec["pass2"]["cost"] == pytest.approx(2.0)
+    # 再実行しても増えない (冪等): backfill が source "test" で書いた record が試験 run を覆う
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)])
+    assert "backfilled 0 run(s)" in out
+
+
 # === report-lint (ctl-016, ADR-0009 自由形式 + 固定 2 節) ===
 
 GOOD_REPORT = (
