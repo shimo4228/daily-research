@@ -234,6 +234,29 @@ EOF
   [ "$status" -eq 1 ]
 }
 
+@test "real_auth_probe passes timeout -k so a SIGTERM-ignoring claude cannot hold the run (and the lock)" {
+  # -k が無いと、timeout は SIGTERM を無視した子の終了を無期限に待つ。probe は lock 取得後に
+  # 走るので、翌朝以降の run が全部 "Another instance is running" になる (run_claude と同じ穴)。
+  # 実時間で 60 秒を待たずに済むよう、PATH 先頭の timeout が引数を記録して本物へ渡す
+  local real_timeout; real_timeout=$(command -v timeout)
+  mkdir -p "$TMP/bin"
+  printf '#!/bin/bash\nprintf "%%s\\n" "$@" > "%s/timeout_args"\nexec "%s" "$@"\n' "$TMP" "$real_timeout" > "$TMP/bin/timeout"
+  chmod +x "$TMP/bin/timeout"
+  cat > "$TMP/claude" <<'EOF'
+#!/bin/bash
+echo '{"type":"result","is_error":false}'
+EOF
+  chmod +x "$TMP/claude"
+  CLAUDE_CMD="$TMP/claude"
+  DR_PY="$(_dr_py)"
+  PATH="$TMP/bin:$PATH"
+  source "$LIB_DIR/auth.sh"
+  run real_auth_probe
+  [ "$status" -eq 0 ]
+  [ "$(sed -n 1p "$TMP/timeout_args")" = "-k" ]
+  [[ "$(sed -n 2p "$TMP/timeout_args")" =~ ^[0-9]+$ ]]
+}
+
 # === claude.sh (classify_exit) ===
 
 _fixtures() {

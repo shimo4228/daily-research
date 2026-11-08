@@ -20,7 +20,9 @@ real_auth_probe() {
   local fields code err
   AUTH_PROBE_JSON=""
   if command -v timeout >/dev/null 2>&1; then
-    AUTH_PROBE_JSON=$(timeout 60 "$CLAUDE_CMD" -p ok --max-turns 1 --model haiku \
+    # -k 10: SIGTERM を無視する claude を待ち続けない (lib/claude.sh の run_claude と同じ穴。
+    # probe は lock 取得後に走るので、待ち続けると翌朝以降の run が全部 skip になる)
+    AUTH_PROBE_JSON=$(timeout -k 10 60 "$CLAUDE_CMD" -p ok --max-turns 1 --model haiku \
       --output-format json --no-session-persistence < /dev/null 2>/dev/null) || true
   else
     AUTH_PROBE_JSON=$("$CLAUDE_CMD" -p ok --max-turns 1 --model haiku \
