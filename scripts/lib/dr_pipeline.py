@@ -15,12 +15,14 @@ subcommand に置き換える parser-of-record。test も本モジュールだ�
            検査は本文の isinstance と try/except が持つ。
 """
 
+import bisect
 import json
 import math
 import re
 import sys
 import tomllib
 from collections.abc import Callable
+from typing import NamedTuple
 
 
 def _result_dict(raw: object) -> object:
@@ -2145,7 +2147,9 @@ def cmd_spend_gate(argv: list[str]) -> int:
 #   大文字の並びだけ、ほかは行番号と字数の整数だけで組む — 原稿は外部由来のデータで、その自由文を
 #   タスクプロンプトへ写さない。最終行は固定文 CLARITY_HINT_FOOTER。
 # --counts: counts だけの JSON 1 行。
-# ノートが読めなければ rc 1 (stdout 空)。引数の誤りは rc 64。
+# ノートが読めない・CLARITY_SCAN_MAX_CHARS 字を超えるときは rc 1 (stdout 空)。引数の誤りは rc 64。
+# 走査は入力長に線形 (大文字の並びは所有量指定子で後戻りさせない・URL・リンク・コメントの長さに上限・
+# 頭文字の語の並びは本文 1 回の索引)。SH は timeout を付けて呼び、超えたら候補なしで呼2 を走らせる。
 #
 # 略語 = 大文字 2 字以上 (数字を挟んでよい、複数形の s を 1 字許す) で CLARITY_TERM_MAX 字以下の並び。
 # 英数字・_・-・/・.・@・# に接する並び (語の一部・ファイル名・製品名・識別子) と、inline code・
@@ -2155,6 +2159,8 @@ def cmd_spend_gate(argv: list[str]) -> int:
 # 頭文字が略語と一致する語の並び (「Hacker News の HN」。of・and 等は飛ばす)。
 CLARITY_LONG_SENTENCE = 120
 CLARITY_TERM_MAX = 8
+CLARITY_SCAN_MAX_CHARS = 200_000  # vault の最長ノート (約 3.8 万字) の 5 倍
+_CS_LONG_FORM_STOPS_MAX = 3  # 頭文字の語の並びで続けて飛ばす stopword の数の上限 (「of the」は 2)
 CLARITY_HINT_TERMS_MAX = 20
 CLARITY_HINT_SENTENCES_MAX = 10
 # --hints の最終行。候補の節はプロンプトの末尾に来るので、照合 (Step B) の重みを候補の後で言い直す —
@@ -2166,14 +2172,17 @@ CLARITY_COMMON_ACRONYMS = frozenset(
         "OS", "PC", "TV", "SNS", "CPU", "GPU", "USB", "QR", "FAQ", "DNA", "GDP",
     }
 )  # fmt: skip
+# 大文字の並びは「先頭の大文字 + 並びの中に 2 字目の大文字がある (先読み) + 並び全体 (所有量指定子)」で取る。
+# 後ろの条件はどれも並びの途中では成り立たない (次の字が英数字) ので、後戻りしない形でも合う並びは同じ —
+# 後戻りする形 ([A-Z][A-Z0-9]*[A-Z][A-Z0-9]*) は 2 万字の大文字の並びで 2 乗の時間がかかった
 _CS_ACRONYM_RE = re.compile(
-    r"(?<![A-Za-z0-9_\-/.@#`])([A-Z][A-Z0-9]*[A-Z][A-Z0-9]*s?)(?![A-Za-z0-9_\-/`+]|\.[A-Za-z0-9])"
+    r"(?<![A-Za-z0-9_\-/.@#`])([A-Z](?=[0-9]*+[A-Z])[A-Z0-9]*+s?)(?![A-Za-z0-9_\-/`+]|\.[A-Za-z0-9])"
 )
 # 複合語の頭の大文字の並び (GPT-5.6・SKILL.md・TLA+) と番号付きの名前 (PR #648・ISO 24138。4 桁以上で、
 # 年・日付・桁区切りの数は除く)。ここで先に出た語は名前として導入済みとみなす — 番号付きの名前を候補に
 # 挙げると、呼2 が名前と番号の間に括弧の説明を割り込ませる (「PR（…）#648」、T5 の測定)
 _CS_COMPOUND_RE = re.compile(
-    r"(?<![A-Za-z0-9_])([A-Z][A-Z0-9]*[A-Z][A-Z0-9]*)"
+    r"(?<![A-Za-z0-9_])([A-Z](?=[0-9]*+[A-Z])[A-Z0-9]*+)"
     r"(?=[\-.][A-Za-z0-9]|\+| ?#\d| \d{4,}(?![\d,.\-/]| ?年))"
 )
 _CS_ROMAN_RE = re.compile(r"[IVX]+")
@@ -2181,11 +2190,12 @@ _CS_CAPS_BEFORE_RE = re.compile(r"[A-Z][A-Z0-9]*[A-Z] $")  # 「CC BY」の BY =
 _CS_WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9'’]*(?:-[A-Za-z0-9]+)*")
 _CS_STOPWORDS = frozenset({"of", "and", "for", "the", "on", "in", "to", "at", "by", "a", "an", "&"})
 # 略語を探す前に空白で塗る範囲 (改行は残して行番号を保つ): fence の code block / inline code /
-# リンクの URL 部分 / 裸の URL / HTML コメント
+# リンクの URL 部分 / 裸の URL / HTML コメント。閉じない「](」「<!--」「[」は出るたびに行末・文末まで
+# 探すので、リンクの URL・リンクの文字列・コメントの長さに上限を置く (上限 × 出現数で線形)
 _CS_MASK_RE = re.compile(
-    r"```.*?```|`[^`\n]*`|\]\([^)\n]*\)|https?://[^\s)）\]>]+|<!--.*?-->", re.DOTALL
+    r"```.*?```|`[^`\n]*`|\]\([^)\n]{0,2048}\)|https?://[^\s)）\]>]+|<!--.{0,5000}?-->", re.DOTALL
 )
-_CS_LINK_RE = re.compile(r"\[([^\]\n]*)\]\([^)\n]*\)")
+_CS_LINK_RE = re.compile(r"\[([^\]\n]{0,1000})\]\([^)\n]{0,2048}\)")
 _CS_LIST_MARK_RE = re.compile(r"^(?:[-*+]|\d+\.)\s+")
 _CS_SENT_END = "。！？\n"
 
@@ -2201,40 +2211,72 @@ def _cs_mask(body: str) -> str:
     return _CS_MASK_RE.sub(lambda m: re.sub(r"[^\n]", " ", m.group()), body)
 
 
-def _cs_long_form(text: str, letters: str) -> bool:
-    """text に、頭文字 (stopword を飛ばす) が letters と一致する空白区切りの語の並びがあるか。"""
+def _cs_long_forms(text: str) -> dict[str, int]:
+    """頭文字の索引: 空白区切りの語の並び (2 語目以後の stopword は飛ばす) の頭文字の列 → その並びが
+    終わる最小の位置。列は CLARITY_TERM_MAX 字まで、続けて飛ばす stopword は _CS_LONG_FORM_STOPS_MAX まで
+    (1 つの並びが見る語の数に上限があるので、本文の語数に線形)。"""
     words = [(m.group(), m.start(), m.end()) for m in _CS_WORD_RE.finditer(text)]
+    index: dict[str, int] = {}
     for i in range(len(words)):
-        acc, prev_end = "", None
-        for w, s, e in words[i:]:
+        acc, prev_end, stops = "", None, 0
+        for j in range(i, len(words)):  # words[i:] は毎回の写しで 2 乗になる
+            w, s, e = words[j]
             if prev_end is not None and text[prev_end:s].strip():
                 break
             prev_end = e
             if acc and w.lower() in _CS_STOPWORDS:
+                stops += 1
+                if stops > _CS_LONG_FORM_STOPS_MAX:
+                    break
                 continue
+            stops = 0
             acc += w[0].upper()
-            if not letters.startswith(acc):
+            index[acc] = min(index.get(acc, e), e)
+            if len(acc) >= CLARITY_TERM_MAX:
                 break
-            if acc == letters:
-                return True
-    return False
+    return index
 
 
-def _cs_explained(body: str, start: int, end: int, letters: str) -> bool:
+class _CsIndex(NamedTuple):
+    """本文 1 回の索引。略語ごとの判定を本文の長さに依らない手間にする (位置はどれも昇順)。"""
+
+    long_forms: dict[str, int]  # _cs_long_forms
+    sent_ends: list[int]  # _CS_SENT_END の字の位置
+    defs: list[int]  # 「とは」「の略」の始まりの位置
+    newlines: list[int]  # 改行の位置 (行番号を出す)
+
+
+def _cs_index(body: str) -> _CsIndex:
+    return _CsIndex(
+        _cs_long_forms(body),
+        [m.start() for m in re.finditer("[" + _CS_SENT_END + "]", body)],
+        [m.start() for m in re.finditer("とは|の略", body)],
+        [m.start() for m in re.finditer("\n", body)],
+    )
+
+
+def _cs_explained(body: str, start: int, end: int, letters: str, idx: _CsIndex) -> bool:
     """body[start:end] の略語の初出に説明があるか (形は clarity-scan の注記)。"""
     after = body[end : end + 8].lstrip(" ")
     if after[:1] in ("（", "(") and not after[1:].lstrip()[:1].isdigit():
         return True
-    if body[:start].rstrip(" ")[-1:] in ("（", "(") and after[:1] in ("）", ")", "、", ",", "，"):
+    before = start
+    while before > 0 and body[before - 1] == " ":
+        before -= 1
+    if body[before - 1 : before] in ("（", "(") and after[:1] in ("）", ")", "、", ",", "，"):
         return True
     if after.startswith(("という", "と呼ばれる", "＝", "=")):
         return True
-    s0 = max(body.rfind(c, 0, start) for c in _CS_SENT_END) + 1
-    ends = [i for i in (body.find(c, end) for c in _CS_SENT_END) if i >= 0]
-    s1 = min(ends) if ends else len(body)
-    if "とは" in body[s0:s1] or "の略" in body[s0:s1]:
+    # 初出の文 = body[s0:s1] (直前の文末の次から、後ろの最初の文末まで)
+    k = bisect.bisect_left(idx.sent_ends, start)
+    s0 = idx.sent_ends[k - 1] + 1 if k else 0
+    k = bisect.bisect_left(idx.sent_ends, end)
+    s1 = idx.sent_ends[k] if k < len(idx.sent_ends) else len(body)
+    k = bisect.bisect_left(idx.defs, s0)
+    if k < len(idx.defs) and idx.defs[k] < s1:  # 同じ文の「とは」「の略」
         return True
-    return _cs_long_form(body[:s1], letters)
+    # 初出の文の終わりまでに、頭文字が略語と一致する語の並びがある
+    return idx.long_forms.get(letters, len(body) + 1) <= s1
 
 
 def _cs_not_a_term(term: str, masked: str, start: int, end: int) -> bool:
@@ -2251,6 +2293,7 @@ def _cs_not_a_term(term: str, masked: str, start: int, end: int) -> bool:
 
 def _cs_undefined_terms(body: str, offset: int) -> list[dict[str, object]]:
     masked = _cs_mask(body)
+    idx = _cs_index(masked)
     compound_at: dict[str, int] = {}
     for m in _CS_COMPOUND_RE.finditer(masked):
         compound_at.setdefault(m.group(1), m.start(1))
@@ -2268,8 +2311,9 @@ def _cs_undefined_terms(body: str, offset: int) -> list[dict[str, object]]:
         if _cs_not_a_term(term, masked, m.start(1), m.end(1)):
             continue
         letters = re.sub(r"[^A-Z]", "", term)
-        if not _cs_explained(masked, m.start(1), m.end(1), letters):
-            out.append({"term": term, "line": offset + masked.count("\n", 0, m.start(1)) + 1})
+        if not _cs_explained(masked, m.start(1), m.end(1), letters, idx):
+            line = offset + bisect.bisect_left(idx.newlines, m.start(1)) + 1
+            out.append({"term": term, "line": line})
     return out
 
 
@@ -2351,6 +2395,9 @@ def cmd_clarity_scan(argv: list[str]) -> int:
             text = f.read()
     except (OSError, UnicodeDecodeError) as e:
         print(f"clarity-scan: cannot read {paths[0]}: {e}", file=sys.stderr)
+        return 1
+    if len(text) > CLARITY_SCAN_MAX_CHARS:
+        print(f"clarity-scan: {paths[0]} is over {CLARITY_SCAN_MAX_CHARS} chars", file=sys.stderr)
         return 1
     if flags == ["--hints"]:
         terms, longs, _ = _cs_parts(text)

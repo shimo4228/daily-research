@@ -718,9 +718,10 @@ if [ -n "$CLARITY_NOTE" ]; then
   # 機械が拾った clarity の候補 (H05)。clarity-scan が本文の初出に説明の無い略語と 120 字超の文を
   # 列挙し、--hints の節 (語・行番号・字数だけ。原稿の自由文は写さない) を CLARITY_PROMPT の末尾に足す。
   # 直すかは呼2 が判断する。呼2 の前後の --counts は CSCAN 行で metrics の verification 節へ。
-  # scan の失敗は候補を足さずに呼2 を従来どおり走らせる (fail-open)
-  CSCAN_BEFORE=$(python3 "$DR_PY" clarity-scan --counts "$CLARITY_NOTE" 2>> "$LOG_FILE") || CSCAN_BEFORE=""
-  if ! CLARITY_HINTS=$(python3 "$DR_PY" clarity-scan --hints "$CLARITY_NOTE" 2>> "$LOG_FILE"); then
+  # scan の失敗と timeout (1 回 30 秒。走査は入力長に線形で、本番のノートは 1 秒未満) は候補を足さずに
+  # 呼2 を従来どおり走らせる (fail-open)
+  CSCAN_BEFORE=$(timeout -k 5 30 python3 "$DR_PY" clarity-scan --counts "$CLARITY_NOTE" 2>> "$LOG_FILE") || CSCAN_BEFORE=""
+  if ! CLARITY_HINTS=$(timeout -k 5 30 python3 "$DR_PY" clarity-scan --hints "$CLARITY_NOTE" 2>> "$LOG_FILE"); then
     log "WARN: Line $TRACK clarity-scan failed — call 2 runs without machine candidates"
     CLARITY_HINTS=""
   fi
@@ -800,7 +801,7 @@ $CLARITY_HINTS}"
   fi
   # 呼2 後の clarity-scan (H05): 残った候補の数を呼2 前と並べる (呼2 の失敗時も部分改稿を測る)。
   # 失敗は計測が欠けるだけ (non-fatal)
-  CSCAN_AFTER=$(python3 "$DR_PY" clarity-scan --counts "$CLARITY_NOTE" 2>> "$LOG_FILE") || CSCAN_AFTER=""
+  CSCAN_AFTER=$(timeout -k 5 30 python3 "$DR_PY" clarity-scan --counts "$CLARITY_NOTE" 2>> "$LOG_FILE") || CSCAN_AFTER=""
   if [ -n "$CSCAN_BEFORE" ] && [ -n "$CSCAN_AFTER" ]; then
     log "CLARITY_SCAN $TRACK: before $CSCAN_BEFORE after $CSCAN_AFTER"
     METRICS_STDIN+="CSCAN"$'\t'"$CSCAN_BEFORE"$'\t'"$CSCAN_AFTER"$'\n'

@@ -6,8 +6,11 @@ clarity-scan は原稿の本文から、初出に説明の無い略語と 120 �
 """
 
 import io
+import itertools
 import json
+import string
 import sys
+import time
 
 import dr_pipeline
 import pytest
@@ -80,6 +83,8 @@ def test_clarity_scan_lists_first_use_acronyms_without_explanation(monkeypatch, 
         "LLM とは大規模言語モデルのことだ。",
         "LLM は Large Language Model の略だ。",
         "LLM という仕組みが増えた。",
+        "Society for the Prevention of Cruelty to Animals の SPCA が出した。",
+        "前の段落で Organisation for Economic Co-operation and Development と書いた。\n\n後の OECD は説明済み。",
     ],
 )
 def test_clarity_scan_accepts_explanation_forms(monkeypatch, capsys, tmp_path, sentence):
@@ -96,6 +101,7 @@ def test_clarity_scan_accepts_explanation_forms(monkeypatch, capsys, tmp_path, s
         "LLM（2026-10）が増えた。",
         "開発者の LLM が増えた。",
         "Language Model の LLM が増えた。",
+        "LLM が増えた。後の文の Large Language Model は初出の文より後。",
     ],
 )
 def test_clarity_scan_flags_unexplained_forms(monkeypatch, capsys, tmp_path, sentence):
@@ -248,6 +254,37 @@ def test_clarity_scan_hints_cap_the_lists(monkeypatch, capsys, tmp_path):
 def test_clarity_scan_unreadable_note_is_rc1_with_empty_stdout(monkeypatch, capsys, tmp_path):
     rc, out, err = run_cmd(monkeypatch, capsys, ["clarity-scan", str(tmp_path / "missing.md")])
     assert rc == 1 and out == "" and "clarity-scan" in err
+
+
+# === 入力の長さと時間 (走査は入力長に線形。SH は timeout を付けて呼ぶ) ===
+
+_THREE = ["".join(p) for p in itertools.product(string.ascii_uppercase, repeat=3)]
+_PATHOLOGICAL = {
+    "caps_run": "A" * 20000,  # 後戻りする正規表現で 2 乗 (6 秒) だった形
+    "caps_runs_and_spaces": ("A" * 6000 + " ") * 3,
+    "distinct_acronyms": "は".join(_THREE)[:20000],
+    "stopword_run": "of " * 6000 + "OX",
+    "words_on_lines": "AB\n" * 6000,
+    "unclosed_link_url": "](" * 10000,
+    "unclosed_link_text": "[" * 20000,
+    "unclosed_comment": "<!--" * 5000,
+}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("body", list(_PATHOLOGICAL.values()), ids=list(_PATHOLOGICAL))
+def test_clarity_scan_pathological_bodies_finish_within_a_second(body):
+    t0 = time.perf_counter()
+    dr_pipeline.clarity_scan(f"# t\n\n{body}\n\n## ソース\n\n- x\n")
+    assert time.perf_counter() - t0 < 1.0
+
+
+@pytest.mark.unit
+def test_clarity_scan_over_the_length_cap_is_rc1_with_empty_stdout(monkeypatch, capsys, tmp_path):
+    p = tmp_path / "note.md"
+    p.write_text("# t\n\n" + "あ" * dr_pipeline.CLARITY_SCAN_MAX_CHARS)
+    rc, out, err = run_cmd(monkeypatch, capsys, ["clarity-scan", "--counts", str(p)])
+    assert rc == 1 and out == "" and "over" in err
 
 
 @pytest.mark.unit
