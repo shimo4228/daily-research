@@ -31,6 +31,8 @@ select = [
     "RUF",                  # ruff 固有の誤り系
     "C90",                  # 複雑度の予算 (mccabe)
     "S",                    # bandit: 危険な構文
+    # 境界の型: 引数・*args・**kwargs・public の戻り値の注釈と Any の禁止 (.claude/verify.md)
+    "ANN001", "ANN002", "ANN003", "ANN201", "ANN401",
 ]
 ignore = [
     # 日本語の全角括弧・句読点を曖昧文字として検出するため (文字列 / docstring / コメント)
@@ -40,8 +42,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# test は assert で書き、fixture の一時ファイルを使う
-"tests/**" = ["S101", "S108"]
+# test は assert で書き、fixture の一時ファイルを使う。境界の型 (ANN) は tests の外だけに掛ける
+"tests/**" = ["S101", "S108", "ANN001", "ANN002", "ANN003", "ANN201", "ANN401"]
 
 [tool.ruff.lint.mccabe]
 # prune, don't raise — record changes in .claude/verify.md with a dated reason

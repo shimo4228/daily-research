@@ -21,12 +21,17 @@ budget: C901 max-complexity = 23 — 分布 n=43、p50=4 / p90=13 / p99=19 / max
 re-research triggers: 12 か月経過 / shuck が 1.0 に達する / shellcheck の新 release
 
 ## type check
-tool: none（ratchet 待ち）
-selected: 2026-10-31
-reason: 境界の型（ANN001-003・ANN201・ANN401、tests 除外）は `dr_pipeline.py` に 75 件の違反がある
-  （2026-10-31）。同ファイルを書き換える plan（`docs/plans/happy-growing-bachman.md`）の後に排出して error で入れる。
-  型検査器（pyright / ty 等）はその時に search-first で選ぶ
-re-research triggers: plan の WP-A 完了 / 12 か月経過
+tool: ruff ==0.17.3 の ANN001・ANN002・ANN003・ANN201・ANN401（境界の型。select は `pyproject.toml`、
+  tests は per-file-ignores で外す）。型検査器は未導入
+selected: 2026-11-08
+reason: 境界の型の違反は 2026-10-31 に 75 件、WP-A（`docs/plans/happy-growing-bachman.md`）の後の 2026-11-08 に
+  81 件（`scripts/lib/dr_pipeline.py`、ANN001 55・ANN201 26）。全件を注釈で排出して error で入れた（ratchet）。
+  JSON / TOML 由来の値は検証するまで object / dict[str, object] で受け、Any は使わない
+type checker: 注釈後の試走（2026-11-08、uvx、`--python-version 3.11`、dr_pipeline.py）は pyright 1.1.414 = 47・
+  pyrefly 1.4.1（default）= 53・ty 0.0.99 = 60・mypy 2.4.1 = 64 件。ほぼ全部が object の値への `.get` / `[]`
+  （本文が try/except と実行時の invariant で受けている duck typing）。verify.sh に足すには排出が先で、
+  verify.sh の変更は運用者の承認を要するので未導入
+re-research triggers: 型検査器を verify.sh に入れるとき / 12 か月経過
 
 ## security
 tool: ruff の `S`（bandit 規則）。secret は `scripts/pre-commit.sh`（git hook）と harness の secret scan
