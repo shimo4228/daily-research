@@ -1881,6 +1881,9 @@ def _spend_totals(ledger: str, date_s: str) -> tuple[float, float, list[str]]:
         except ValueError:
             unreadable.append(f"line {n} (not JSON)")
             continue
+        except RecursionError:  # 深い入れ子。ValueError でないので別に捕まえる
+            unreadable.append(f"line {n} (too deeply nested)")
+            continue
         if not isinstance(r, dict):
             unreadable.append(f"line {n} (not an object)")
             continue

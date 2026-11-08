@@ -273,6 +273,25 @@ def test_spend_gate_negative_or_non_finite_cost_is_unreadable(
 
 
 @pytest.mark.unit
+def test_spend_gate_deeply_nested_line_is_rc2_not_traceback(monkeypatch, capsys, tmp_path):
+    # json.loads は深い入れ子で RecursionError (ValueError でない) を出す。以前は traceback で rc 1 に
+    # なり、billing.sh が「上限で止めた」と読んで理由を捨てていた。深さ 10^6 は python 3.13 / 3.14
+    # (本番の homebrew) の両方で RecursionError になる (3.14 は 10^5 では通る)
+    depth = 1_000_000
+    ledger = _write(
+        tmp_path,
+        "l.jsonl",
+        '{"date": "2026-11-02", "cost_usd": 1}\n' + "[" * depth + "]" * depth + "\n",
+    )
+    rc, out, err = run_cmd(
+        monkeypatch, capsys, ["spend-gate", ledger, "2026-11-02", "100", "10", "1"]
+    )
+    assert rc == 2
+    assert out == ""
+    assert err == f"spend-gate: 1 unreadable line(s) in {ledger}: line 2 (too deeply nested)\n"
+
+
+@pytest.mark.unit
 def test_spend_gate_zero_cost_is_a_readable_row(monkeypatch, capsys, tmp_path):
     # 0 は報告された費用 (spend-add が total_cost_usd: 0 を記録する)。読めない行にしない
     ledger = _write(tmp_path, "l.jsonl", '{"date": "2026-11-02", "cost_usd": 0}\n')
