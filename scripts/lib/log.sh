@@ -4,13 +4,15 @@
 # ログ環境を初期化する。
 # - logs/ とログファイルを作成し、権限を「作成時に」制限する (旧実装は実行末尾で chmod
 #   していたため、実行中はログが group/other に読めた = ctl-012)
-# - 30 日より古いログを削除 (ローテーション)
+# - 30 日より古い日付ログ (YYYY-MM-DD.log) を削除 (ローテーション)。launchd-stdout.log /
+#   launchd-stderr.log は対象外 — launchd が起動時に開いた後で消すと、その run の stderr が
+#   unlink 済みの inode に書かれて失われる (docs/RUNBOOK.md は手動 cleanup と定める)
 log_init() {
   mkdir -p "$LOG_DIR"
   chmod 700 "$LOG_DIR"
   : >> "$LOG_FILE"
   chmod 600 "$LOG_FILE"
-  find "$LOG_DIR" -name "*.log" -mtime +30 -delete 2>/dev/null || true
+  find "$LOG_DIR" -name "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].log" -mtime +30 -delete 2>/dev/null || true
 }
 
 log() {

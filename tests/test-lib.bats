@@ -46,14 +46,30 @@ refute_out() {
 
 @test "log_init deletes logs older than 30 days" {
   LOG_DIR="$TMP/logs"
-  LOG_FILE="$LOG_DIR/today.log"
+  LOG_FILE="$LOG_DIR/2026-01-31.log"
   mkdir -p "$LOG_DIR"
-  : > "$LOG_DIR/old.log"
-  touch -t 202501010000 "$LOG_DIR/old.log"  # 30日超
+  : > "$LOG_DIR/2025-01-01.log"
+  touch -t 202501010000 "$LOG_DIR/2025-01-01.log"  # 30日超
   source "$LIB_DIR/log.sh"
   log_init
-  [ ! -f "$LOG_DIR/old.log" ]
+  [ ! -f "$LOG_DIR/2025-01-01.log" ]
   [ -f "$LOG_FILE" ]
+}
+
+@test "log_init keeps launchd's stdout/stderr capture files however old (RUNBOOK: manual cleanup)" {
+  # launchd は job の起動時に StandardErrorPath を開いてから script を exec する。rotation が
+  # ここで消すと、その run の stderr (set -u の中断など、log に残らない出力) は unlink 済みの
+  # inode に書かれて失われる。書き込みの無い日が 30 日続くと mtime が古くなる
+  LOG_DIR="$TMP/logs"
+  LOG_FILE="$LOG_DIR/2026-01-31.log"
+  mkdir -p "$LOG_DIR"
+  : > "$LOG_DIR/launchd-stderr.log"
+  : > "$LOG_DIR/launchd-stdout.log"
+  touch -t 202501010000 "$LOG_DIR/launchd-stderr.log" "$LOG_DIR/launchd-stdout.log"
+  source "$LIB_DIR/log.sh"
+  log_init
+  [ -f "$LOG_DIR/launchd-stderr.log" ]
+  [ -f "$LOG_DIR/launchd-stdout.log" ]
 }
 
 # === notify.sh ===
