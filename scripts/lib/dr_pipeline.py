@@ -1417,12 +1417,21 @@ def _backfill_kind(source: object) -> str:
     return "test" if source == "test" else "live"
 
 
+# metrics-append が record を書いた run の印 (producer = cmd_metrics_append の print。daily-research.sh が
+# stdout を同じ log に >> し、時刻の prefix は付かない)
+_APPENDED_LOG_PREFIX = "metrics: appended "
+
+
 # --- metrics-backfill <metrics_path> <logs_dir>: 既存ログの SUMMARY 行から過去分を投入 ---
 # ログは 30 日ローテーションで消えるため、残存分を JSONL へ救済するワンショット。
-# 重複の判定は (date, 種別)。種別はログの run が試験 seam の行を持てば test、無ければ live で、
-# 既存 metrics に同じ (date, 種別) の record が 1 件でもあれば、その日のその種別の run は書かない
-# (再実行安全)。ts では照合しない — live の record の ts は metrics-append を呼んだ時刻、ログから
-# 読む ts は最後の SUMMARY 行の時刻で、同じ run でも一致しない。書く record の source は live なら
+# 重複は run ごとに判定し、次のどちらかの run は書かない (再実行安全):
+# - log の自分の区間に metrics-append の印があり、既存 metrics に同じ (date, 種別) の record がある run。
+#   ts では照合できない — live の record の ts は metrics-append を呼んだ時刻、ログから読む ts は最後の
+#   SUMMARY 行の時刻で、同じ run でも一致しない。印だけで決めないのは、metrics.jsonl を作り直した後の
+#   rescue (record の無い日) を残すため
+# - 既存 metrics に同じ (date, ts) の record がある run (前回の backfill が書いた)
+# 印の無い run (metrics-append の前に死んだ再実行など) は、同じ日に記録済みの run があっても救う。
+# 種別はログの run が試験 seam の行を持てば test、無ければ live。書く record の source は live なら
 # "backfill"、test なら "test" (_load_metrics の既定が本番の集計から除く)。
 def cmd_metrics_backfill(argv: list[str]) -> int:
     import os
@@ -1432,10 +1441,9 @@ def cmd_metrics_backfill(argv: list[str]) -> int:
         return 64
     metrics_path, logs_dir = argv[:2]
 
-    existing = {
-        (r.get("date"), _backfill_kind(r.get("source")))
-        for r in _load_metrics(metrics_path, include_test=True)
-    }
+    known = _load_metrics(metrics_path, include_test=True)
+    recorded_kinds = {(r.get("date"), _backfill_kind(r.get("source"))) for r in known}
+    recorded_ts = {(r.get("date"), r.get("ts")) for r in known}
     appended = 0
 
     log_files = sorted(
@@ -1468,6 +1476,9 @@ def cmd_metrics_backfill(argv: list[str]) -> int:
                         runs.append(run)
                         continue
                     if run is None:
+                        continue
+                    if line.startswith(_APPENDED_LOG_PREFIX):
+                        run["appended"] = True
                         continue
                     if _SEAM_LOG_RE.search(line):
                         run["source"] = "test"
@@ -1518,9 +1529,12 @@ def cmd_metrics_backfill(argv: list[str]) -> int:
             for run in runs:
                 if run["pass1"] is None and run["pass2"] is None:
                     continue  # SUMMARY 行のない中断 run はデータなし
-                run["total_cost"] = _total_cost(run)
-                if (run["date"], _backfill_kind(run["source"])) in existing:
+                was_appended = run.pop("appended", False)
+                kind = (run["date"], _backfill_kind(run["source"]))
+                backfilled_before = (run["date"], run["ts"]) in recorded_ts
+                if backfilled_before or (was_appended and kind in recorded_kinds):
                     continue
+                run["total_cost"] = _total_cost(run)
                 out.write(json.dumps(run, ensure_ascii=False) + "\n")
                 appended += 1
     print(f"metrics: backfilled {appended} run(s) from {len(log_files)} log file(s)")
