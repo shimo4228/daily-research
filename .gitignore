@@ -49,7 +49,8 @@ __pycache__/
 .ruff_cache/
 .coverage
 
-# Per-line research state (watched-sources / playbook / last-seen; operational, private)
+# Per-line research state (brief / pending / runs / pre-verify, an ecosystem line's watchlist,
+# and the API spend ledger api-spend.jsonl; operational, private)
 state/
 
 # 旧 concept-graph 同期 dir (ADR-0008 で廃止)。ローカルに残骸が残りうるので ignore は維持

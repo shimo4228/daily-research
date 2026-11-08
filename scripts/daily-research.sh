@@ -61,8 +61,9 @@ log "=== Starting daily research ==="
 # Write は Edit(//abs) 規則が同じ path に許可する (呼2 は verify.json の新規作成に要る)。
 CALL1_TOOLS="WebSearch,WebFetch,Read,Glob,Grep,Edit,Write"
 # 呼1 の --max-turns。上限で切れた run は log に残る result JSON の subtype error_max_turns と
-# レポートゲートの失敗で見える。num_turns は --max-turns と数え方が揃わない (live で 59 > 55 の
-# success がある) ので、num_turns との比で WARN は出さない
+# レポートゲートの失敗で見える。result JSON の num_turns は --max-turns と数え方が揃わない: haiku の
+# probe (2026-11-08) は上限 3 で num_turns 4 (= 上限 + 1) の error_max_turns、live の呼1 は上限 55 で
+# num_turns 58・59 のまま success (原因は未特定)。なので num_turns との比で WARN は出さない
 CALL1_MAX_TURNS=55
 CALL2_TOOLS="Read,WebFetch,Edit,Write"
 # 無人 run で model に絶対に渡さないツールと読ませない場所 (呼1 / 呼2・全 line 共通)。
@@ -295,7 +296,7 @@ FAILED_LINES=""       # ctl-015 (receipt gate) に落ちた line (空 = 全 line
 OK_LINES=""
 METRICS_STDIN=""      # metrics-append へ渡す RUN / CLARITY / STATE / VERIFY / VDIFF 行の蓄積 (1 日 1 レコード)
 AUTH_ABORT=0          # 401 検出 — 残 line は中断するが、完走済み line の集計は捨てない
-BILLING_ABORT=0       # 429 / クレジット切れ — 同上 (再試行で踏み抜かない、rules: debugging.md)
+BILLING_ABORT=0       # 429 / クレジット切れ — 同上 (再試行で踏み抜かない、harness の rules: boundary.md)
 BUDGET_STOP=0         # API 支出の上限 (月・日) に届いた — 残 line を始めない
 STOPPED_LIST=""       # 上の 3 つの理由で実行しなかった line
 LINE_INDEX=0          # 実行を始めた line の数 (止めたときの残 line の算出用)
@@ -344,7 +345,7 @@ mkdir -p "$STATE_DIR/runs"
 #   .claude/settings.json を project settings として読む。web 由来の注入が day N に
 #   permissions.allow を書けば day N+1 の書き込み先が広がる (2026-09-21 security review)。
 #   CLAUDE.md / .mcp.json は safe mode が読まないが、運用者が対話で開いた時のために塞ぐ。
-#   allowedTools / gate / 呼2 は repo line と同一。
+#   gate / 呼2 は repo line と同一。書き込み先 (allowedTools) は WRITE_PATHS の注記 (ecosystem line は watchlist の 2 file を足す)。
 # mode の enum は dr_pipeline._load_tracks が検証済み (rotation-pick が先に通っている)。
 LINE_MODE=$(python3 "$DR_PY" config-get "$PROJECT_DIR/config.toml" "tracks.$TRACK.mode" repo 2>> "$LOG_FILE") || LINE_MODE="repo"
 # 書き込み先から外した場所は deny でも塞ぐ (allow は加算なので、境界は deny で書く — ADR-0019 Decision 3/4)。
@@ -539,7 +540,7 @@ $LINE_TEMPLATE"
       break
     fi
     if [ "$LINE_CLASS" = "E_BILLING" ]; then
-      # 429 / クレジット切れは policy signal (rules: debugging.md)。再試行せず残 line を止める。
+      # 429 / クレジット切れは policy signal (harness の rules: boundary.md)。再試行せず残 line を止める。
       log "ERROR: Line $TRACK hit a billing/rate-limit error — aborting remaining lines, no retry"
       notify "Claude API の課金エラー (429 またはクレジット切れ)。残りのラインを止めました。" "Daily Research Billing Error"
       BILLING_ABORT=1
@@ -917,7 +918,7 @@ else
     # Pass 3 の exit は握り潰さず distinct にログ (ctl-010)。非 fatal なので FINAL_EXIT は変えない。
     PASS3_EXIT=0
     # run の DATE を渡す — 引数なしだと ingest 側が「今日」を探し、日付をまたいだ run (試走 2026-09-14 23:51→00:01) の
-    # レポートを skip する (scripts/daily-research.sh:619 producer、vault daily_wiki_ingest.sh:44 sink)
+    # レポートを skip する (producer = この script の DATE、sink = vault の daily_wiki_ingest.sh の DATE="${1:-…}")
     # 外側の上限: ingest の中身は Obsidian の終了待ち (最大 30s) + claude (vault 側の INGEST_TIMEOUT 既定
     # 2700s、-k なし) + index / lint + Slack 通知 (curl -m 15)。SIGTERM を無視する claude で ingest が
     # 戻らないと lock を握ったまま run が終わらないので、2700s に 15 分の余裕を足した 3600s と -k 60 で切る

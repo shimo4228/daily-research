@@ -41,7 +41,9 @@ call2_max_usd = 1.5
 # === Lines (tracks) — per-repo in-context research (ADR-0008 / ADR-0010 / ADR-0017) ===
 # Each track is a research LINE mapped 1:1 to a research repository via a
 # [[tracks.<line>.repos]] entry (lines with mode = "ecosystem" have no repo — see the
-# ecosystem example below). Track names must match [A-Za-z0-9_-]+.
+# ecosystem example below). Track names must match [A-Za-z0-9_-]+. Write repos with double
+# brackets (an array of tables) and give every entry a non-empty key and target_repo: a
+# single [tracks.<line>.repos] table or an entry missing either fails the startup schema check.
 # Each morning the orchestrator picks a WINDOW of [general].lines_per_day lines:
 # k = lines_per_day, n = non-daily line count, day = date.toordinal() (proleptic
 # Gregorian ordinal, not Unix epoch day), start = (day * k) % n, lines
@@ -88,8 +90,10 @@ target_doi = "10.5281/zenodo.XXXXXXX"  # optional; informational — not read by
 # prompts/ecosystem-research-protocol.md. Like every line it runs with --safe-mode
 # (ADR-0019); safe mode does NOT switch off permissions, so the boundary stays
 # --disallowedTools. Ecosystem lines add denies for writing .claude/ / CLAUDE.md /
-# .mcp.json into state/<line>/ (the cwd is model-writable). Write permissions, the receipt
-# gate, the four content states, and the verification call are identical to repo lines. `repos` and `context_files` are rejected by the schema for this mode.
+# .mcp.json into state/<line>/ (the cwd is model-writable). The receipt gate, the four content
+# states, and the verification call are identical to repo lines; the write targets are the repo
+# line's plus the two watchlist files below. `repos` and `context_files` are rejected by the
+# schema for this mode.
 # The watchlist lives in state/<line>/watched-sources.md (format and row cap: see the
 # protocol); rows taken off the table move to state/<line>/watched-archive.md;
 # duplicates are judged by "what changed since the last report", not by topic name.

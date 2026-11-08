@@ -26,10 +26,11 @@ acquire_lock() {
     esac
   fi
   # stale ロック: 奪取を試みる。
-  # 注: rm→mkdir の間に残存 race がある (2 プロセスが同時に stale を検出すると両方が
-  # rm し mkdir を競う)。ただし mkdir はアトミックで勝者は 1 つ、敗者は return 1 で
-  # 弾かれるため「二重実行」は起きない (最大で 1 プロセスが余分に拒否されるだけ)。
-  # launchd の単一ジョブでは実害なし。完全な atomic steal が要る場合は mv -n を使う。
+  # 保証の範囲: mkdir の原子性が守るのは 1 回の mkdir の勝者が 1 つであることだけで、奪取は不可分でない。
+  # 2 プロセスが同じ stale lock をほぼ同時に見つけると、先に rm→mkdir した側の新しい lock を遅れた側の
+  # rm -rf が消し、遅れた側の mkdir も成功して両方が走る (pid は後の側。先の側の run スコープの基準
+  # $LOCK_DIR/pid の mtime も後の側の時刻に変わる)。起きうるのは stale lock が残った朝に launchd の起動と
+  # 手動実行・試験 seam の run が重なったとき。不可分な奪取が要るなら mv -n 等で作り直す。
   rm -rf "$LOCK_DIR"
   if mkdir "$LOCK_DIR" 2>/dev/null; then
     echo $$ > "$LOCK_DIR/pid"

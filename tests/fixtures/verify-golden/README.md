@@ -40,7 +40,8 @@ cat /tmp/verify-golden.verify.json
 
 起動フラグは本番の呼2（`scripts/daily-research.sh` の `CLARITY_JSON=` の呼び出し）に合わせる。`--safe-mode` が無いと
 運用者の `~/.claude` の CLAUDE.md・rules・hook が入り、本番と別の条件で測ることになる。本番は `--disallowedTools` に
-`DISALLOWED_TOOLS` の Read deny（`~/.claude/**`・資格情報の置き場）も足す。
+`DISALLOWED_TOOLS` の Read deny（`~/.claude/**`・資格情報の置き場）と、改稿前の写し `state/<line>/pre-verify/**` への
+Edit deny も足し、api モードでは `--max-budget-usd` も付く。この手順は写しを作らないので、verify-diff の記録は残らない。
 
 ## 記録するもの
 
