@@ -12,7 +12,7 @@ DATE=${DR_DATE:-$(date +%Y-%m-%d)}
 LOG_DIR="$PROJECT_DIR/logs"
 LOG_FILE="$LOG_DIR/$DATE.log"
 # shellcheck disable=SC2034  # LOCK_DIR は source した lib/lock.sh で使用
-LOCK_DIR="$PROJECT_DIR/.daily-research.lock"  # mkdir アトミックロック (ディレクトリ)
+LOCK_DIR="$PROJECT_DIR/.daily-research.lock"  # lock dir (pid 入り)。判定と変更は隣の .mutex の flock の中
 # JSON/TOML 解析層の単一モジュール (旧 inline python3 -c を集約)
 DR_PY="$LIB_DIR/dr_pipeline.py"
 
@@ -20,7 +20,7 @@ DR_PY="$LIB_DIR/dr_pipeline.py"
 source "$LIB_DIR/env.sh"      # 環境サニタイズ + PATH (homebrew python3 優先)
 source "$LIB_DIR/log.sh"      # log() / log_init()
 source "$LIB_DIR/notify.sh"   # notify() (osascript ガード付き)
-source "$LIB_DIR/lock.sh"     # acquire_lock() / release_lock() (mkdir アトミック)
+source "$LIB_DIR/lock.sh"     # acquire_lock() / release_lock() (flock の mutex の中で判定と取得)
 source "$LIB_DIR/auth.sh"     # real_auth_probe() (実 OAuth probe、2 entrypoint 共有)
 source "$LIB_DIR/claude.sh"   # run_claude() / classify_exit() (E_AUTH/E_BILLING/E_BUDGET/E_TRANSIENT/E_FATAL)
 source "$LIB_DIR/billing.sh"  # billing_load() / budget_flags() / billing_record() / billing_gate()
@@ -38,7 +38,7 @@ log_summary() {
   log "$summary"
 }
 
-# === 同時実行ガード (mkdir アトミックロック。lib/lock.sh) ===
+# === 同時実行ガード (lib/lock.sh。判定と取得は flock の mutex の中) ===
 trap release_lock EXIT
 # set -e による予期せぬ死亡を無言にしない (2026-08-22 review): 失敗した行と command を
 # log + notify してから EXIT trap (lock 解放) に渡す。通常の非ゼロ exit は `exit N` で
@@ -46,9 +46,16 @@ trap release_lock EXIT
 # $(…) 内の失敗を親が `|| X` で処理する箇所では trap がサブシェルで走るので、本体
 # (lib/notify.sh の report_unexpected_exit) は親シェルでだけ記録・通知する。
 trap 'report_unexpected_exit $? $LINENO "$BASH_COMMAND"' ERR
-if ! acquire_lock; then
+# 1 = 実行中の daily-research が保持、2 = lock を確かめられない (理由は LOCK_ERROR)。どちらも走らせない
+lock_rc=0
+acquire_lock || lock_rc=$?
+if [ "$lock_rc" -eq 1 ]; then
   log "ERROR: Another instance is running. Skipping."
   notify "前回のリサーチがまだ実行中です" "Daily Research Skipped"
+  exit 1
+elif [ "$lock_rc" -ne 0 ]; then
+  log "ERROR: Could not verify the lock ($LOCK_ERROR). Skipping."
+  notify "ロックを確かめられず実行しませんでした (ログを確認)" "Daily Research Skipped"
   exit 1
 fi
 

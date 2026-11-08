@@ -1692,3 +1692,46 @@ EOF
   [ ! -f "$MOCK_HOME/.calls_$PICKED" ]
   get_log | grep -q "Line eco report gate passed"
 }
+
+# === Test: 同時実行ガード (lib/lock.sh の 1 = 実行中、2 = 確かめられない) ===
+
+@test "E2E lock: a lock held by a live daily-research.sh skips the run as another instance" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  # 保持者 = コマンド行が daily-research.sh の生きた process (fd 3 は bats の出力)
+  mkdir -p "$MOCK_HOME/holder" "$MOCK_PROJECT/.daily-research.lock"
+  printf '#!/bin/bash\nsleep 30\n' > "$MOCK_HOME/holder/daily-research.sh"
+  /bin/bash "$MOCK_HOME/holder/daily-research.sh" >/dev/null 2>&1 3>&- &
+  local owner=$! i
+  for i in $(seq 1 50); do   # fork 直後は exec 前の親のコマンド行が見える
+    case "$(ps -ww -p "$owner" -o command= 2>/dev/null)" in *daily-research.sh*) break ;; esac
+    sleep 0.1
+  done
+  echo "$owner" > "$MOCK_PROJECT/.daily-research.lock/pid"
+
+  run run_script
+  pkill -P "$owner" 2>/dev/null || true
+  kill "$owner" 2>/dev/null || true
+  [ "$status" -ne 0 ]
+  get_log | grep -qF "ERROR: Another instance is running. Skipping."
+  notified "前回のリサーチがまだ実行中です"
+  refute_grep -qF "Could not verify the lock" "$MOCK_PROJECT/logs/$DR_DATE.log"
+  refute_grep -qF "=== Starting daily research ===" "$MOCK_PROJECT/logs/$DR_DATE.log"
+  [ ! -e "$MOCK_HOME/.calls_$PICKED" ]
+  [ "$(cat "$MOCK_PROJECT/.daily-research.lock/pid")" = "$owner" ]   # 他者の lock は消さない
+}
+
+@test "E2E lock: a lock that cannot be verified skips the run with its own log line and notify" {
+  # mutex のファイルを開けない (同名の dir が居座る) = 保持者を確かめられない。実行中と報告せず、run も始めない
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  mkdir "$MOCK_PROJECT/.daily-research.lock.mutex"
+
+  run run_script
+  [ "$status" -ne 0 ]
+  get_log | grep -qF "ERROR: Could not verify the lock ("
+  notified "ロックを確かめられず実行しませんでした"
+  refute_grep -qF "Another instance" "$MOCK_PROJECT/logs/$DR_DATE.log"
+  refute_grep -qF "前回のリサーチがまだ実行中です" "$MOCK_HOME/.notify_log"
+  refute_grep -qF "=== Starting daily research ===" "$MOCK_PROJECT/logs/$DR_DATE.log"
+  [ ! -e "$MOCK_HOME/.calls_$PICKED" ]
+  [ ! -e "$MOCK_PROJECT/.daily-research.lock" ]
+}

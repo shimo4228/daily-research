@@ -235,7 +235,7 @@ skip_unless_private() {
 
 # === Lock mechanism ===
 
-@test "orchestrator uses mkdir-atomic lock via lib/lock.sh" {
+@test "orchestrator takes the lock via lib/lock.sh" {
   grep -q 'source.*lock.sh' "$SCRIPT"
   grep -q 'acquire_lock' "$SCRIPT"
   refute_grep -q 'echo \$\$ > "\$LOCK_FILE"' "$SCRIPT"

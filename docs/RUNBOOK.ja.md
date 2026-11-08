@@ -148,7 +148,8 @@ launchctl list | grep daily-research
 | `ERROR: Line <track> hit a billing/rate-limit error — aborting remaining lines, no retry` | api モード: 429 またはクレジット残高不足（`E_BILLING`） |
 | `WARN: Line <track> reached --max-budget-usd $… — no retry, going to gate` | 呼び出しごとの上限で呼1 が止まった。書けた分でゲートへ進む |
 | `API spend: today $… / $…, month $… / $…` | api モード: run 後の `state/api-spend.jsonl` の合計 |
-| `ERROR: Another instance is running. Skipping.` | ロックディレクトリ `.daily-research.lock/` を生存中の `daily-research.sh` の process が保持している（またはロックの mutex を 10 秒で取れなかった — `logs/launchd-stderr.log` に `lock: … の flock を 10 秒待っても取れない`） |
+| `ERROR: Another instance is running. Skipping.` | ロックディレクトリ `.daily-research.lock/` を生存中の `daily-research.sh` の process が保持している |
+| `ERROR: Could not verify the lock (…). Skipping.` | ロックを確かめられなかったので run を始めなかった（通知は `ロックを確かめられず実行しませんでした`）。括弧の中が理由: mutex を 10 秒で取れない・`python3` の失敗・mutex のファイルかロックディレクトリを作れない |
 | `Config schema check passed` | `config.toml` が現行 (ADR-0008) schema に適合 |
 | `ERROR: config.toml schema check failed (the reason is on the line above; see config.example.toml)` | `dr_pipeline.py tracks` が `config.toml` を拒否した（旧 schema、line 名の形、`daily` / `template` / `mode` の型、`mode` の未知の値、`mode = "ecosystem"` の line に書いた `repos` / `context_files`、壊れた `repos`、`lines_per_day` の値）。理由は直前に log された行にある。どのラインも始めずに停止（exit 1） |
 | `Rotation pick: a, b, c (ADR-0010/0017)` | 当日担当ラインの輪番 window 選択結果 |
@@ -225,9 +226,9 @@ which claude
 
 ### 3. ロックファイルによる実行ブロック
 
-**症状**: ログに `ERROR: Another instance is running. Skipping.` が出力される。
+**症状**: ログに `ERROR: Another instance is running. Skipping.` または `ERROR: Could not verify the lock (…). Skipping.` が出力される。
 
-**原因**: 前回の実行がまだ実行中、またはクラッシュした run の PID を別の `daily-research.sh` が再利用している。
+**原因**: `Another instance` — 前回の実行がまだ実行中、またはクラッシュした run の PID を別の `daily-research.sh` が再利用している。`Could not verify the lock` — 確認そのものが失敗し、二重実行の危険を避けて skip した: mutex `.daily-research.lock.mutex` を 10 秒で取れない（止まった process が持っている — `lsof .daily-research.lock.mutex` で探す）、mutex を取る `python3` が失敗した・PATH に無い、mutex のファイルかロックディレクトリを作れない（権限・ディスク）。
 
 **対処**:
 ```bash

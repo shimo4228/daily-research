@@ -133,7 +133,7 @@ echo "not reached"')"
   [ "$(echo "$output" | grep -c "unexpected exit")" -eq 1 ]
 }
 
-# === lock.sh (mkdir アトミックロック) ===
+# === lock.sh (lock dir + flock の mutex。0 = 取得、1 = 実行中、2 = 確かめられない) ===
 
 @test "acquire_lock succeeds when no lock exists and records pid" {
   LOCK_DIR="$TMP/lock"
@@ -160,7 +160,7 @@ echo "not reached"')"
   run acquire_lock
   pkill -P "$owner" 2>/dev/null || true
   kill "$owner" 2>/dev/null || true
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 1 ]   # 1 = 実行中 (2 の「確かめられない」と分ける)
   [ "$(cat "$LOCK_DIR/pid")" = "$owner" ]
 }
 
@@ -222,6 +222,43 @@ echo "not reached"')"
     [ "$status" -eq 0 ] || { echo "not stolen: pid=[$content]" >&2; return 1; }
     [ "$(cat "$LOCK_DIR/pid")" = "$$" ]
   done
+}
+
+@test "acquire_lock steals a lock whose pid is 0 (kill -0 0 reaches the process group, ps -p 0 is empty)" {
+  # 旧実装からの穴: "0" を実行中と読み、以後の run が全部 skip になる
+  LOCK_DIR="$TMP/lock"
+  mkdir "$LOCK_DIR"
+  echo 0 > "$LOCK_DIR/pid"
+  source "$LIB_DIR/lock.sh"
+  run acquire_lock
+  [ "$status" -eq 0 ]
+  [ "$(cat "$LOCK_DIR/pid")" = "$$" ]
+}
+
+@test "acquire_lock returns 2 with a reason, not 'running', when python3 fails to take the mutex" {
+  LOCK_DIR="$TMP/lock"
+  mkdir -p "$TMP/bin"
+  printf '#!/bin/sh\necho "python3 stub failed" >&2\nexit 1\n' > "$TMP/bin/python3"
+  chmod +x "$TMP/bin/python3"
+  source "$LIB_DIR/lock.sh"
+  local rc=0
+  PATH="$TMP/bin:$PATH" acquire_lock || rc=$?
+  [ "$rc" -eq 2 ]
+  [[ "$LOCK_ERROR" == *"python3 stub failed"* ]]
+  [ ! -e "$LOCK_DIR" ]   # 確かめられないときは lock に触れない
+}
+
+@test "acquire_lock returns 2 with a reason when the mutex file cannot be opened" {
+  # fd 9 の redirect の失敗は bash が 1 を返す — それを「実行中」の 1 と取り違えない
+  LOCK_DIR="$TMP/lock"
+  mkdir "$LOCK_DIR.mutex"   # 同名の dir が居座って開けない
+  source "$LIB_DIR/lock.sh"
+  local rc=0
+  acquire_lock || rc=$?
+  [ "$rc" -eq 2 ]
+  [[ "$LOCK_ERROR" == *"lock.mutex"* ]]
+  [[ "$LOCK_ERROR" != *$'\n'* ]]   # log の 1 行に収まる
+  [ ! -e "$LOCK_DIR" ]
 }
 
 @test "acquire_lock waits while another process holds the mutex, then takes the lock" {

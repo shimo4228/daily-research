@@ -149,7 +149,8 @@ launchctl list | grep daily-research
 | `ERROR: Line <track> hit a billing/rate-limit error — aborting remaining lines, no retry` | api mode: 429 or credit balance too low (`E_BILLING`) |
 | `WARN: Line <track> reached --max-budget-usd $… — no retry, going to gate` | The per-call cap stopped call 1; whatever it wrote goes to the gate |
 | `API spend: today $… / $…, month $… / $…` | api mode: totals from `state/api-spend.jsonl` after the run |
-| `ERROR: Another instance is running. Skipping.` | Lock directory `.daily-research.lock/` is held by a live `daily-research.sh` process (or the lock's mutex was not free within 10 s — `logs/launchd-stderr.log` shows `lock: … の flock を 10 秒待っても取れない`) |
+| `ERROR: Another instance is running. Skipping.` | Lock directory `.daily-research.lock/` is held by a live `daily-research.sh` process |
+| `ERROR: Could not verify the lock (…). Skipping.` | The lock could not be checked, so the run did not start (notification: `ロックを確かめられず実行しませんでした`). The reason in parentheses: the mutex was not free within 10 s, `python3` failed, or the mutex file / lock directory could not be created |
 | `Config schema check passed` | `config.toml` matches the current (ADR-0008) schema |
 | `ERROR: config.toml schema check failed (the reason is on the line above; see config.example.toml)` | `dr_pipeline.py tracks` rejected `config.toml` (legacy schema, a bad line name, a wrong type for `daily` / `template` / `mode`, an unknown `mode` value, `repos` / `context_files` on a `mode = "ecosystem"` line, a malformed `repos`, or a bad `lines_per_day`); the reason is the line logged just before. The run stops before any line (exit 1) |
 | `Rotation pick: a, b, c (ADR-0010/0017)` | The rotation window picked for today |
@@ -226,9 +227,9 @@ which claude
 
 ### 3. Lock File Prevents Execution
 
-**Symptoms**: Log shows `ERROR: Another instance is running. Skipping.`
+**Symptoms**: Log shows `ERROR: Another instance is running. Skipping.` or `ERROR: Could not verify the lock (…). Skipping.`
 
-**Cause**: Previous run is still active, or another `daily-research.sh` reuses the PID of a crashed run.
+**Cause**: `Another instance` — the previous run is still active, or another `daily-research.sh` reuses the PID of a crashed run. `Could not verify the lock` — the check itself failed, and the run is skipped rather than risk running twice: the mutex `.daily-research.lock.mutex` was not free within 10 s (a stopped process holds it — find it with `lsof .daily-research.lock.mutex`), `python3` (which takes the mutex) failed or is not on the PATH, or the mutex file or lock directory could not be created (permissions, disk).
 
 **Fix**:
 ```bash
