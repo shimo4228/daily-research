@@ -327,9 +327,10 @@ log "=== Line: $TRACK (${TARGET_REPO:-no target repo}) ==="
 STATE_DIR="$PROJECT_DIR/state/$TRACK"
 RECEIPT_PATH="$STATE_DIR/runs/${DATE}.json"
 VERIFY_PATH="$STATE_DIR/runs/${DATE}.verify.json"
-# 呼2 の改稿前の写し (verify-diff の入力)。SH が呼1 の終了後・呼2 の前に cp で書く — 呼1 の runs/** の
-# 書き込み権は中身に効かず (cp が上書きする)、呼2 の allow は原稿と verify.json だけ。モデルの書き込み先ではない
-PRE_VERIFY_PATH="$STATE_DIR/runs/${DATE}.pre-verify.md"
+# 呼2 の改稿前の写し (verify-diff の入力)。SH が呼1 の終了後・呼2 の前に書く。置き場は呼1 の書き込み先
+# (WRITE_PATHS の runs/** 等) の外で、呼2 の allow にも入れず deny で塞ぐ — モデルの書き込み先ではない
+PRE_VERIFY_DIR="$STATE_DIR/pre-verify"
+PRE_VERIFY_PATH="$PRE_VERIFY_DIR/${DATE}.md"
 mkdir -p "$STATE_DIR/runs"
 
 # 実行形は [tracks.<x>].mode が決める (ADR-0018)。line 名では分岐しない。
@@ -703,8 +704,15 @@ if [ -n "$CLARITY_NOTE" ]; then
   log "=== Clarity pass: $(basename "$CLARITY_NOTE") ==="
   # 前回 run の verify.json を今回の結果と取り違えない (読み取りも run スコープに限る)
   rm -f "$VERIFY_PATH"
+  # 写しの path に dir が先にあると cp は中へ写して成功を返す (verify-diff は rc 1 で外れる)。rm -rf してから
+  # 写し、通常ファイルであることを確かめる。置き場の dir が symlink なら link だけを外して作り直す
   PRE_VERIFY_OK=0
-  if cp "$CLARITY_NOTE" "$PRE_VERIFY_PATH" 2>> "$LOG_FILE"; then
+  if [ -L "$PRE_VERIFY_DIR" ]; then
+    rm -f "$PRE_VERIFY_DIR"
+  fi
+  rm -rf "$PRE_VERIFY_PATH"
+  if mkdir -p "$PRE_VERIFY_DIR" 2>> "$LOG_FILE" && cp "$CLARITY_NOTE" "$PRE_VERIFY_PATH" 2>> "$LOG_FILE" \
+      && [ -f "$PRE_VERIFY_PATH" ] && [ ! -L "$PRE_VERIFY_PATH" ]; then
     PRE_VERIFY_OK=1
   else
     log "WARN: Line $TRACK pre-verify copy failed — call 2 edits will not be diffed"
@@ -729,7 +737,7 @@ clarity 改稿し、最後に主要な主張を原典で照合してください
     --permission-mode default \
     --append-system-prompt-file "$PROJECT_DIR/prompts/verification-protocol.md" \
     --allowedTools "Read,WebFetch,Edit(//${CLARITY_NOTE#/}),Edit(//${VERIFY_PATH#/})" \
-    --disallowedTools "$DISALLOWED_TOOLS,WebSearch" \
+    --disallowedTools "$DISALLOWED_TOOLS,WebSearch,Edit(//${PRE_VERIFY_DIR#/}/**)" \
     --max-turns 30 \
     --model "$VERIFY_MODEL" \
     --output-format json \

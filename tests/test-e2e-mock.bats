@@ -1063,7 +1063,7 @@ PY
 
   run run_script
   [ "$status" -eq 0 ]
-  local log_content pre="$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.pre-verify.md"
+  local log_content pre="$MOCK_PROJECT/state/$PICKED/pre-verify/${DR_DATE}.md"
   log_content=$(get_log)
 
   # 改稿前の写しは呼1 が書いた原稿そのもの (呼2 の後も残る)
@@ -1079,6 +1079,8 @@ PY
   refute_grep -q "pre-verify" "$MOCK_HOME/.prompt_clarity"
   refute_grep -q "pre-verify" "$MOCK_HOME/.prompt_$PICKED"
   refute_grep -q "pre-verify" "$MOCK_HOME/.allowed_$PICKED"
+  # 呼2 の deny が写しの置き場を塞ぐ
+  grep -qF "Edit(//${MOCK_PROJECT#/}/state/$PICKED/pre-verify/**)" "$MOCK_HOME/.disallowed_clarity"
   assert_metrics << 'PY'
 v = rec["verification"]
 assert v["diff_lines"] == 1 and v["diff_spans"] >= 1, v
@@ -1095,7 +1097,23 @@ PY
   log_content=$(get_log)
   echo "$log_content" | grep -q "VERIFY_DIFF $PICKED: {\"diff_spans\": 0, "
   refute_grep -q "clarity pass: " <<< "$log_content"
-  [ -f "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.pre-verify.md" ]
+  [ -f "$MOCK_PROJECT/state/$PICKED/pre-verify/${DR_DATE}.md" ]
+}
+
+@test "E2E clarity: a directory squatting on the pre-verify path is replaced by the copy (H07)" {
+  # 写しの path に dir が先にある (注入された呼1 か前の run の残り) と、cp は中へ写して成功を返す。
+  # SH は rm -rf してから写し、通常ファイルであることを確かめる — verify-diff は改稿前の原稿と比べる
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  local pre="$MOCK_PROJECT/state/$PICKED/pre-verify/${DR_DATE}.md"
+  mkdir -p "$pre/inner"
+  echo decoy > "$pre/inner/x.md"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  [ -f "$pre" ]
+  [ "$(cat "$pre")" = "# mock report for $PICKED" ]
+  get_log | grep -q "VERIFY_DIFF $PICKED: {\"diff_spans\": 0, "
+  refute_grep -q "pre-verify copy failed" <<< "$(get_log)"
 }
 
 @test "E2E states: brief passes the gate, gets verified, and is labelled (brief)" {

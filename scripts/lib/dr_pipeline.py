@@ -802,7 +802,8 @@ def cmd_verify_read(argv: list[str]) -> int:
 
 
 # --- verify-diff <pre_path> <post_path> [verify_json_path]: 呼2 の改稿を決定論で記録する ---
-# SH が呼2 の前に原稿を runs/<date>.pre-verify.md へ写し (呼1 の後に SH が書く。呼2 の書き込み先ではない)、
+# SH が呼2 の前に原稿を state/<line>/pre-verify/<date>.md へ写し (呼1 の後に SH が書く。呼1 の書き込み先の
+# 外で、呼2 の deny が塞ぐ)、
 # 呼2 の後にこの subcommand で改稿後の原稿と比べる。stdin は呼2 の claude -p result JSON (空でよい)。
 # stdout: 1 行目 = JSON 1 行、2 行目以降 = WARN の本文 (1 行 1 件、model 由来の文字列を含まない)。
 #   diff_spans                 変更された連続範囲の数 (文単位 = 。！？ と改行で切り、空白を除いて比べる)

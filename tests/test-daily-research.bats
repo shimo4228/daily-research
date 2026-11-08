@@ -420,7 +420,7 @@ precommit_fixture_commit() {
   grep -q 'prompts/verification-protocol.md' "$SCRIPT"
   refute_grep -q 'clarity-review-protocol.md' "$SCRIPT"
   grep -qF -- '--allowedTools "Read,WebFetch,Edit(//${CLARITY_NOTE#/}),Edit(//${VERIFY_PATH#/})"' "$SCRIPT"
-  grep -qF -- '--disallowedTools "$DISALLOWED_TOOLS,WebSearch"' "$SCRIPT"
+  grep -qF -- '--disallowedTools "$DISALLOWED_TOOLS,WebSearch,Edit(//${PRE_VERIFY_DIR#/}/**)"' "$SCRIPT"
   grep -qF -- '--max-turns 30' "$SCRIPT"
   grep -qF -- '--model "$VERIFY_MODEL"' "$SCRIPT"
   grep -qF 'CLAUDE_TIMEOUT=1200' "$SCRIPT"
@@ -429,8 +429,16 @@ precommit_fixture_commit() {
 }
 
 @test "the pre-verify copy is written by the orchestrator between call 1 and call 2, never by the model (H07)" {
-  grep -qF 'PRE_VERIFY_PATH="$STATE_DIR/runs/${DATE}.pre-verify.md"' "$SCRIPT"
+  # 写しの置き場は呼1 の書き込み先 (runs/** 等) の外。同名の dir や symlink が先にあっても cp が中へ
+  # 写して成功扱いにならないよう、rm -rf してから写し、通常ファイルであることを確かめる
+  grep -qF 'PRE_VERIFY_DIR="$STATE_DIR/pre-verify"' "$SCRIPT"
+  grep -qF 'PRE_VERIFY_PATH="$PRE_VERIFY_DIR/${DATE}.md"' "$SCRIPT"
+  refute_grep -q 'runs/[^"]*pre-verify' "$SCRIPT"
+  grep -qF 'rm -rf "$PRE_VERIFY_PATH"' "$SCRIPT"
   grep -qF 'cp "$CLARITY_NOTE" "$PRE_VERIFY_PATH"' "$SCRIPT"
+  grep -qF '[ -f "$PRE_VERIFY_PATH" ] && [ ! -L "$PRE_VERIFY_PATH" ]' "$SCRIPT"
+  # 呼2 の deny が写しの置き場を塞ぐ
+  grep -qF -- '--disallowedTools "$DISALLOWED_TOOLS,WebSearch,Edit(//${PRE_VERIFY_DIR#/}/**)"' "$SCRIPT"
   grep -q 'python3 "\$DR_PY" verify-diff' "$SCRIPT"
   grep -q '"VDIFF"' "$SCRIPT"
   # 書き込み先の正本と呼2 の allow に写しを足さない
