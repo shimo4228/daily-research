@@ -1473,9 +1473,12 @@ PY
   grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/pending.md)" "$MOCK_HOME/.allowed_eco"
   grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/runs/**)" "$MOCK_HOME/.allowed_eco"
   grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/watched-sources.md)" "$MOCK_HOME/.allowed_eco"
+  # 表から外した行の置き場 (H03-A)。ecosystem line だけが書く
+  grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/watched-archive.md)" "$MOCK_HOME/.allowed_eco"
   refute_grep -qF "Edit(//${MOCK_PROJECT#/}/state/eco/**)" "$MOCK_HOME/.allowed_eco"
   # repo line は watchlist を書かない
   refute_grep -q "watched-sources" "$MOCK_HOME/.allowed_$PICKED"
+  refute_grep -q "watched-archive" "$MOCK_HOME/.allowed_$PICKED"
   grep -qF "Edit(//${MOCK_PROJECT#/}/state/$PICKED/pending.md)" "$MOCK_HOME/.allowed_$PICKED"
 
   # repo line の実行形は不変

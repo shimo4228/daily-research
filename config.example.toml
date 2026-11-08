@@ -90,7 +90,8 @@ target_doi = "10.5281/zenodo.XXXXXXX"  # optional; informational — not read by
 # --disallowedTools. Ecosystem lines add denies for writing .claude/ / CLAUDE.md /
 # .mcp.json into state/<line>/ (the cwd is model-writable). Write permissions, the receipt
 # gate, the four content states, and the verification call are identical to repo lines. `repos` and `context_files` are rejected by the schema for this mode.
-# The watchlist lives in state/<line>/watched-sources.md (format: see the protocol);
+# The watchlist lives in state/<line>/watched-sources.md (format and row cap: see the
+# protocol); rows taken off the table move to state/<line>/watched-archive.md;
 # duplicates are judged by "what changed since the last report", not by topic name.
 # Combine with `daily = true` to observe every morning outside the rotation window.
 

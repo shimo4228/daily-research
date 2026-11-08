@@ -319,7 +319,8 @@ fi
 LINE_INDEX=$((LINE_INDEX + 1))
 log "=== Line: $TRACK (${TARGET_REPO:-no target repo}) ==="
 
-# state 層 (brief = 運用者が書く静的な文書 / pending / runs/、ecosystem line は watched-sources も)。
+# state 層 (brief = 運用者が書く静的な文書 / pending / runs/、ecosystem line は watched-sources と
+# その archive も)。
 # gitignored、初回は空で開始。
 # gate が target_repo 不在の line でも receipt を探すため、分岐の前に置く。
 # track 名は dr_pipeline._load_tracks が [A-Za-z0-9_-]+ に制限済み (パス・allowedTools 安全)。
@@ -414,10 +415,11 @@ $_activity
   # 「書き込み先」節をこの配列から描く — プロトコルはパスを列挙せず「書き込み先」節を指す。
   # past_topics.json はモデルに書かせない (gate 成功後に past-topics-append が receipt から追記する)。
   # state のうちモデルが書くのは pending.md と runs/ だけ (brief は運用者の静的な文書、playbook と
-  # repo line の watched-sources は撤去 — ADR-0019 Decision 3)。ecosystem line は watchlist も書く。
+  # repo line の watched-sources は撤去 — ADR-0019 Decision 3)。ecosystem line は watchlist と、表から
+  # 外した行の置き場 watched-archive.md も書く (表の行数の上限、ecosystem プロトコル Step 6)。
   WRITE_PATHS=("$REPORT_DIR/**" "$STATE_DIR/pending.md" "$STATE_DIR/runs/**")
   if [ "$LINE_MODE" = "ecosystem" ]; then
-    WRITE_PATHS+=("$STATE_DIR/watched-sources.md")
+    WRITE_PATHS+=("$STATE_DIR/watched-sources.md" "$STATE_DIR/watched-archive.md")
   fi
   WRITE_PATHS_LIST=""
   for _wp in "${WRITE_PATHS[@]}"; do

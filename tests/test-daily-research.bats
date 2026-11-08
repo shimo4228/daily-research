@@ -486,6 +486,12 @@ ECO_TEMPLATE="$PROJECT_DIR/templates/report-template-ecosystem.md"
   grep -q '反論・再現・反証' "$ECO_PROTOCOL"
   grep -qF '| 名前 | canonical URL | 種別 | 初出日 | last-attempt | last-seen | 最後に報告した意味のある変化 | 状態 |' "$ECO_PROTOCOL"
   grep -q 'active' "$ECO_PROTOCOL" && grep -q 'stalled' "$ECO_PROTOCOL" && grep -q 'archived' "$ECO_PROTOCOL"
+  # watchlist の表は行数に上限があり、各列は最新の値の 1 文 (経過は記事と根拠ファイル)。外した行は
+  # watched-archive.md へ移し、経路 B の新規候補はそこを Grep してから足す (H03-A)
+  grep -q '表の行は \*\*25 行まで\*\*' "$ECO_PROTOCOL"
+  grep -q '各列は最新の値の 1 文' "$ECO_PROTOCOL"
+  grep -q 'watched-archive.md' "$ECO_PROTOCOL"
+  grep -q '名前で Grep' "$ECO_PROTOCOL"
   grep -q '掲載されていることを採用の根拠にしない' "$ECO_PROTOCOL"
   grep -q '公開日と出来事の日付を区別する' "$ECO_PROTOCOL"
   # repo 文脈・個人 harness を要求しない / 適用可能性を選定条件にしない
