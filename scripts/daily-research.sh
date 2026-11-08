@@ -103,10 +103,14 @@ list_add() {
   if [ -z "$1" ]; then printf '%s' "$2"; else printf '%s, %s' "$1" "$2"; fi
 }
 
-# coreutils timeout の DURATION (整数 + 任意の接尾辞 s / m / h / d) を秒にして出力する。小数・0 (timeout では
-# 上限なし)・その他の形は読めないとして 1 を返す (呼ぶ側が既定に戻す)
+# coreutils timeout の DURATION を秒 (小数は切り上げ) にして出力する。timeout は先頭の空白と + を読み飛ばし、
+# 10 進の浮動小数 (小数点・指数) に任意の接尾辞 s / m / h / d を付けた値を受ける (例 1.5h・1e4・+2700)。
+# 0 (timeout では上限なし)・負・16 進・inf / nan・末尾の空白やその他の文字・999999999 秒 (9 桁) を超える値
+# (桁の大きい値は外側の上限の足し算が bash の整数で負に溢れ、timeout が 125 で Pass 3 を走らせない) は読めない
+# として 1 を返す (呼ぶ側が既定に戻す)
 duration_seconds() {
   local v="$1" n mult=1
+  v="${v#"${v%%[![:space:]]*}"}"
   case "$v" in
     *s) n=${v%s} ;;
     *m) n=${v%m}; mult=60 ;;
@@ -114,9 +118,12 @@ duration_seconds() {
     *d) n=${v%d}; mult=86400 ;;
     *) n=$v ;;
   esac
-  case "$n" in ''|*[!0-9]*) return 1 ;; esac
-  [ "$((10#$n))" -gt 0 ] || return 1
-  echo "$((10#$n * mult))"
+  awk -v n="$n" -v m="$mult" 'BEGIN {
+    if (n !~ /^[+]?([0-9]+[.]?[0-9]*|[.][0-9]+)([eE][+-]?[0-9]+)?$/) exit 1
+    s = n * m; c = int(s); if (c < s) c++
+    if (c < 1 || c > 999999999) exit 1
+    printf "%d\n", c
+  }'
 }
 
 # === 依存コマンドチェック ===
@@ -1014,7 +1021,7 @@ else
     PASS3_INNER=$PASS3_INNER_DEFAULT
     if [ -n "${WIKI_INGEST_TIMEOUT:-}" ]; then
       if ! PASS3_INNER=$(duration_seconds "$WIKI_INGEST_TIMEOUT"); then
-        log "WARN: WIKI_INGEST_TIMEOUT=$WIKI_INGEST_TIMEOUT is not whole seconds with an optional s/m/h/d suffix — Pass 3's outer limit uses the vault default ${PASS3_INNER_DEFAULT}s"
+        log "WARN: WIKI_INGEST_TIMEOUT=$WIKI_INGEST_TIMEOUT is not a positive decimal number with an optional s/m/h/d suffix of at most 999999999s — Pass 3's outer limit uses the vault default ${PASS3_INNER_DEFAULT}s"
         PASS3_INNER=$PASS3_INNER_DEFAULT
       fi
     fi

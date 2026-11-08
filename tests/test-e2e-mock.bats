@@ -1005,6 +1005,33 @@ pass3_outer_limit() {
   get_log | grep -qF "(ingest's claude 2700s + "
 }
 
+@test "E2E pass3: a decimal WIKI_INGEST_TIMEOUT is read as coreutils timeout reads it (the outer timeout does not cut first)" {
+  # 整数だけを読んでいた頃は 1.5h (timeout では 5400 秒) を読めずに既定 2700 から外側 3600 を導き、外側が先に切った
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  install_timeout_spy
+  install_ingest_stub
+  export WIKI_INGEST_TIMEOUT=1.5h
+
+  run_script
+  [ "$(pass3_outer_limit)" -gt 5400 ]
+  get_log | grep -qF "(ingest's claude 5400s + "
+  refute_grep -F "WARN: WIKI_INGEST_TIMEOUT" "$MOCK_PROJECT/logs/$DR_DATE.log"
+}
+
+@test "E2E pass3: a WIKI_INGEST_TIMEOUT too large for shell arithmetic warns and Pass 3 still runs" {
+  # 9 桁を超える値は外側の上限の足し算が bash の整数で負に溢れ、timeout が 125 で Pass 3 を走らせなかった
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  install_timeout_spy
+  install_ingest_stub
+  export WIKI_INGEST_TIMEOUT=9223372036854775807
+
+  run_script
+  [ "$(pass3_outer_limit)" -gt 2700 ]
+  [ -f "$MOCK_HOME/.inner_limit" ]   # ingest が走った
+  get_log | grep -qF "WARN: WIKI_INGEST_TIMEOUT=9223372036854775807"
+  get_log | grep -qF "(ingest's claude 2700s + "
+}
+
 # === Test: No legacy gtimeout dependency ===
 
 @test "E2E: script does not use gtimeout or legacy timeout patterns" {

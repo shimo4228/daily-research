@@ -84,7 +84,7 @@ daily-research/
 | `ANTHROPIC_API_KEY` | `[billing].env_file` だけ | `lib/env.sh` が親の環境の値を捨てる。`api` モードでは `lib/billing.sh` が `env_file` から読んで export し、`subscription` モードでは unset のまま（OAuth） |
 | `CLAUDE_CODE_EFFORT_LEVEL` | `lib/env.sh` が捨てる | Claude Code では `--effort` より優先されるので、親の環境の値が `[effort]` を上書きする。スクリプトが unset する |
 | `CLAUDE_TIMEOUT` | スクリプト（内部） | `run_claude()` 経由の `claude -p` 呼び出しのタイムアウト（秒）。0 = 無制限（デフォルト）。呼1 (研究 run) は 1500秒 (25 分)、呼2 (検証 + clarity) は 1200秒 (20 分) を設定 |
-| `WIKI_INGEST_TIMEOUT` | ユーザー設定（plist / 環境） | vault の `scripts/daily_wiki_ingest.sh` が自分の `claude` 呼び出しの上限として読む（未設定なら vault 側の既定）。`daily-research.sh` はそのまま渡し、Pass 3 の外側の `timeout` をその上限 + 余裕にする（外側が先に切らない）。整数の秒（接尾辞 `s` / `m` / `h` / `d` は可）以外の値は WARN を出し、外側の上限は vault 側の既定から導く |
+| `WIKI_INGEST_TIMEOUT` | ユーザー設定（plist / 環境） | vault の `scripts/daily_wiki_ingest.sh` が自分の `claude` 呼び出しの上限として読む（未設定なら vault 側の既定）。`daily-research.sh` はそのまま渡し、Pass 3 の外側の `timeout` をその上限 + 余裕にする（外側が先に切らない）。値は coreutils の `timeout` と同じく読む（10 進の数。小数は切り上げ、接尾辞 `s` / `m` / `h` / `d` は可）。それ以外（0・16 進・`inf`・999999999 秒を超える値など）は WARN を出し、外側の上限は vault 側の既定から導く |
 | `DEBUG` | ユーザー設定 | `1` に設定するとデバッグログ（PATH、CLAUDE_CMD）を出力 |
 | `DR_DATE` | ユーザー設定（テスト seam） | `YYYY-MM-DD` — rotation-pick とレポート名に使う日付を固定する（e2e テストが輪番を固定するために使う）。既定は当日 |
 | `DR_ONLY_TRACK` | ユーザー設定（テスト seam） | 当日担当ラインのうち指定ラインだけを実行する。当日担当でないラインを指定するとエラー |
