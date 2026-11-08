@@ -701,13 +701,17 @@ if [ -n "$CLARITY_NOTE" ]; then
   # 前回 run の verify.json を今回の結果と取り違えない (読み取りも run スコープに限る)
   rm -f "$VERIFY_PATH"
   # 写しの path に dir が先にあると cp は中へ写して成功を返す (verify-diff は rc 1 で外れる)。rm -rf してから
-  # 写し、通常ファイルであることを確かめる。置き場の dir が symlink なら link だけを外して作り直す
+  # 写し、通常ファイルであることを確かめる。置き場の dir が symlink なら link だけを外して作り直す。link が
+  # 外れずに残ったら写しを作らない — rm -rf "$PRE_VERIFY_PATH" が link をたどって state の外の <date>.md を消す。
+  # どの失敗も WARN だけで run は続く (fail-open。PRE_VERIFY_OK=0 なら verify-diff を回さない)
   PRE_VERIFY_OK=0
   if [ -L "$PRE_VERIFY_DIR" ]; then
-    rm -f "$PRE_VERIFY_DIR"
+    rm -f "$PRE_VERIFY_DIR" 2>> "$LOG_FILE" || true
   fi
-  rm -rf "$PRE_VERIFY_PATH"
-  if mkdir -p "$PRE_VERIFY_DIR" 2>> "$LOG_FILE" && cp "$CLARITY_NOTE" "$PRE_VERIFY_PATH" 2>> "$LOG_FILE" \
+  if [ -L "$PRE_VERIFY_DIR" ]; then
+    log "WARN: Line $TRACK pre-verify copy failed — the pre-verify dir is a symlink that could not be removed; call 2 edits will not be diffed"
+  elif rm -rf "$PRE_VERIFY_PATH" 2>> "$LOG_FILE" && mkdir -p "$PRE_VERIFY_DIR" 2>> "$LOG_FILE" \
+      && cp "$CLARITY_NOTE" "$PRE_VERIFY_PATH" 2>> "$LOG_FILE" \
       && [ -f "$PRE_VERIFY_PATH" ] && [ ! -L "$PRE_VERIFY_PATH" ]; then
     PRE_VERIFY_OK=1
   else

@@ -1112,6 +1112,43 @@ PY
   refute_grep -q "pre-verify copy failed" <<< "$(get_log)"
 }
 
+@test "E2E clarity: a symlinked pre-verify dir is unlinked and recreated, the link target is untouched (H07)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  mkdir -p "$MOCK_HOME/outside"
+  echo victim > "$MOCK_HOME/outside/${DR_DATE}.md"
+  mkdir -p "$MOCK_PROJECT/state/$PICKED"
+  ln -s "$MOCK_HOME/outside" "$MOCK_PROJECT/state/$PICKED/pre-verify"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  [ ! -L "$MOCK_PROJECT/state/$PICKED/pre-verify" ]
+  [ -f "$MOCK_PROJECT/state/$PICKED/pre-verify/${DR_DATE}.md" ]
+  [ "$(cat "$MOCK_HOME/outside/${DR_DATE}.md")" = "victim" ]
+  get_log | grep -q "VERIFY_DIFF $PICKED: "
+}
+
+@test "E2E clarity: a symlinked pre-verify dir that cannot be unlinked gets no copy; call 2 still runs (H07)" {
+  # rm -f が失敗して link が残ると、rm -rf "<dir>/<date>.md" は link をたどって state の外の file を消す。
+  # 失敗を作れないので、PATH の先頭 ($HOME/.claude/local) の rm の shim がその link の rm -f だけを失敗させる
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  mkdir -p "$MOCK_HOME/outside"
+  echo victim > "$MOCK_HOME/outside/${DR_DATE}.md"
+  mkdir -p "$MOCK_PROJECT/state/$PICKED"
+  ln -s "$MOCK_HOME/outside" "$MOCK_PROJECT/state/$PICKED/pre-verify"
+  local real_rm; real_rm=$(command -v rm)
+  printf '#!/bin/bash\nif [ "$1" = "-f" ] && [[ "$2" == */state/%s/pre-verify ]]; then exit 1; fi\nexec "%s" "$@"\n' \
+    "$PICKED" "$real_rm" > "$MOCK_HOME/.claude/local/rm"
+  chmod +x "$MOCK_HOME/.claude/local/rm"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  [ -L "$MOCK_PROJECT/state/$PICKED/pre-verify" ]
+  [ "$(cat "$MOCK_HOME/outside/${DR_DATE}.md")" = "victim" ]
+  get_log | grep -q "WARN: Line $PICKED pre-verify copy failed — the pre-verify dir is a symlink that could not be removed"
+  get_log | grep -q "VERIFY $PICKED: "
+  refute_grep -q "VERIFY_DIFF $PICKED" <<< "$(get_log)"
+}
+
 @test "E2E states: brief passes the gate, gets verified, and is labelled (brief)" {
   echo "normal" > "$MOCK_HOME/.mock_scenario"
   echo brief > "$MOCK_HOME/.state_$PICKED"
