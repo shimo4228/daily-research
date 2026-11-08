@@ -1479,6 +1479,10 @@ _APPENDED_LOG_PREFIX = "metrics: appended "
 # "backfill"、test なら "test" (_load_metrics の既定が本番の集計から除く)。
 # verification はログから復元しない。例外は呼3 の AUDIT 行で、run に AUDIT 行があれば verification を
 # _sum_audit の audit_* だけにする (audit_cost が total_cost に入る。呼2 の VERIFY の件数は戻さない)。
+# VERIFY_KEYS を 0 で埋めないのは、「呼2 が 0 件を確かめた」(lines_verified 0 は unverified に読める) と
+# 「件数を戻していない」を分けるため。集計 (expect-check の metric_value の unsupported_rate など・
+# _clarity_scan_mean・_audit_metric) は欠けた key を .get(k, 0) / _nonneg_int で 0 として読むので、
+# 埋めても埋めなくても和と分母は同じ。
 def cmd_metrics_backfill(argv: list[str]) -> int:
     import os
 
@@ -2629,7 +2633,9 @@ def _clarity_scan_mean(name: str, verif: list[dict[str, object]]) -> float | Non
 #   candidates[]  {id "D<n>", note_sentence, replacement, url (ノートの URL), url_read, locator, claim,
 #                  source_quote, correct_value, type, confidence, drift, status, reason,
 #                  confirm {verdict, replacement_verdict, parts [{wrong, fixed, source_quote, correct_value}],
-#                  url_read} | null}
+#                  url_read} | null, edit_distance / edit_cap (audit-apply が confirmed の候補に足す。A → B の
+#                  編集距離 (AUDIT_SENTENCE_MAX + 1 で打ち切り) と _audit_replace の上限。拒否した候補の距離を
+#                  後で測り直すため — 置き換え文が空なら足さない)}
 # candidate の status: pending (第 2 段待ち) → confirmed / not_confirmed (reason = 第 2 段の verdict) /
 # confirm_failed (reason = classify_exit の分類か "parse")、または skipped (reason = drift / url_not_in_note /
 # duplicate / over_cap)。audit-apply が confirmed を applied か rejected (reason = _audit_replace と
@@ -3434,7 +3440,11 @@ def _audit_apply_all(state: dict[str, object], text: str) -> tuple[str, list[str
     for c in state["candidates"]:
         if c.get("status") != "confirmed":
             continue
-        new, why = _audit_replace(text, str(c.get("note_sentence")), str(c.get("replacement")))
+        a, b = str(c.get("note_sentence")), str(c.get("replacement"))
+        if b.strip():
+            c["edit_distance"] = _edit_distance(a, b, AUDIT_SENTENCE_MAX)
+            c["edit_cap"] = _audit_edit_distance(a, b)[1]
+        new, why = _audit_replace(text, a, b)
         if new is not None:
             why = _audit_fix_reject(c)
             new = None if why else new

@@ -1014,6 +1014,31 @@ def test_fix_spans_gives_up_at_the_state_cap(monkeypatch):
 
 
 @pytest.mark.unit
+def test_apply_records_the_edit_distance_of_confirmed_candidates(monkeypatch, capsys, tmp_path):
+    long_fix = S_REPORT[:-1] + "（" + "あ" * dr_pipeline.AUDIT_EDIT_MIN + "）。"
+    path = confirmed_state(
+        monkeypatch,
+        capsys,
+        tmp_path,
+        [
+            disc(S_REPORT, S_REPORT_4),
+            disc(S_Q2, long_fix.replace(S_REPORT[:-1], S_Q2[:-1])),
+            disc(S_STUDY, ""),
+        ],
+        ["contradicts", "contradicts", "contradicts"],
+        [FIX_3_TO_4, [], []],
+        "consistent",
+    )
+    apply(monkeypatch, capsys, tmp_path, path)
+    c1, c2, c3 = json.loads(path.read_text())["candidates"]
+    assert (c1["status"], c1["edit_distance"], c1["edit_cap"]) == ("applied", 1, 24)
+    # 上限を超えて拒否した候補も、超えた後の距離を持つ (上限で打ち切らない)
+    assert (c2["status"], c2["reason"]) == ("rejected", "edit_distance")
+    assert c2["edit_distance"] == dr_pipeline.AUDIT_EDIT_MIN + 2 > c2["edit_cap"]
+    assert "edit_distance" not in c3 and c3["reason"] == "empty"
+
+
+@pytest.mark.unit
 def test_apply_checks_the_replacement_rules_before_the_fix(monkeypatch, capsys, tmp_path):
     path = confirmed_state(
         monkeypatch, capsys, tmp_path, [disc(S_REPORT, "")], ["contradicts"], [[]], "contradicts"
