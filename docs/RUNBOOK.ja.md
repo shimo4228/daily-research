@@ -89,6 +89,14 @@ daily-research.sh (05:00)
 │   認証・課金のエラーは呼1 と同じく残りのラインを止める)
 │   [前: script が原稿を state/<line>/pre-verify/{date}.md に写す。
 │    後: verify-diff が両者を比べて VERIFY_DIFF をログに出す]
+├── 呼3（[audit] enabled のときだけ。kind: article だけ）: 照合監査, ADR-0020（既定 Opus, --effort high,
+│   WebFetch + WebSearch だけ — Read も書き込みの道具も持たない。ノートと根拠ファイルは prompt に入れる）
+│   ├── 第 1 段（--max-turns 40, 10 分タイムアウト）: 原典と両立しない文だけを候補にする
+│   ├── 第 2 段（候補ごと、最大 5 件。--max-turns 20, 4 分タイムアウト）: 文・URL・ノートの公開日だけを見て
+│   │   独立に判定する
+│   └── audit-apply（モデルでなくコード）: 両段が食い違いとした候補を、文が本文にちょうど 1 回現れ、置き換えが
+│       link を保つときだけ置き換える。状態は runs/{date}.audit.json、監査の前のノートは
+│       state/<line>/pre-audit/{date}.md、ログに AUDIT。どの失敗も fail-open — ノートは呼2 の後のまま
 ├── ctl-016 決定論的レポート lint（固定節 = 機会メモ / ソース、report-template.md に同期。
 │   kind: brief は機会メモと文字数の soft を免除）
 ├── Pass 3: Obsidian wiki ingest（vault 側スクリプト、non-fatal。外側の timeout = ingest 自身の claude の上限
@@ -182,6 +190,13 @@ launchctl list | grep daily-research
 | `WARN: Line <track> pre-verify copy failed — …` / `WARN: Line <track> verify-diff could not run (non-fatal)` | 改稿前の写しを書けなかったか比べられなかった。呼2 の結果は残り、改稿の差分だけが記録されない |
 | `WARN: report lint hard fail (ctl-016): ...` | 決定論 lint がソース節不在・出典 0 件を検出 |
 | `WARN: clarity pass failed ...` | 呼2（検証 + clarity）の失敗 (fail-open — run 全体は成功のまま、そのラインは `unverified` として計上) |
+| `Audit pass: on (model <m>, ADR-0020)` | `[audit] enabled = true`。article ごとに呼2 の後で呼3 が走る |
+| `AUDIT <track>: {...}` | そのラインの呼3 の集計: `ran`（第 1 段が読める結果を返したか）、`reason`（返さなかった理由: `E_TRANSIENT` などの呼び出しの分類・`parse`・`E_BUDGET_GATE`・`note_unreadable`）、確かめた主張・一致・原典が取れない主張の数、`invalid`（形が壊れていて捨てた候補）、`candidates`、`confirmed`（両段が食い違いとした）、`applied`、`rejected`、第 2 段の呼び出し数・turns・費用。metrics の `verification` に `audit_*` として合算する |
+| `WARN: Line <track> audit stage 1 did not run or failed (<class>) — …` | 第 1 段を始めなかった（支出の上限・ノートが読めない・長すぎる）か失敗した。ノートは呼2 の後のままで、run の成否は変わらない |
+| `WARN: Line <track> audit pass: 監査で確定した候補 D<n> を適用しなかった (<規則>) — …` | 両段が誤りと確定したが、置き換えが規則に外れた（`not_found` / `ambiguous` / `outside_body`: 文が本文にちょうど 1 回ない、`url_changed` / `link_changed`、`length`、`empty`、`unchanged`、`newline`、`control`、`sections_changed`）。誤りはノートに残る — `runs/{date}.audit.json` を見て手で直す |
+| `WARN: Line <track> audit pass: 監査の置き換えをノートに書けなかった (<エラー>) — ノートは元のまま` | 置き換えた全文をノートに書けなかった。適用した候補は全部 `rejected`（`write_failed`）として記録され、ノートは変わらない |
+| `WARN: Line <track> audit stage 2 stopped — API spend cap …` / `WARN: Line <track> audit pass skipped …` | api mode でその日の残額が次の監査の呼び出しに足りなくなった、または監査を始めなかった（認証・課金のエラーの後） |
+| `Line <track> audit pass skipped (kind: brief, only article is audited)` | brief は監査しない |
 | `Completed successfully` | 当日担当ラインが全て完了・レポートゲート通過（全ライン quiet の日も含む） |
 
 ### 通知メッセージ
@@ -266,7 +281,7 @@ rm -rf .daily-research.lock
 - `status=401` / `403`: `env_file` の key が違うか失効している。そこで差し替え（repo には置かない）、`./scripts/check-auth.sh` で確かめる。
 - `Your credit balance is too low`: platform.claude.com でクレジットを足す。
 - `status=429`: レート制限。backoff で踏み抜かず、意図して止めている（連発する rate limit は policy signal）。時間をおいて手で再実行する。
-- `API spend gate stopped the run`: 1 日または 1 か月の残額が 1 ライン分の予約額（`call1_max_usd + call2_max_usd`）を下回った。`state/api-spend.jsonl` を確認し、上限はクレジットが足りるときだけ `[billing]` で上げる。
+- `API spend gate stopped the run`: 1 日または 1 か月の残額が 1 ライン分の予約額（`call1_max_usd + call2_max_usd`。`[audit] enabled` なら `audit_max_usd + 5 × audit_confirm_max_usd` を足す。ログの `Billing: api` 行に `line reserve` として出る）を下回った。`state/api-spend.jsonl` を確認し、上限はクレジットが足りるときだけ `[billing]` で上げる。
 - `ERROR: API spend gate failed (rc …): …` か `ERROR: API spend ledger could not be written …` の直後の `API spend gate could not check the caps`: 上限を判定できなかったので、gate が次のラインの前で止めた。残りのラインは始まらず（最初のラインの前なら全部）、完走済みのラインの成果は残る。rc 2 のメッセージは台帳の読めない行のうち先頭 5 件を行番号と理由で名指し、残りを `and N more` で数える。`state/api-spend.jsonl` のその行を直すか消して（または書き込めるように戻して）から再実行する。
 
 課金経路は設定なしに変わらない。subscription モードではシェルで export した `ANTHROPIC_API_KEY` を捨て、api モードでは `env_file` の key だけを使う。
@@ -328,6 +343,25 @@ cat past_topics.json | python3 -m json.tool
 cp past_topics.json.bak past_topics.json
 ```
 
+### 9. 監査（呼3）がノートを変えた、または誤りを残した
+
+**症状**: ノートが呼2 の後と違って読める、またはログに `audit pass: 監査で確定した候補 … を適用しなかった` / `audit stage 1 did not run or failed`。
+
+**見る場所**: `state/<line>/runs/{date}.audit.json` に候補ごとの状態（`applied`、`rejected` + 規則、`not_confirmed` + 第 2 段の判定、`confirm_failed`、`skipped` + `drift` / `duplicate` / `over_cap`）と、各段が読んだ原典の引用と URL がある。`state/<line>/pre-audit/{date}.md` は監査の前のノート。
+
+**対処**:
+```bash
+# 監査が変えたところ
+diff state/<line>/pre-audit/<date>.md "<vault_path>/daily-research/<date>_<line>_<slug>.md"
+
+# 1 本のノートの監査を取り消す（監査の前の写し = 呼2 の後のノート）
+cp state/<line>/pre-audit/<date>.md "<vault_path>/daily-research/<date>_<line>_<slug>.md"
+
+# 監査を止める: config.toml で
+#   [audit]
+#   enabled = false
+```
+
 ## ロールバック手順
 
 ### 設定変更の取り消し
@@ -365,14 +399,14 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 
 ## コスト
 
-毎朝、輪番 window で選ばれた `lines_per_day` 本のラインと、`daily = true` の全ラインが走る（ADR-0010 / ADR-0011 / ADR-0017 / ADR-0019）。ラインごとに、呼1 = Opus の研究 run（リトライ込みで最大 2 回）と、呼2 = 検証 + clarity（`[verification] model`）が 1 回ずつ走る。quiet / hold で終わったラインは呼2 を飛ばす。timeout とターン数の上限は `scripts/daily-research.sh` にある。
+毎朝、輪番 window で選ばれた `lines_per_day` 本のラインと、`daily = true` の全ラインが走る（ADR-0010 / ADR-0011 / ADR-0017 / ADR-0019）。ラインごとに、呼1 = Opus の研究 run（リトライ込みで最大 2 回）と、呼2 = 検証 + clarity（`[verification] model`）が 1 回ずつ走る。quiet / hold で終わったラインは呼2 を飛ばす。`[audit] enabled` なら、article に呼3 = 監査 1 回と候補ごとの確認（最大 5 回）が足される（`[audit] model`）。timeout とターン数の上限は `scripts/daily-research.sh` にある。
 
 **誰が払うか**は `config.toml` の `[billing] mode` で決まる（`scripts/lib/billing.sh`。契約の正本は `scripts/lib/dr_pipeline.py` の `[billing]`）:
 
 | mode | 認証 | 課金 | 上限 |
 |---|---|---|---|
 | `subscription`（既定） | Claude Code のログイン（OAuth） | Max プランならトークン単位の課金なし。プランの利用上限に数えられる | プランの上限。環境にある `ANTHROPIC_API_KEY` は捨てる |
-| `api` | `env_file` から読む `ANTHROPIC_API_KEY`（repo の外のファイルで、モデルの読み取りは拒否される） | すべての呼び出しが Claude API の課金 | 呼び出しごとに `--max-budget-usd`（`call1_max_usd`、`call2_max_usd`）。1 日と 1 か月の残額がどちらも 呼1 + 呼2 の分を満たすときだけラインを始める（`daily_cap_usd`、`monthly_cap_usd`）。満たさなければ残りのラインを止めて通知する。1 本も始められなかった日は `E_BUDGET`（exit 1） |
+| `api` | `env_file` から読む `ANTHROPIC_API_KEY`（repo の外のファイルで、モデルの読み取りは拒否される） | すべての呼び出しが Claude API の課金 | 呼び出しごとに `--max-budget-usd`（`call1_max_usd`、`call2_max_usd`、`audit_max_usd`、`audit_confirm_max_usd`）。1 日と 1 か月の残額がどちらも 呼1 + 呼2（`[audit] enabled` なら + 監査の予約額）の分を満たすときだけラインを始める（`daily_cap_usd`、`monthly_cap_usd`）。満たさなければ残りのラインを止めて通知する。1 本も始められなかった日は `E_BUDGET`（exit 1） |
 
 `api` モードでは、呼び出しごとの費用（Claude Code が報告する `total_cost_usd`。認証 probe を含む）を `state/api-spend.jsonl` に追記する。上限の判定はこのファイルを読み、その日と月の合計は `API spend: today … month …` としてログに出る。429、クレジット残高の不足、key の拒否が出たら、再試行せずに残りのラインを止める（`E_BILLING` / `E_AUTH`）。
 

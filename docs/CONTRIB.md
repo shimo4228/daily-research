@@ -22,13 +22,15 @@ daily-research/
 ├── prompts/
 │   ├── repo-research-protocol.md       # Per-repo research protocol, call 1, mode = "repo" (--append-system-prompt-file)
 │   ├── ecosystem-research-protocol.md  # Ecosystem research protocol, call 1, mode = "ecosystem" (ADR-0018)
-│   └── verification-protocol.md        # Fresh-context verification + clarity protocol, call 2 (ADR-0017)
+│   ├── verification-protocol.md        # Fresh-context verification + clarity protocol, call 2 (ADR-0017)
+│   ├── audit-protocol.md               # Fact audit, call 3 stage 1: list only the sentences a source contradicts (ADR-0020)
+│   └── audit-confirm-protocol.md       # Fact audit, call 3 stage 2: re-judge one candidate sentence on its own (ADR-0020)
 ├── templates/
 │   ├── report-template.md              # Explanatory-report writing rules + fixed tail sections (frontmatter)
 │   ├── report-template-edge.md         # Per-line section override for edge (ADR-0015)
 │   └── report-template-ecosystem.md    # Per-line section override for ecosystem lines (ADR-0018)
 ├── scripts/
-│   ├── daily-research.sh               # Main entry point (rotation window: lines_per_day lines/day; call 1 research + call 2 verification/clarity); sources lib/
+│   ├── daily-research.sh               # Main entry point (rotation window: lines_per_day lines/day; call 1 research + call 2 verification/clarity + call 3 audit when enabled); sources lib/
 │   ├── check-auth.sh                   # Auth check on the [billing] path via real_auth_probe() + notification
 │   ├── pre-commit.sh                   # Secret / syntax guard (git pre-commit hook)
 │   ├── dev/                             # Dev-only isolated trial runs: sandbox-run.sh / eval_run.py / compare.py
@@ -38,7 +40,8 @@ daily-research/
 ├── state/                               # Per-line brief.md (static, written by you) / pending.md /
 │                                        #   watched-sources.md + watched-archive.md (ecosystem lines) / runs/{date}.md (evidence file) /
 │                                        #   runs/{date}.json (run receipt) / runs/{date}.verify.json / pre-verify/{date}.md
-│                                        #   (call 2's before-copy, written by the script, not the model) (gitignored)
+│                                        #   (call 2's before-copy, written by the script, not the model) /
+│                                        #   runs/{date}.audit.json + pre-audit/{date}.md (call 3, written by the script) (gitignored)
 ├── graph.jsonld                         # FROZEN archive (retired concept-graph pipeline)
 ├── com.example.daily-research.plist    # launchd schedule (AM 5:00, research)
 ├── tests/
@@ -51,6 +54,7 @@ daily-research/
 │   ├── dev_tools_test.py              # pytest for scripts/dev/ (config rewrite, collect, eval metrics)
 │   ├── dr_pipeline_test.py            # pytest for dr_pipeline.py (dev-only, .venv)
 │   ├── dr_pipeline_strength_test.py   # pytest pinning the dr_pipeline.py behaviors mutation testing found unguarded
+│   ├── audit_test.py                  # pytest for call 3's deterministic side (replacement rules, state, AUDIT metrics)
 │   ├── test_helper.bash               # shared bats helpers (refute_grep — write negative grep assertions with it, never `! grep`)
 │   └── fixtures/                      # configs and result JSONs for the tests; verify-golden/ = manual call-2 check (its README)
 ├── logs/                                # Execution logs (date-stamped, auto-rotated 30d)
@@ -201,7 +205,25 @@ The run is invoked with `cd "$TARGET_REPO"`; a `mode = "ecosystem"` line has no 
 
 The day's `verify.json` is removed before call 2 starts and read back run-scoped (newer than `$LOCK_DIR/pid`). When the same line's call 1 ended with an auth / billing error, call 2 does not start and the note stays `unverified`.
 
-**Note**: All `claude -p` calls use `< /dev/null` stdin redirect — calls 1 and 2 via the `run_claude()` wrapper, the auth probe in `real_auth_probe()` itself. This prevents MCP stdio communication from conflicting with terminal stdin, which was a root cause of past MCP hangs.
+### Call 3 — fact audit (Opus by default, per article, only when `[audit] enabled`)
+
+Two stages, both launched by `audit_call` with the same flags except the turn cap and the timeout. Stage 1 runs once per article; stage 2 once per candidate, at most 5 (`AUDIT_MAX_CONFIRM`).
+
+| Flag | Value | Purpose |
+|------|-------|---------|
+| `-p` | Stage 1: the note and the evidence file inlined (`dr_pipeline.py audit-prompt`). Stage 2: one candidate sentence, its URL and the note's date (`audit-confirm-prompt`) — not stage 1's reasoning or correct value | The audit has no Read: an allow rule cannot carve an exception out of a deny, so "Read only these two files" cannot be written; the two files travel in the prompt. Stage 2 judges without stage 1's conclusion |
+| `--max-budget-usd` | `[billing] audit_max_usd` / `audit_confirm_max_usd` (api mode only) | Per-call spend cap |
+| `--safe-mode` / `--tools` | `AUDIT_TOOLS` (`WebFetch,WebSearch`) | No file tool at all |
+| `--permission-mode` | `default` | Use default permission handling |
+| `--append-system-prompt-file` | `prompts/audit-protocol.md` / `prompts/audit-confirm-protocol.md` | Only contradictions count; "not found in the fetched page" is unverifiable, not evidence (WebFetch truncates long pages) |
+| `--allowedTools` | `AUDIT_TOOLS` | Web reads only |
+| `--disallowedTools` | `DISALLOWED_TOOLS` + `Read,Glob,Grep,Edit,Write` | The model writes nothing; the note is replaced by code |
+| `--max-turns` / timeout | `AUDIT_STAGE1_MAX_TURNS` (40) with 600 s / `AUDIT_STAGE2_MAX_TURNS` (20) with 240 s | Stage 1 fetches every source of the note; stage 2 one |
+| `--model` / `--effort` | `[audit] model` (default `opus`) / `high` | The errors left after call 2 are attribution, time, scope and condition shifts, which a same-tier re-check missed |
+
+`dr_pipeline.py audit-apply` then replaces each candidate both stages call a contradiction, under fixed rules (`_audit_replace`): the sentence appears exactly once in the body (frontmatter, title, 機会メモ and ソース are never touched), the replacement keeps every URL and markdown link, changes the length by at most max(40, half the sentence), is neither empty nor identical to the sentence, keeps the number of line breaks, adds no control character, and leaves frontmatter, 機会メモ and ソース unchanged. Everything is recorded in `state/<line>/runs/{date}.audit.json`; the note before the audit is copied to `state/<line>/pre-audit/{date}.md`. Failures are fail-open: a failed stage 1 leaves the note as call 2 left it and `AUDIT` logs `"ran": false`; a failed stage 2 call leaves only its own candidate unconfirmed. An auth / billing error stops the remaining lines as in calls 1 and 2.
+
+**Note**: All `claude -p` calls use `< /dev/null` stdin redirect — calls 1, 2 and 3 via the `run_claude()` wrapper, the auth probe in `real_auth_probe()` itself. This prevents MCP stdio communication from conflicting with terminal stdin, which was a root cause of past MCP hangs.
 
 ## Architecture Notes
 
@@ -213,7 +235,7 @@ The report-existence gate (ctl-015) reads the run receipt `state/<line>/runs/{da
 
 Call 2 (verification + clarity, ADR-0017) runs after the gate: a fresh-context process (`--max-turns 30`, `CLAUDE_TIMEOUT=1200`, `--allowedTools` = Read + WebFetch + Edit of the day's note and `runs/{date}.verify.json`, with WebSearch added to `--disallowedTools`) reads the finished note as a first-contact reader, fixes comprehension stumbles, and then checks every claim in the evidence file against its source. Its failure is fail-open: the log records `WARN: clarity pass failed`, the unverified (or, on timeout, partially revised) note survives, and `FINAL_EXIT` is unaffected — but the line is reported as `unverified` in the metrics and the notification. An auth / billing error in call 2 (`E_AUTH` / `E_BILLING`) also stops the remaining lines, as in call 1. Before call 2 the script copies the note to `state/<line>/pre-verify/{date}.md` (outside every model write path; the path is removed first and must end up a regular file); after call 2, `dr_pipeline.py verify-diff` compares the two and logs `VERIFY_DIFF`, so call 2's real edits are recorded independently of its own report.
 
-`metrics.jsonl` keeps the pre-ADR-0008 record shape for compatibility with `expect-check` / `/dr-review`: the research run JSON is aggregated into the `pass2` field, `pass1` is always `None`, `fallback_used` means "a retry occurred" (`pass2` sums every attempt), `source` is `live` or `test` (runs under `DR_FORCE_TRACK` / `DR_ONLY_TRACK` are recorded as `test` and excluded from `expect-check` / `/dr-review` aggregation) — or `backfill` for a live run that `metrics-backfill` rescued from the logs (a rescued test run is written as `test`), and `clarity_pass` records call 2's `{ran, ok, cost, turns, ...}` (the label is kept for compatibility; what it measures is the verification + clarity pass). Each record also carries `line_states {article, brief, quiet, hold, mismatch, suspect, unverified}` (always emitted, zeros included) and `verification {supported, partial, unsupported, unverifiable, edits, lines_verified}` (`None` on a day with no VERIFY line; on a day with VERIFY_DIFF lines it also carries verify-diff's summed `diff_*` counts and `diff_lines`, the number of lines diffed), and `event_age_days {<line>: days | null}` — for each line that published an article / brief, the run date minus the receipt's `event_date` (the note's central event; `null` = unknown, an older receipt, or not a date on or before the run date; `None` on a day with no note), and `effort {call1, call2}` — the `--effort` passed to each call (`None` when the run sent no EFFORT line). `python3 scripts/lib/dr_pipeline.py event-age-stats metrics.jsonl [since]` prints per-line note count, unknown rate and median age (H17: measured only — selection does not use it). Verdicts themselves are never stored — the eval is in-loop (ADR-0010) and only the verification tally survives.
+`metrics.jsonl` keeps the pre-ADR-0008 record shape for compatibility with `expect-check` / `/dr-review`: the research run JSON is aggregated into the `pass2` field, `pass1` is always `None`, `fallback_used` means "a retry occurred" (`pass2` sums every attempt), `source` is `live` or `test` (runs under `DR_FORCE_TRACK` / `DR_ONLY_TRACK` are recorded as `test` and excluded from `expect-check` / `/dr-review` aggregation) — or `backfill` for a live run that `metrics-backfill` rescued from the logs (a rescued test run is written as `test`), and `clarity_pass` records call 2's `{ran, ok, cost, turns, ...}` (the label is kept for compatibility; what it measures is the verification + clarity pass). Each record also carries `line_states {article, brief, quiet, hold, mismatch, suspect, unverified}` (always emitted, zeros included) and `verification {supported, partial, unsupported, unverifiable, edits, lines_verified}` (`None` on a day with no VERIFY line; on a day with VERIFY_DIFF lines it also carries verify-diff's summed `diff_*` counts and `diff_lines`, the number of lines diffed; on a day with AUDIT lines, call 3's summed `audit_*` counts — `audit_lines` audited, `audit_ran`, `audit_claims`, `audit_supported`, `audit_unverifiable`, `audit_invalid`, `audit_candidates`, `audit_confirmed`, `audit_applied`, `audit_rejected`, `audit_confirm_calls`, `audit_turns`, `audit_confirm_turns`, `audit_cost` — whose cost is also in `total_cost`; `expect-check` reads them as `audit_ran_rate` and `audit_<count>_mean` per audited line), and `event_age_days {<line>: days | null}` — for each line that published an article / brief, the run date minus the receipt's `event_date` (the note's central event; `null` = unknown, an older receipt, or not a date on or before the run date; `None` on a day with no note), and `effort {call1, call2}` — the `--effort` passed to each call (`None` when the run sent no EFFORT line). `python3 scripts/lib/dr_pipeline.py event-age-stats metrics.jsonl [since]` prints per-line note count, unknown rate and median age (H17: measured only — selection does not use it). Verdicts themselves are never stored — the eval is in-loop (ADR-0010) and only the verification tally survives.
 
 ## Persistent Memory Layer
 

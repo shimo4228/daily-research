@@ -89,6 +89,16 @@ daily-research.sh (05:00)
 │   survives, ADR-0017; an auth / billing error stops the remaining lines as in call 1)
 │   [before: the script copies the note to state/<line>/pre-verify/{date}.md;
 │    after: verify-diff compares the two and logs VERIFY_DIFF]
+├── Call 3 (only when [audit] enabled; kind: article only): fact audit, ADR-0020 (Opus by default,
+│   --effort high, WebFetch + WebSearch only — no Read, no write tool; the note and the evidence file
+│   are inlined in the prompt)
+│   ├── Stage 1 (--max-turns 40, 10-min timeout): lists only the sentences that contradict a source
+│   ├── Stage 2 per candidate, at most 5 (--max-turns 20, 4-min timeout): sees only the sentence,
+│   │   the URL and the note's date, and judges it again on its own
+│   └── audit-apply (code, not the model): replaces the candidates both stages call a contradiction,
+│       when the sentence appears exactly once in the body and the replacement keeps its links;
+│       state in runs/{date}.audit.json, the note before the audit in state/<line>/pre-audit/{date}.md,
+│       logs AUDIT. Any failure is fail-open — the note stays as call 2 left it
 ├── ctl-016 deterministic report lint (fixed sections 機会メモ / ソース, synced to
 │   report-template.md; kind: brief is exempt from the 機会メモ and length soft checks)
 ├── Pass 3: Obsidian wiki ingest (vault-side script, non-fatal, under an outer timeout = the ingest's own claude
@@ -182,6 +192,13 @@ launchctl list | grep daily-research
 | `WARN: Line <track> clarity pass: …` | verify-diff found an edit the verification protocol forbids (frontmatter, 機会メモ, ソース beyond `(未解決 …)` marks, a URL the draft did not have) or a count mismatch between `verify.json` and call 2's completion report |
 | `WARN: Line <track> pre-verify copy failed — …` / `WARN: Line <track> verify-diff could not run (non-fatal)` | The before-copy could not be written or compared; call 2's result is kept, its edits are not diffed |
 | `WARN: clarity pass failed ...` | Call 2 (verification + clarity) failed (fail-open — the run still succeeds and the line is counted `unverified`) |
+| `Audit pass: on (model <m>, ADR-0020)` | `[audit] enabled = true`; call 3 runs after call 2 for each article |
+| `AUDIT <track>: {...}` | Call 3's tally for the line: `ran` (stage 1 returned a readable result), `reason` (why not: a call class such as `E_TRANSIENT`, `parse`, `E_BUDGET_GATE`, `note_unreadable`), claims checked / supported / unverifiable, `invalid` (malformed candidates dropped), `candidates`, `confirmed` (both stages call it a contradiction), `applied`, `rejected`, stage 2 calls, turns and cost. Summed into the metrics record's `verification` as `audit_*` |
+| `WARN: Line <track> audit stage 1 did not run or failed (<class>) — …` | Stage 1 was not started (spend gate, unreadable or too long note) or failed. The note stays as call 2 left it; the run's result does not change |
+| `WARN: Line <track> audit pass: 監査で確定した候補 D<n> を適用しなかった (<rule>) — …` | Both stages confirmed an error but the replacement broke a rule (`not_found` / `ambiguous` / `outside_body`: the sentence is not exactly once in the body; `url_changed` / `link_changed`; `length`; `empty`; `unchanged`; `newline`; `control`; `sections_changed`). The error is still in the note — fix it by hand from `runs/{date}.audit.json` |
+| `WARN: Line <track> audit pass: 監査の置き換えをノートに書けなかった (<error>) — ノートは元のまま` | The replaced note could not be written; every applied candidate is recorded as `rejected` (`write_failed`) and the note is unchanged |
+| `WARN: Line <track> audit stage 2 stopped — API spend cap …` / `WARN: Line <track> audit pass skipped …` | api mode: the day's remainder no longer covers the next audit call; or the audit did not start (after an auth / billing error) |
+| `Line <track> audit pass skipped (kind: brief, only article is audited)` | Briefs are not audited |
 | `WARN: report lint hard fail (ctl-016): ...` | Deterministic lint found a missing sources section / zero citations |
 | `Completed successfully` | All of the day's picked lines completed and passed the report gate (including an all-quiet day) |
 
@@ -267,7 +284,7 @@ rm -rf .daily-research.lock
 - `status=401` / `403`: the key in `env_file` is wrong or revoked. Replace it there (never in the repo), then run `./scripts/check-auth.sh`.
 - `Your credit balance is too low`: add credit on platform.claude.com.
 - `status=429`: rate limit. The run stops on purpose instead of backing off (a burst of rate limits is a policy signal). Re-run later by hand.
-- `API spend gate stopped the run`: the day's or month's remaining budget is below one line's reserve (`call1_max_usd + call2_max_usd`). Check `state/api-spend.jsonl`; raise the caps in `[billing]` only if the credit covers it.
+- `API spend gate stopped the run`: the day's or month's remaining budget is below one line's reserve (`call1_max_usd + call2_max_usd`, plus `audit_max_usd + 5 × audit_confirm_max_usd` when `[audit] enabled`; the log's `Billing: api` line shows it as `line reserve`). Check `state/api-spend.jsonl`; raise the caps in `[billing]` only if the credit covers it.
 - `API spend gate could not check the caps` right after `ERROR: API spend gate failed (rc …): …` or `ERROR: API spend ledger could not be written …`: the caps could not be checked, so the gate stopped before the next line: every remaining line stays unstarted (all of them when this happens before the first line), and lines that already finished keep their results. The rc 2 message names the first five unreadable ledger lines with their reasons, plus `and N more`; fix or remove those lines in `state/api-spend.jsonl` (or make the file writable again), then re-run.
 
 The billing path never changes on its own: in subscription mode an `ANTHROPIC_API_KEY` exported in your shell is dropped, and in api mode only the key in `env_file` is used.
@@ -329,6 +346,25 @@ cat past_topics.json | python3 -m json.tool
 cp past_topics.json.bak past_topics.json
 ```
 
+### 9. Audit (Call 3) Changed a Note, or Left an Error In
+
+**Symptoms**: a note reads differently from what call 2 left, or `audit pass: 監査で確定した候補 … を適用しなかった` / `audit stage 1 did not run or failed` in the log.
+
+**Where to look**: `state/<line>/runs/{date}.audit.json` holds every candidate with its status (`applied`, `rejected` + rule, `not_confirmed` + stage 2's verdict, `confirm_failed`, `skipped` + `drift` / `duplicate` / `over_cap`), the source quote and the URL each stage read. `state/<line>/pre-audit/{date}.md` is the note before the audit.
+
+**Fixes**:
+```bash
+# What the audit changed
+diff state/<line>/pre-audit/<date>.md "<vault_path>/daily-research/<date>_<line>_<slug>.md"
+
+# Undo the audit for one note (the pre-audit copy is the note after call 2)
+cp state/<line>/pre-audit/<date>.md "<vault_path>/daily-research/<date>_<line>_<slug>.md"
+
+# Turn the audit off: in config.toml
+#   [audit]
+#   enabled = false
+```
+
 ## Rollback Procedures
 
 ### Revert Configuration Changes
@@ -366,14 +402,14 @@ If Mac was asleep at the scheduled time, launchd runs the job on wake (behavior 
 
 ## Cost
 
-Each morning the `lines_per_day` lines of the rotation window plus every `daily = true` line run (ADR-0010 / ADR-0011 / ADR-0017 / ADR-0019). Per line: Call 1 = one Opus research run (at most 2 invocations with its single retry) plus Call 2 = one verification + clarity pass (`[verification] model`); a line that ends quiet or hold skips Call 2. Timeouts and turn limits are in `scripts/daily-research.sh`.
+Each morning the `lines_per_day` lines of the rotation window plus every `daily = true` line run (ADR-0010 / ADR-0011 / ADR-0017 / ADR-0019). Per line: Call 1 = one Opus research run (at most 2 invocations with its single retry) plus Call 2 = one verification + clarity pass (`[verification] model`); a line that ends quiet or hold skips Call 2. With `[audit] enabled`, an article adds Call 3 = one audit run plus one confirmation run per candidate, at most 5 (`[audit] model`). Timeouts and turn limits are in `scripts/daily-research.sh`.
 
 **Who pays** is `[billing] mode` in `config.toml` (`scripts/lib/billing.sh`; the contract is `[billing]` in `scripts/lib/dr_pipeline.py`):
 
 | mode | Auth | Billing | Limits |
 |---|---|---|---|
 | `subscription` (default) | Claude Code login (OAuth) | No per-token charge on a Max plan; counts against the plan's usage limits | The plan's own limits. Any `ANTHROPIC_API_KEY` in the environment is dropped |
-| `api` | `ANTHROPIC_API_KEY` read from `env_file`, a file outside the repo that the model is denied from reading | Every call is billed to the Claude API | `--max-budget-usd` per call (`call1_max_usd`, `call2_max_usd`); a line starts only if the day's and the month's remaining budget both cover call1 + call2 (`daily_cap_usd`, `monthly_cap_usd`). Otherwise the remaining lines are skipped with a notification; a day where no line started ends as `E_BUDGET` (exit 1) |
+| `api` | `ANTHROPIC_API_KEY` read from `env_file`, a file outside the repo that the model is denied from reading | Every call is billed to the Claude API | `--max-budget-usd` per call (`call1_max_usd`, `call2_max_usd`, `audit_max_usd`, `audit_confirm_max_usd`); a line starts only if the day's and the month's remaining budget both cover call1 + call2 (+ the audit's reserve when `[audit] enabled`) (`daily_cap_usd`, `monthly_cap_usd`). Otherwise the remaining lines are skipped with a notification; a day where no line started ends as `E_BUDGET` (exit 1) |
 
 In `api` mode every call's cost (the `total_cost_usd` Claude Code reports, including the auth probe) is appended to `state/api-spend.jsonl`; the caps read that file, and the day's and month's totals are logged as `API spend: today … month …`. A 429, a too-low credit balance or a rejected key stops the remaining lines without a retry (`E_BILLING` / `E_AUTH`).
 

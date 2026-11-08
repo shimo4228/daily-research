@@ -16,12 +16,13 @@ line の一覧・repo 対応・focus は各自の `config.toml`（私的）が�
 
 | 知りたいこと | 正本 |
 |---|---|
-| 毎朝の流れ（輪番・呼1 / 呼2・gate・metrics） | `scripts/daily-research.sh`（各ブロック直上のコメント） |
-| 呼1・呼2 の起動フラグ・ツール集合・deny・timeout | 同 script の呼び出し箇所と `CALL1_TOOLS` / `CALL2_TOOLS` / `DISALLOWED_TOOLS` |
+| 毎朝の流れ（輪番・呼1 / 呼2 / 呼3・gate・metrics） | `scripts/daily-research.sh`（各ブロック直上のコメント） |
+| 呼1・呼2・呼3 の起動フラグ・ツール集合・deny・timeout | 同 script の呼び出し箇所（呼3 は `audit_call`）と `CALL1_TOOLS` / `CALL2_TOOLS` / `AUDIT_TOOLS` / `DISALLOWED_TOOLS` |
 | モデルが書いてよい場所 | 同 script の `WRITE_PATHS` 配列（allow 規則とプロンプトの「書き込み先」節を描く） |
 | JSON / TOML の契約（receipt・past_topics・billing・lint の対象節） | `scripts/lib/dr_pipeline.py` の定数と docstring |
 | 調査と執筆の手順・4 つの内容状態・文体規律 | `prompts/repo-research-protocol.md`・`prompts/ecosystem-research-protocol.md` |
 | 呼2（clarity + 原典照合） | `prompts/verification-protocol.md` |
+| 呼3（照合監査の 2 段。置き換えの規則・状態ファイル） | `prompts/audit-protocol.md`・`prompts/audit-confirm-protocol.md`、`scripts/lib/dr_pipeline.py` の「呼3」節 |
 | ノートの記述規律と末尾固定 2 節 | `templates/report-template.md`（line 別は `[tracks.<x>].template`） |
 | 設定キーと既定値 | `config.example.toml` |
 | 課金経路と支出（当月の実績） | `scripts/lib/billing.sh`、`./scripts/check-auth.sh` の出力、`state/api-spend.jsonl`（私的） |
@@ -53,10 +54,12 @@ DR_DATE=YYYY-MM-DD ./scripts/daily-research.sh      # 輪番とレポート名�
 - **境界は deny で書く。** `--allowedTools` は加算リストで、user settings の `defaultMode: auto` 下では列挙外の
   Bash が通った（2026-08-22 PoC）。呼び出しは `--permission-mode default` を付け、書き込みは `Edit(//abs)` 規則で
   許す（`Write(path)` 規則は consult されない）。外した書き込み先は deny にも置く
-- **両呼び出しは `--safe-mode`**（ADR-0019）。user の hook と CLAUDE.md が外れるので、hook が守っていた場所と
+- **全呼び出しは `--safe-mode`**（ADR-0019）。user の hook と CLAUDE.md が外れるので、hook が守っていた場所と
   資格情報の置き場は `DISALLOWED_TOOLS` の Read deny で塞ぐ。safe mode でも permissions は効く
 - **repo は read-only。** 呼1 の書き込みは vault のレポート dir と line の state の一部だけ。note は読み物で、
   repo への取り込みは運用者が repo セッションで行う
+- 呼3（照合監査、ADR-0020）のモデルは書き込みの道具も Read も持たない。ノートの置き換えは両段が確定した候補だけを
+  `dr_pipeline.py audit-apply` が規則で行う
 - `past_topics.json` はモデルに書かせない — gate 成功後に `dr_pipeline.py past-topics-append` が receipt から追記する
 - 全 `claude -p` 呼び出しは `< /dev/null`。`--append-system-prompt-file` を使う（既定の能力を残すため）。
   呼2 の allow に埋めるノート名は basename 検証済みのものだけ
@@ -69,7 +72,7 @@ DR_DATE=YYYY-MM-DD ./scripts/daily-research.sh      # 輪番とレポート名�
   lint と line 別テンプレートを同時に直す
 - 提案・承認要求・「すべき」・手順列挙は書かない。使い道は平文で書く（ADR-0009 / ADR-0014）
 - 材料が薄い日の quiet / hold は正常な結果。全 line quiet の日も成功
-- 事後採点の LLM judge は入れない。eval は run 内で verdict が消費される型に限る（ADR-0010。呼2 の照合は原稿の訂正）。
+- 事後採点の LLM judge は入れない。eval は run 内で verdict が消費される型に限る（ADR-0010。呼2 の照合と呼3 の監査は原稿の訂正）。
   集計は決定論の `metrics.jsonl` と対話 skill `/dr-review`。効果を意図した変更の commit には `DR-Expect:` trailer
 - 鮮度が一級制約: 全 claim に as-of 日付、機会メモの全機会に失効日
 

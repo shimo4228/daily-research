@@ -22,13 +22,15 @@ daily-research/
 ├── prompts/
 │   ├── repo-research-protocol.md       # per-repo リサーチプロトコル、呼1、mode = "repo"（--append-system-prompt-file 用）
 │   ├── ecosystem-research-protocol.md  # エコシステム観測プロトコル、呼1、mode = "ecosystem"（ADR-0018）
-│   └── verification-protocol.md        # fresh-context の検証 + clarity プロトコル、呼2（ADR-0017）
+│   ├── verification-protocol.md        # fresh-context の検証 + clarity プロトコル、呼2（ADR-0017）
+│   ├── audit-protocol.md               # 照合監査、呼3 の第 1 段: 原典と両立しない文だけを挙げる（ADR-0020）
+│   └── audit-confirm-protocol.md       # 照合監査、呼3 の第 2 段: 候補の文 1 つを独立に判定し直す（ADR-0020）
 ├── templates/
 │   ├── report-template.md              # 解説レポートの記述規律 + 固定 2 節（frontmatter付き）
 │   ├── report-template-edge.md         # edge ライン専用の節構成（ADR-0015）
 │   └── report-template-ecosystem.md    # ecosystem ライン専用の節構成（ADR-0018）
 ├── scripts/
-│   ├── daily-research.sh               # メインエントリポイント（輪番 window で当日 lines_per_day 本: 呼1 研究 + 呼2 検証 + clarity）; lib/ を source
+│   ├── daily-research.sh               # メインエントリポイント（輪番 window で当日 lines_per_day 本: 呼1 研究 + 呼2 検証 + clarity + 有効なら呼3 監査）; lib/ を source
 │   ├── check-auth.sh                   # [billing] の経路で認証チェック（real_auth_probe()）+ macOS 通知
 │   ├── pre-commit.sh                   # secret / 構文ガード（git pre-commit hook）
 │   ├── dev/                             # dev 専用の隔離試験 run: sandbox-run.sh / eval_run.py / compare.py
@@ -38,7 +40,8 @@ daily-research/
 ├── state/                               # ラインごとの brief.md / pending.md /
 │                                        #   watched-sources.md + watched-archive.md（ecosystem ライン）/ runs/{date}.md（根拠ファイル）/
 │                                        #   runs/{date}.json（run receipt）/ runs/{date}.verify.json / pre-verify/{date}.md
-│                                        #   （呼2 の改稿前の写し。script が書き、モデルは書かない）（gitignored）
+│                                        #   （呼2 の改稿前の写し。script が書き、モデルは書かない）/
+│                                        #   runs/{date}.audit.json + pre-audit/{date}.md（呼3。script が書く）（gitignored）
 ├── graph.jsonld                         # 凍結アーカイブ（退役した concept-graph パイプライン）
 ├── com.example.daily-research.plist    # launchd スケジュール（AM 5:00、リサーチ）
 ├── tests/
@@ -51,6 +54,7 @@ daily-research/
 │   ├── dev_tools_test.py              # scripts/dev/ の pytest（config の書き換え、集約、eval の指標）
 │   ├── dr_pipeline_test.py            # dr_pipeline.py の pytest（dev 専用、.venv）
 │   ├── dr_pipeline_strength_test.py   # mutation testing が見逃しを見つけた dr_pipeline.py の振る舞いを固定する pytest
+│   ├── audit_test.py                  # 呼3 の決定論の側（置き換えの規則・状態・AUDIT の計測）の pytest
 │   ├── test_helper.bash               # bats 共通 helper（refute_grep — grep の否定 assertion は `! grep` でなくこれで書く）
 │   └── fixtures/                      # テスト用の config と result JSON。verify-golden/ = 呼2 の手動確認（その README）
 ├── logs/                                # 実行ログ（日付別、30日自動ローテーション）
@@ -201,7 +205,25 @@ run は `cd "$TARGET_REPO"` で起動される。`mode = "ecosystem"` のライ�
 
 呼2 は起動前に当日の `verify.json` を削除し、run スコープ（`$LOCK_DIR/pid` より新しい）で読み直す。同じラインの呼1 が認証・課金のエラーで終わったときは呼2 を始めず、ノートは `unverified` のまま残る。
 
-**備考**: 全 `claude -p` 呼び出しは `< /dev/null` stdin リダイレクトを使用する（呼1・呼2 は `run_claude()` ラッパー経由、認証 probe は `real_auth_probe()` 自身が付ける）。これにより MCP の stdio 通信がターミナルの stdin と競合するのを防止する（過去 MCP ハングの根本原因だった）。
+### 呼3 — 照合監査（既定 Opus、article ごと、`[audit] enabled` のときだけ）
+
+2 段とも `audit_call` が起動し、ターン数の上限と timeout のほかは同じフラグを使う。第 1 段は article ごとに 1 回、第 2 段は候補ごとに 1 回（最大 5 件、`AUDIT_MAX_CONFIRM`）。
+
+| フラグ | 値 | 目的 |
+|------|-------|---------|
+| `-p` | 第 1 段: ノートと根拠ファイルの全文（`dr_pipeline.py audit-prompt`）。第 2 段: 候補の文 1 つ・その URL・ノートの公開日（`audit-confirm-prompt`）— 第 1 段の理由と正しい値は渡さない | 監査は Read を持たない: allow は deny に例外を作れず「この 2 ファイルだけ Read を許す」を書けないので、2 ファイルは prompt で渡す。第 2 段は第 1 段の結論を見ずに判定する |
+| `--max-budget-usd` | `[billing] audit_max_usd` / `audit_confirm_max_usd`（api mode のみ） | 呼び出しごとの支出上限 |
+| `--safe-mode` / `--tools` | `AUDIT_TOOLS`（`WebFetch,WebSearch`） | ファイルの道具を持たない |
+| `--permission-mode` | `default` | デフォルトの権限処理を使用 |
+| `--append-system-prompt-file` | `prompts/audit-protocol.md` / `prompts/audit-confirm-protocol.md` | 両立しないものだけを数える。「取得したページに無い」は根拠でなく unverifiable（WebFetch は長いページを切る） |
+| `--allowedTools` | `AUDIT_TOOLS` | ウェブの読み取りだけ |
+| `--disallowedTools` | `DISALLOWED_TOOLS` + `Read,Glob,Grep,Edit,Write` | モデルは何も書かない。ノートの置き換えはコードが行う |
+| `--max-turns` / timeout | `AUDIT_STAGE1_MAX_TURNS`（40）と 600 秒 / `AUDIT_STAGE2_MAX_TURNS`（20）と 240 秒 | 第 1 段はノートの全原典を取得する。第 2 段は 1 つ |
+| `--model` / `--effort` | `[audit] model`（既定 `opus`）/ `high` | 呼2 の後に残る誤りは帰属・時点・範囲・条件のずれで、同じ層の再照合では拾えなかった |
+
+その後 `dr_pipeline.py audit-apply` が、両段が食い違いとした候補を固定の規則（`_audit_replace`）で置き換える: 文が本文にちょうど 1 回現れる（frontmatter・題・機会メモ・ソースには触れない）、置き換えが URL と markdown link をすべて保つ、字数の増減が max(40, 元の文の半分) 以内、空でも元と同じでもない、改行の数を変えない、制御文字を入れない、frontmatter・機会メモ・ソースが変わらない。全件を `state/<line>/runs/{date}.audit.json` に記録し、監査の前のノートを `state/<line>/pre-audit/{date}.md` に写す。失敗は fail-open: 第 1 段が失敗すればノートは呼2 の後のままで `AUDIT` は `"ran": false`、第 2 段の 1 回の失敗はその候補だけを確定にしない。認証・課金のエラーは呼1・呼2 と同じく残りのラインを止める。
+
+**備考**: 全 `claude -p` 呼び出しは `< /dev/null` stdin リダイレクトを使用する（呼1・呼2・呼3 は `run_claude()` ラッパー経由、認証 probe は `real_auth_probe()` 自身が付ける）。これにより MCP の stdio 通信がターミナルの stdin と競合するのを防止する（過去 MCP ハングの根本原因だった）。
 
 ## アーキテクチャ補足
 
@@ -213,7 +235,7 @@ per-repo 単一パス設計は、2026-08-04 に旧中央 2 パス（Opus テー�
 
 呼2（検証 + clarity、ADR-0017）はゲートの後に走る: fresh-context のプロセス（`--max-turns 30`、`CLAUDE_TIMEOUT=1200`、`--allowedTools` = Read + WebFetch + 当日ノートと `runs/{date}.verify.json` のみの Edit、`--disallowedTools` に WebSearch を追加）が、初見読者としてつまずき箇所を直したうえで根拠ファイルの全 claim を原典と突き合わせる。失敗は fail-open — ログに `WARN: clarity pass failed` を記録し、未検証（timeout 時は部分改稿）の版が残り、`FINAL_EXIT` には影響しない。ただしそのラインは `unverified` として metrics と通知に出る。呼2 での認証・課金のエラー（`E_AUTH` / `E_BILLING`）は、呼1 と同じく残りのラインも止める。呼2 の前に script が原稿を `state/<line>/pre-verify/{date}.md`（モデルのどの書き込み先の外。先に path を消し、通常ファイルになったことを確かめる）へ写し、呼2 の後に `dr_pipeline.py verify-diff` が両者を比べて `VERIFY_DIFF` を log に出す — 呼2 の実際の改稿量が、呼2 自身の報告と別に記録される。
 
-`metrics.jsonl` は `expect-check` / `/dr-review` との互換のため ADR-0008 以前のレコード形を維持する: リサーチ run の JSON は `pass2` フィールドに合算され、`pass1` は常に `None`、`fallback_used` は「リトライが発生した」の意味（`pass2` は全 attempt の合算）、`source` は `live` / `test`（`DR_FORCE_TRACK` / `DR_ONLY_TRACK` の run は `test` で記録され `expect-check` / `/dr-review` の集計から除かれる）か、`metrics-backfill` がログから救った live run の `backfill`（救った試験 run は `test`）、`clarity_pass` は呼2 の `{ran, ok, cost, turns, ...}` を記録する（ラベルは互換のため据え置きで、中身は検証 + clarity パスの実測）。これに加えて `line_states {article, brief, quiet, hold, mismatch, suspect, unverified}`（零でも常に出す）と `verification {supported, partial, unsupported, unverifiable, edits, lines_verified}`（VERIFY 行が無い日は `None`。VERIFY_DIFF 行がある日は verify-diff の `diff_*` の合算と、比べたライン数 `diff_lines` も持つ）と `event_age_days {<line>: 日数 | null}`（article / brief を出したラインごとに、run の日付 − receipt の `event_date` = ノートの中心の出来事の日付。`null` は不明・古い receipt・run の日付以前の日付でない値、ノートが 0 本の日は `None`）と `effort {call1, call2}`（各呼び出しに渡した `--effort`。EFFORT 行の無い run は `None`）を持つ。`python3 scripts/lib/dr_pipeline.py event-age-stats metrics.jsonl [since]` がライン別のノート数・不明の率・日数の中央値を出す（H17: 計測だけで、選定には使わない）。判定そのものは保存しない — eval は in-loop 型（ADR-0010）で、残るのは照合結果の内訳だけ。
+`metrics.jsonl` は `expect-check` / `/dr-review` との互換のため ADR-0008 以前のレコード形を維持する: リサーチ run の JSON は `pass2` フィールドに合算され、`pass1` は常に `None`、`fallback_used` は「リトライが発生した」の意味（`pass2` は全 attempt の合算）、`source` は `live` / `test`（`DR_FORCE_TRACK` / `DR_ONLY_TRACK` の run は `test` で記録され `expect-check` / `/dr-review` の集計から除かれる）か、`metrics-backfill` がログから救った live run の `backfill`（救った試験 run は `test`）、`clarity_pass` は呼2 の `{ran, ok, cost, turns, ...}` を記録する（ラベルは互換のため据え置きで、中身は検証 + clarity パスの実測）。これに加えて `line_states {article, brief, quiet, hold, mismatch, suspect, unverified}`（零でも常に出す）と `verification {supported, partial, unsupported, unverifiable, edits, lines_verified}`（VERIFY 行が無い日は `None`。VERIFY_DIFF 行がある日は verify-diff の `diff_*` の合算と、比べたライン数 `diff_lines` も持つ。AUDIT 行がある日は呼3 の `audit_*` の合算 — 監査したライン数 `audit_lines`、`audit_ran`、`audit_claims`、`audit_supported`、`audit_unverifiable`、`audit_invalid`、`audit_candidates`、`audit_confirmed`、`audit_applied`、`audit_rejected`、`audit_confirm_calls`、`audit_turns`、`audit_confirm_turns`、`audit_cost` — も持ち、その費用は `total_cost` にも入る。`expect-check` はこれを `audit_ran_rate` と、監査した 1 ラインあたりの `audit_<件数>_mean` として読む）と `event_age_days {<line>: 日数 | null}`（article / brief を出したラインごとに、run の日付 − receipt の `event_date` = ノートの中心の出来事の日付。`null` は不明・古い receipt・run の日付以前の日付でない値、ノートが 0 本の日は `None`）と `effort {call1, call2}`（各呼び出しに渡した `--effort`。EFFORT 行の無い run は `None`）を持つ。`python3 scripts/lib/dr_pipeline.py event-age-stats metrics.jsonl [since]` がライン別のノート数・不明の率・日数の中央値を出す（H17: 計測だけで、選定には使わない）。判定そのものは保存しない — eval は in-loop 型（ADR-0010）で、残るのは照合結果の内訳だけ。
 
 ## 永続メモリ層
 
