@@ -81,7 +81,10 @@ billing_gate() {
     _billing_log "ERROR: API spend ledger could not be written earlier in this run — cannot check the caps"
     return 1
   fi
-  err=$(mktemp) || return 1
+  if ! err=$(mktemp); then
+    _billing_log "ERROR: API spend gate could not create a temp file (mktemp failed) — cannot check the caps"
+    return 1
+  fi
   out=$(python3 "$DR_PY" spend-gate "$SPEND_LEDGER" "$DATE" "$BILLING_MONTHLY_CAP" \
     "$BILLING_DAILY_CAP" "$BILLING_RESERVE" 2>"$err") || rc=$?
   if [ "$rc" = "0" ] || [ "$rc" = "1" ]; then

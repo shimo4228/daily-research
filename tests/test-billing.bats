@@ -178,6 +178,20 @@ calls_of() { grep -c "kind=$1" "$MOCK_HOME/.calls" || true; }
   [ "$(classify_exit 1 "$(cat "$REAL_PROJECT_DIR/tests/fixtures/result-401-api-key.json")")" = "E_AUTH" ]
 }
 
+# === billing_gate (lib/billing.sh) の単体 ===
+
+@test "billing_gate: a mktemp failure is logged as a gate failure before returning 1" {
+  # mktemp が失敗する (disk full・不正な TMPDIR) と billing_gate は無言で 1 を返し、呼ぶ側の
+  # 「上限で止めた」ログだけが残っていた — docstring の「上限以外の理由は log してから 1」に反する
+  PROJECT_DIR="$P"; DATE="$DR_DATE"
+  source "$LIB_DIR/billing.sh"
+  BILLING_MODE=api; BILLING_MONTHLY_CAP=190; BILLING_DAILY_CAP=15; BILLING_RESERVE=5.5
+  mktemp() { return 1; }
+  run billing_gate
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ERROR: "*"cannot check the caps"* ]]
+}
+
 # === orchestrator E2E ===
 
 @test "api mode: key from env_file reaches claude, per-call cap is passed, spend is logged" {
