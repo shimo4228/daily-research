@@ -28,14 +28,19 @@ claude -p "以下のレポートを、システムプロンプトに追記され
 根拠ファイル (読み取りのみ): $PWD/tests/fixtures/verify-golden/evidence.md
 検証結果の書き込み先: /tmp/verify-golden.verify.json
 書き込みはこの 2 ファイルだけ。" \
+  --safe-mode --tools "Read,WebFetch,Edit,Write" \
   --permission-mode default \
   --append-system-prompt-file prompts/verification-protocol.md \
   --allowedTools "Read,WebFetch,Edit(///tmp/verify-golden-report.md),Edit(///tmp/verify-golden.verify.json)" \
   --disallowedTools "Bash,Task,NotebookEdit,WebSearch" \
-  --max-turns 30 --model sonnet --output-format json --no-session-persistence
+  --max-turns 30 --model sonnet --output-format json --no-session-persistence < /dev/null
 diff tests/fixtures/verify-golden/report.md /tmp/verify-golden-report.md
 cat /tmp/verify-golden.verify.json
 ```
+
+起動フラグは本番の呼2（`scripts/daily-research.sh` の `CLARITY_JSON=` の呼び出し）に合わせる。`--safe-mode` が無いと
+運用者の `~/.claude` の CLAUDE.md・rules・hook が入り、本番と別の条件で測ることになる。本番は `--disallowedTools` に
+`DISALLOWED_TOOLS` の Read deny（`~/.claude/**`・資格情報の置き場）も足す。
 
 ## 記録するもの
 
