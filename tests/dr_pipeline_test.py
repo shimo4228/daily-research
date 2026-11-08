@@ -1598,36 +1598,6 @@ def test_success_fixture_searches_come_from_model_usage(monkeypatch, capsys):
     assert "searches=19" in out
 
 
-# --- turns-near-cap: 呼1 の num_turns が --max-turns の 90% を超えたか (hillclimb H14) ---
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    "stdin,cap,expected",
-    [
-        ('{"num_turns": 49}', "55", "49\t0"),  # 49 * 10 = 490 <= 495
-        ('{"num_turns": 50}', "55", "50\t1"),  # 90% (49.5) を超えた
-        ('{"num_turns": 59}', "55", "59\t1"),  # 上限を超える数字のまま success (2026-11-08 の live)
-        ('[{"type": "result", "num_turns": 30}]', "30", "30\t1"),
-        ('{"num_turns": 27}', "30", "27\t0"),  # ちょうど 90% は超えていない
-        ("not json", "55", "0\t0"),
-        ("", "55", "0\t0"),
-        ('{"num_turns": "x"}', "55", "0\t0"),
-    ],
-)
-def test_turns_near_cap(monkeypatch, capsys, stdin, cap, expected):
-    rc, out, _ = run_cmd(monkeypatch, capsys, ["turns-near-cap", cap], stdin)
-    assert rc == 0
-    assert out.strip() == expected
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("args", [[], ["x"], ["0"]])
-def test_turns_near_cap_usage(monkeypatch, capsys, args):
-    rc, _, err = run_cmd(monkeypatch, capsys, ["turns-near-cap", *args], "{}")
-    assert rc == 64 and err
-
-
 # --- pending-stats: pending.md の項目数・字数と、記事の機会メモの項目数 (hillclimb H02) ---
 
 PENDING_MD = (

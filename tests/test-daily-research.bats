@@ -366,10 +366,10 @@ precommit_fixture_commit() {
 
 @test "max-turns is configured" {
   grep -q '\-\-max-turns' "$SCRIPT"
-  # 呼1 の上限は 1 つの変数が flag と WARN (turns-near-cap) の両方に効く (H14)
+  # 呼1 の上限は 1 つの変数 (H14)。num_turns との比の WARN は持たない (数え方が --max-turns と揃わない)
   grep -qE '^CALL1_MAX_TURNS=[0-9]+$' "$SCRIPT"
   grep -qF -- '--max-turns "$CALL1_MAX_TURNS"' "$SCRIPT"
-  grep -qF 'turns-near-cap "$CALL1_MAX_TURNS"' "$SCRIPT"
+  refute_grep -q 'turns-near-cap' "$SCRIPT"
 }
 
 # === 自己改善ループの計測 (ADR-0006) ===

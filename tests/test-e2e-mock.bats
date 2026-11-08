@@ -597,20 +597,16 @@ install_timeout_spy() {
 
 # === Test: Retry (per-line, once) ===
 
-@test "E2E turns: call 1 above 90% of --max-turns warns, below does not (H14)" {
+@test "E2E turns: call 1 gets --max-turns from CALL1_MAX_TURNS; a success above the cap is a success (H14)" {
+  # live では --max-turns 55 で num_turns 59 の success がある。num_turns は上限切れの判定に使わない
   echo "normal" > "$MOCK_HOME/.mock_scenario"
-  echo 50 > "$MOCK_HOME/.turns_$PICKED"
+  echo 59 > "$MOCK_HOME/.turns_$PICKED"
   run run_script
   [ "$status" -eq 0 ]
-  get_log | grep -q "WARN: Line $PICKED call 1 used 50 turns (> 90% of --max-turns 55)"
   grep -A1 -x -- '--max-turns' "$MOCK_HOME/.args_$PICKED" | grep -qx 55
-
-  echo 49 > "$MOCK_HOME/.turns_$PICKED"
-  rm -rf "$MOCK_PROJECT/logs" "$MOCK_HOME/mock-vault/daily-research" "$MOCK_PROJECT/state/$PICKED/runs"
-  mkdir -p "$MOCK_PROJECT/logs"
-  run run_script
-  [ "$status" -eq 0 ]
-  refute_grep -q "turns (> 90%" <<< "$(get_log)"
+  get_log | grep -q "SUMMARY Run($PICKED):.* turns=59 "
+  get_log | grep -q "Line $PICKED report gate passed"
+  refute_grep -q "WARN: Line $PICKED call 1 used" <<< "$(get_log)"
 }
 
 @test "E2E retry: transient failure retries once then succeeds" {
