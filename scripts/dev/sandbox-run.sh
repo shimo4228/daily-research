@@ -75,18 +75,31 @@ fi
 MAIN=$(cd "$MAIN" && pwd -P) || die "--main is not a directory: $MAIN"
 [ -f "$MAIN/config.toml" ] || die "no config.toml in $MAIN"
 
-# 出力 dir: 空であること。本物の vault・MAIN の state / logs の中には作らない
-mkdir -p "$OUT"
-OUT=$(cd "$OUT" && pwd -P)
-[ -z "$(ls -A "$OUT")" ] || die "output dir is not empty: $OUT"
+# 出力 dir: 空であること。本物の vault・MAIN の state / logs の中と、git の作業ツリーの ignore されない
+# 範囲 (公開 repo の追跡対象になりうる場所) には作らない。検査は mkdir より前に行う — まだ無い末尾は、
+# 在る最も近い祖先を実体化 (pwd -P) した path に繋いで判定する
+_anc=$OUT; _rest=""
+while [ ! -d "$_anc" ]; do
+  _rest="/$(basename "$_anc")$_rest"
+  _anc=$(dirname "$_anc")
+done
+case "$_rest/" in */./*|*/../*) die "the part of --out that does not exist yet must not contain . or ..: $OUT" ;; esac
+OUT="$(cd "$_anc" && pwd -P)$_rest"
 # MAIN の config を読むのは道具と同じ checkout の dr_pipeline (試すコードの版に依らない)
 TOOL_DR_PY="$SELF_DIR/../lib/dr_pipeline.py"
 REAL_VAULT=$("$PY" "$TOOL_DR_PY" vault-path "$MAIN/config.toml" 2>/dev/null) || REAL_VAULT=""
 REAL_REPORT_DIR=$("$PY" "$TOOL_DR_PY" report-dir "$MAIN/config.toml" 2>/dev/null) || REAL_REPORT_DIR=""
 for _guard in "$REAL_VAULT" "$MAIN/state" "$MAIN/logs"; do
   [ -n "$_guard" ] || continue
+  if [ -d "$_guard" ]; then _guard=$(cd "$_guard" && pwd -P); fi
   case "$OUT/" in "$_guard"/*) die "output dir must be outside $_guard" ;; esac
 done
+_top=$(git -C "$_anc" rev-parse --show-toplevel 2>/dev/null) || _top=""
+if [ -n "$_top" ] && ! git -C "$_top" check-ignore -q "$OUT"; then
+  die "output dir is inside the git work tree $_top and not ignored — use an ignored path such as .notes/"
+fi
+mkdir -p "$OUT"
+[ -z "$(ls -A "$OUT")" ] || die "output dir is not empty: $OUT"
 
 SANDBOX="$OUT/sandbox"
 PROJ="$SANDBOX/project"
@@ -143,11 +156,13 @@ if [ -f "$MAIN/past_topics.json" ]; then
   chmod 600 "$PROJ/past_topics.json"
 fi
 # state/<line>: brief.md / pending.md / watched-sources.md と過去の runs/。当日の runs/<date>.* は写さない
-# (呼1 が「今日は済んだ」と読む・gate が古い receipt を拾う、を避ける)。mtime は保つ
+# (呼1 が「今日は済んだ」と読む・gate が古い receipt を拾う、を避ける)。mtime は保つ。symlink は実体を
+# 写す (-L): link のまま写すと、呼1 の pending.md への書き込みが link 先の本物に届く
 mkdir -p "$PROJ/state"
 if [ -d "$MAIN/state/$LINE" ]; then
-  cp -Rp "$MAIN/state/$LINE" "$PROJ/state/$LINE"
+  cp -RLp "$MAIN/state/$LINE" "$PROJ/state/$LINE"
   rm -f "$PROJ/state/$LINE/runs/$DATE".*
+  [ -z "$(find "$PROJ/state/$LINE" -type l | head -n 1)" ] || die "symlinks survived the copy of state/$LINE"
 fi
 for _f in pending.md watched-sources.md; do
   if [ -f "$PROJ/state/$LINE/$_f" ]; then cp -p "$PROJ/state/$LINE/$_f" "$OUT/${_f%.md}.before.md"; fi

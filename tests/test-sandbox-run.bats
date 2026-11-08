@@ -180,6 +180,35 @@ run_sandbox() {
   python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert m["valid"] is False and [r["ok"] for r in m["call_auth"]] == [False, True], m["call_auth"]' "$OUT/meta.json"
 }
 
+@test "sandbox-run: a symlinked state dir is copied as real files, so writes stay in the sandbox" {
+  mv "$FAKE_MAIN/state/demo" "$MOCK_HOME/state-demo-real"
+  ln -s "$MOCK_HOME/state-demo-real" "$FAKE_MAIN/state/demo"
+  run_sandbox --prepare-only
+  [ "$status" -eq 0 ]
+  [ ! -L "$OUT/sandbox/project/state/demo" ]
+  [ -z "$(find "$OUT/sandbox/project/state/demo" -type l)" ]
+  [ "$(cat "$OUT/sandbox/project/state/demo/pending.md")" = "pending" ]
+}
+
+@test "sandbox-run: refuses an output dir in the real vault or in a tracked git tree, before creating it" {
+  HOME="$MOCK_HOME" run "$REAL_PROJECT_DIR/scripts/dev/sandbox-run.sh" --line demo --tree "$REAL_PROJECT_DIR" \
+    --main "$FAKE_MAIN" --out "$MOCK_HOME/real-vault/daily-research/new/x" --prepare-only
+  [ "$status" -eq 1 ]
+  [ ! -e "$MOCK_HOME/real-vault/daily-research/new" ]
+  git init -q "$MOCK_HOME/pub"
+  HOME="$MOCK_HOME" run "$REAL_PROJECT_DIR/scripts/dev/sandbox-run.sh" --line demo --tree "$REAL_PROJECT_DIR" \
+    --main "$FAKE_MAIN" --out "$MOCK_HOME/pub/runs/x" --prepare-only
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not ignored"* ]]
+  [ ! -e "$MOCK_HOME/pub/runs" ]
+  # ignore された場所なら作る
+  echo "runs/" > "$MOCK_HOME/pub/.gitignore"
+  HOME="$MOCK_HOME" run "$REAL_PROJECT_DIR/scripts/dev/sandbox-run.sh" --line demo --tree "$REAL_PROJECT_DIR" \
+    --main "$FAKE_MAIN" --out "$MOCK_HOME/pub/runs/x" --prepare-only
+  [ "$status" -eq 0 ]
+  [ -d "$MOCK_HOME/pub/runs/x/sandbox/project" ]
+}
+
 @test "sandbox-run: refuses a non-empty output dir and a missing line" {
   mkdir -p "$OUT" && touch "$OUT/x"
   run_sandbox --prepare-only
