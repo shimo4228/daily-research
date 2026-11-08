@@ -1,53 +1,64 @@
 #!/usr/bin/env bash
-# lock.sh — mkdir ベースのアトミックな同時実行ロック。source 専用。
-# LOCK_DIR を呼び出し側で定義済みであること (ロックはディレクトリとして扱う)。
+# lock.sh — daily-research の同時実行ロック。source 専用。
+# LOCK_DIR を呼び出し側で定義済みであること。lock は dir の LOCK_DIR と、その中の pid (保持者の PID。
+# mtime は daily-research.sh の find_run_file が run の開始時刻として使う)。
 #
-# 旧実装は `[ -f lock ]` で確認してから `echo $$ > lock` で書き込む check-then-write
-# で、確認と書き込みの間に他プロセスが割り込む race があった (ctl-014)。
-# mkdir はアトミック (既存なら必ず失敗する) なので、これでロック取得を不可分にする。
+# 保証: acquire_lock が 0 を返した process は同時に高々 1 つ (保持者が daily-research.sh の名前で走っている
+# 限り — コマンド行がこの名前でない保持者は PID 再利用の stale と読んで奪う)。lock の判定と変更 (pid の読み・
+# stale の奪取・mkdir・pid の書き込み・release の削除) は、すべて "$LOCK_DIR.mutex" に取る flock(2) の中で行う。
+# flock は fd を持つ process が全部終わると kernel が外すので、mutex に stale は無い (取得中に死んでも残らない)。
+# mutex のファイルは消さない — 消すと、古い inode を lock した process と新しい inode を lock した process が並ぶ。
 
-# acquire_lock: 取得成功で 0、他インスタンス実行中で 1。
-# 既存ロックの PID が死んでいれば stale とみなして奪取する。PID が生きていても、その process の
-# コマンド行が daily-research.sh でないと読めたときは stale とみなす — run 中の再起動で lock dir が
-# 残り、再起動後に同じ PID を別の process が使うと kill -0 が通り、以後の run が全部 skip になる。
+# _lock_mutex: 呼び出し側の subshell が開いた fd 9 ("$LOCK_DIR.mutex") に排他 flock を取る。10 秒で取れなければ 1。
+# python は flock を取って終わるだけで、lock は fd 9 を開いた subshell が終わるまで続く (flock は open file に付く)。
+_lock_mutex() {
+  python3 -c '
+import fcntl, signal, sys
+signal.signal(signal.SIGALRM, lambda *_: sys.exit("lock: " + sys.argv[1] + " の flock を 10 秒待っても取れない"))
+signal.alarm(10)
+fcntl.flock(9, fcntl.LOCK_EX)
+' "$LOCK_DIR.mutex"
+}
+
+# _lock_held: LOCK_DIR を実行中の daily-research が持っていれば 0、stale なら 1。mutex の中で呼ぶ。
+# pid が無い・空・数字でない lock dir は stale — pid を書き込み中の取得者は mutex の中にしかおらず、mutex を
+# 持つのは呼び出し側なので、それは取得中に死んだ process の残骸。pid が自分の PID なのも stale (取得前の
+# 自分は保持者でない。再起動前の run の lock に残った PID を、再起動後の自分が引いた)。
+# PID が生きていても、その process のコマンド行が daily-research.sh でないと読めたときは stale — run 中の
+# 再起動で lock dir が残り、再起動後に同じ PID を別の process が使うと kill -0 が通る。
 # ps が何も返さないときは実行中として扱う (二重実行より skip の方が安全)。
-acquire_lock() {
-  if mkdir "$LOCK_DIR" 2>/dev/null; then
-    echo $$ > "$LOCK_DIR/pid"
-    return 0
-  fi
-  # 既存ロックあり: PID で stale 判定
+_lock_held() {
   local pid cmd
-  pid=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "")
-  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-    cmd=$(ps -ww -p "$pid" -o command= 2>/dev/null || true)
-    case "$cmd" in
-      ""|*daily-research.sh*) return 1 ;;  # 実行中
-    esac
-  fi
-  # stale ロック: 奪取を試みる。
-  # 保証の範囲: mkdir の原子性が守るのは 1 回の mkdir の勝者が 1 つであることだけで、奪取は不可分でない。
-  # 両方が走る窓は 2 つある:
-  #   (a) 勝者の mkdir から `echo $$ > pid` までの間。来た側は空の pid を stale と読み、rm -rf→mkdir
-  #       で奪う (stale lock が無い朝でも、2 つの起動が重なれば起きる)
-  #   (b) 2 プロセスが同じ stale lock をほぼ同時に見つけたとき。先に rm→mkdir した側の新しい lock を
-  #       遅れた側の rm -rf が消し、遅れた側の mkdir も成功する
-  # どちらも pid は後の側になり、先の側の run スコープの基準 $LOCK_DIR/pid の mtime も後の側の時刻に
-  # 変わる。launchd の起動と手動実行・試験 seam の run が重なれば起きうる。不可分な奪取が要るなら
-  # mv -n 等で作り直す。
-  rm -rf "$LOCK_DIR"
-  if mkdir "$LOCK_DIR" 2>/dev/null; then
-    echo $$ > "$LOCK_DIR/pid"
-    return 0
-  fi
+  pid=$(cat "$LOCK_DIR/pid" 2>/dev/null) || return 1
+  case "$pid" in ""|*[!0-9]*|"$$") return 1 ;; esac
+  kill -0 "$pid" 2>/dev/null || return 1
+  cmd=$(ps -ww -p "$pid" -o command= 2>/dev/null || true)
+  case "$cmd" in
+    ""|*daily-research.sh*) return 0 ;;
+  esac
   return 1
 }
 
-# release_lock: 自分が保持するロックのみ解放する。
-# trap EXIT で呼ぶ。stale 奪取後に別プロセスが取り直したロックを誤って消さないよう
-# pid ファイルが自分の PID のときだけ削除する。
-release_lock() {
-  if [ -f "$LOCK_DIR/pid" ] && [ "$(cat "$LOCK_DIR/pid" 2>/dev/null)" = "$$" ]; then
+# acquire_lock: 取得成功で 0、他インスタンス実行中 (または mutex を 10 秒で取れない) で 1。
+# stale な lock は mutex の中で消して取り直す。
+acquire_lock() {
+  local rc=0
+  (
+    _lock_mutex || exit 1
+    if _lock_held; then exit 1; fi
     rm -rf "$LOCK_DIR"
-  fi
+    mkdir "$LOCK_DIR" && echo $$ > "$LOCK_DIR/pid"
+  ) 9>> "$LOCK_DIR.mutex" || rc=$?
+  return "$rc"
+}
+
+# release_lock: 自分が保持するロックのみ解放する。常に 0。
+# trap EXIT で呼ぶ。stale 奪取後に別プロセスが取り直したロックを誤って消さないよう
+# pid ファイルが自分の PID のときだけ削除する。mutex を取れなければ消さずに返す (残った lock は
+# 次の取得者が死んだ PID の stale として奪う)。
+release_lock() {
+  (
+    _lock_mutex || exit 0
+    if [ "$(cat "$LOCK_DIR/pid" 2>/dev/null)" = "$$" ]; then rm -rf "$LOCK_DIR"; fi
+  ) 9>> "$LOCK_DIR.mutex" || true
 }

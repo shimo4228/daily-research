@@ -58,7 +58,7 @@ launchctl start com.yourname.daily-research   # the Label in your plist
 
 ```
 daily-research.sh (05:00)
-├── Lock acquisition (atomic mkdir)
+├── Lock acquisition (check and mkdir inside a flock mutex)
 ├── Billing setup ([billing]: api = ANTHROPIC_API_KEY from env_file, subscription = OAuth)
 ├── Auth probe (one real Haiku call on that billing path, with --safe-mode like both calls)
 ├── Config schema check (`dr_pipeline.py tracks`: the legacy pre-ADR-0008 schema and malformed line
@@ -149,7 +149,7 @@ launchctl list | grep daily-research
 | `ERROR: Line <track> hit a billing/rate-limit error — aborting remaining lines, no retry` | api mode: 429 or credit balance too low (`E_BILLING`) |
 | `WARN: Line <track> reached --max-budget-usd $… — no retry, going to gate` | The per-call cap stopped call 1; whatever it wrote goes to the gate |
 | `API spend: today $… / $…, month $… / $…` | api mode: totals from `state/api-spend.jsonl` after the run |
-| `ERROR: Another instance is running. Skipping.` | Lock directory `.daily-research.lock/` is held by a live `daily-research.sh` process |
+| `ERROR: Another instance is running. Skipping.` | Lock directory `.daily-research.lock/` is held by a live `daily-research.sh` process (or the lock's mutex was not free within 10 s — `logs/launchd-stderr.log` shows `lock: … の flock を 10 秒待っても取れない`) |
 | `Config schema check passed` | `config.toml` matches the current (ADR-0008) schema |
 | `ERROR: config.toml schema check failed (the reason is on the line above; see config.example.toml)` | `dr_pipeline.py tracks` rejected `config.toml` (legacy schema, a bad line name, a wrong type for `daily` / `template` / `mode`, an unknown `mode` value, `repos` / `context_files` on a `mode = "ecosystem"` line, a malformed `repos`, or a bad `lines_per_day`); the reason is the line logged just before. The run stops before any line (exit 1) |
 | `Rotation pick: a, b, c (ADR-0010/0017)` | The rotation window picked for today |
@@ -228,7 +228,7 @@ which claude
 
 **Symptoms**: Log shows `ERROR: Another instance is running. Skipping.`
 
-**Cause**: Previous run is still active, or crashed without cleanup.
+**Cause**: Previous run is still active, or another `daily-research.sh` reuses the PID of a crashed run.
 
 **Fix**:
 ```bash
@@ -237,8 +237,9 @@ cat .daily-research.lock/pid
 ps aux | grep daily-research
 
 # If no process is running, remove the stale lock directory
-# (the script also steals, on its next start, a lock whose PID is dead or now belongs
-#  to a process other than daily-research.sh — e.g. a PID reused after a reboot)
+# (the script also steals, on its next start, a lock whose PID is dead, missing or empty, or now
+#  belongs to a process other than daily-research.sh — e.g. a PID reused after a reboot.
+#  Keep the neighbouring .daily-research.lock.mutex: it is the permanent file the lock is taken under)
 rm -rf .daily-research.lock
 ```
 

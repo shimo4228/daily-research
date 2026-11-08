@@ -58,7 +58,7 @@ launchctl start com.yourname.daily-research   # plist の Label
 
 ```
 daily-research.sh (05:00)
-├── ロック取得（アトミック mkdir）
+├── ロック取得（flock の mutex の中で判定と mkdir）
 ├── 課金経路の設定（[billing]: api = env_file の ANTHROPIC_API_KEY、subscription = OAuth）
 ├── 認証 probe（その経路で Haiku を実際に 1 回呼ぶ。呼1・呼2 と同じく --safe-mode）
 ├── config schema チェック（`dr_pipeline.py tracks`: ADR-0008 以前の旧 schema と、壊れたライン定義 —
@@ -148,7 +148,7 @@ launchctl list | grep daily-research
 | `ERROR: Line <track> hit a billing/rate-limit error — aborting remaining lines, no retry` | api モード: 429 またはクレジット残高不足（`E_BILLING`） |
 | `WARN: Line <track> reached --max-budget-usd $… — no retry, going to gate` | 呼び出しごとの上限で呼1 が止まった。書けた分でゲートへ進む |
 | `API spend: today $… / $…, month $… / $…` | api モード: run 後の `state/api-spend.jsonl` の合計 |
-| `ERROR: Another instance is running. Skipping.` | ロックディレクトリ `.daily-research.lock/` を生存中の `daily-research.sh` の process が保持している |
+| `ERROR: Another instance is running. Skipping.` | ロックディレクトリ `.daily-research.lock/` を生存中の `daily-research.sh` の process が保持している（またはロックの mutex を 10 秒で取れなかった — `logs/launchd-stderr.log` に `lock: … の flock を 10 秒待っても取れない`） |
 | `Config schema check passed` | `config.toml` が現行 (ADR-0008) schema に適合 |
 | `ERROR: config.toml schema check failed (the reason is on the line above; see config.example.toml)` | `dr_pipeline.py tracks` が `config.toml` を拒否した（旧 schema、line 名の形、`daily` / `template` / `mode` の型、`mode` の未知の値、`mode = "ecosystem"` の line に書いた `repos` / `context_files`、壊れた `repos`、`lines_per_day` の値）。理由は直前に log された行にある。どのラインも始めずに停止（exit 1） |
 | `Rotation pick: a, b, c (ADR-0010/0017)` | 当日担当ラインの輪番 window 選択結果 |
@@ -227,7 +227,7 @@ which claude
 
 **症状**: ログに `ERROR: Another instance is running. Skipping.` が出力される。
 
-**原因**: 前回の実行がまだ実行中、またはクラッシュしてクリーンアップされなかった。
+**原因**: 前回の実行がまだ実行中、またはクラッシュした run の PID を別の `daily-research.sh` が再利用している。
 
 **対処**:
 ```bash
@@ -236,8 +236,9 @@ cat .daily-research.lock/pid
 ps aux | grep daily-research
 
 # プロセスが存在しない場合、古いロックディレクトリを削除
-# （PID が死んでいるロックと、PID が daily-research.sh 以外の process のもの（再起動後の PID の再利用など）
-#  になったロックは、次回起動時にスクリプト自身が奪取する）
+# （PID が死んでいる・pid が無いか空のロックと、PID が daily-research.sh 以外の process のもの（再起動後の
+#  PID の再利用など）になったロックは、次回起動時にスクリプト自身が奪取する。隣の .daily-research.lock.mutex は
+#  取得の排他に使う常設ファイルで、消さない）
 rm -rf .daily-research.lock
 ```
 

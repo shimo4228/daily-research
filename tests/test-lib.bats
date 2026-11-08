@@ -196,6 +196,7 @@ echo "not reached"')"
   [ -d "$LOCK_DIR" ]
   release_lock
   [ ! -d "$LOCK_DIR" ]
+  [ -f "$LOCK_DIR.mutex" ]   # mutex は常設 (消すと別 inode を lock する process と並ぶ)
 }
 
 @test "release_lock does not remove a lock owned by another pid" {
@@ -205,6 +206,64 @@ echo "not reached"')"
   source "$LIB_DIR/lock.sh"
   release_lock
   [ -d "$LOCK_DIR" ]   # 自分のものでないので消さない
+}
+
+@test "acquire_lock steals a lock dir whose pid is missing, empty, non-numeric or its own PID" {
+  # どれも実行中の保持者を示さない (pid を書く途中の取得者は mutex の中にしかいない)。実行中と読むと
+  # 以後の run が全部 skip になる。旧実装は "-1" を実行中と読んだ (kill -0 -1 が通り、ps が空を返す)
+  LOCK_DIR="$TMP/lock"
+  source "$LIB_DIR/lock.sh"
+  local content
+  for content in none "" "-1" "12x" "$$"; do
+    rm -rf "$LOCK_DIR"
+    mkdir "$LOCK_DIR"
+    [ "$content" = none ] || printf '%s' "$content" > "$LOCK_DIR/pid"
+    run acquire_lock
+    [ "$status" -eq 0 ] || { echo "not stolen: pid=[$content]" >&2; return 1; }
+    [ "$(cat "$LOCK_DIR/pid")" = "$$" ]
+  done
+}
+
+@test "acquire_lock waits while another process holds the mutex, then takes the lock" {
+  LOCK_DIR="$TMP/lock"
+  # 保持者は flock を取って held を作り、1 秒後に released を作ってから終わる (終わると kernel が flock を外す)
+  ( exec python3 -c 'import fcntl, pathlib, sys, time; fcntl.flock(9, fcntl.LOCK_EX); pathlib.Path(sys.argv[1]).touch(); time.sleep(1); pathlib.Path(sys.argv[2]).touch()' "$TMP/held" "$TMP/released" ) 9>> "$LOCK_DIR.mutex" 3>&- &
+  local holder=$! i
+  for i in $(seq 1 100); do [ -e "$TMP/held" ] && break; sleep 0.05; done
+  [ -e "$TMP/held" ]
+  source "$LIB_DIR/lock.sh"
+  run acquire_lock
+  local after_release=0
+  [ -e "$TMP/released" ] && after_release=1   # wait より前に見る: 取得は保持者が mutex を手放した後
+  wait "$holder"
+  [ "$status" -eq 0 ]
+  [ "$after_release" -eq 1 ]
+  [ "$(cat "$LOCK_DIR/pid")" = "$$" ]
+}
+
+@test "acquire_lock is not blocked by a mutex whose holder was killed (kernel releases the flock)" {
+  # mutex に stale は無い: 取得の途中で kill -9 された process の flock は fd と一緒に外れる
+  LOCK_DIR="$TMP/lock"
+  ( exec python3 -c 'import fcntl, pathlib, sys, time; fcntl.flock(9, fcntl.LOCK_EX); pathlib.Path(sys.argv[1]).touch(); time.sleep(30)' "$TMP/held" ) 9>> "$LOCK_DIR.mutex" 3>&- &
+  local holder=$! i
+  for i in $(seq 1 100); do [ -e "$TMP/held" ] && break; sleep 0.05; done
+  [ -e "$TMP/held" ]
+  kill -9 "$holder"
+  wait "$holder" 2>/dev/null || true
+  mkdir "$LOCK_DIR"   # 取得の途中 (mkdir の後、pid の前) で死んだ残骸
+  source "$LIB_DIR/lock.sh"
+  run acquire_lock
+  [ "$status" -eq 0 ]
+  [ "$(cat "$LOCK_DIR/pid")" = "$$" ]
+}
+
+@test "acquire_lock: concurrent acquirers never both win (no lock / stale dead-pid lock)" {
+  # 8 本を barrier で揃えて同時に取得させ、winner がちょうど 1 本かを 3 trial × 2 状況で見る。mkdir の後と
+  # rm の前に 0.02 秒の窓を挟む。旧実装 (mkdir 単独。pid 書き込みと stale の奪取が mutex の外) はこの設定で
+  # 二重取得した。重い版 (20 本 × 50 trial) は scripts/dev/lock-stress.sh を手で回す
+  run "$LIB_DIR/../dev/lock-stress.sh" --procs 8 --trials 3 --widen 0.02
+  echo "$output"
+  [ "$status" -eq 0 ]
 }
 
 # === auth.sh (real_auth_probe) ===

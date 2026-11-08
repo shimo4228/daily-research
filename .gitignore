@@ -6,6 +6,7 @@ logs/
 
 # Runtime
 .daily-research*.lock
+.daily-research*.lock.mutex
 
 # Personal data (use *.example.* as templates)
 config.toml
