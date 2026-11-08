@@ -48,6 +48,9 @@ python3 scripts/lib/dr_pipeline.py metrics-backfill metrics.jsonl logs   # ロ�
 - **clarity_pass (呼2、ラベルは互換のため据え置き)**: ran/ok 率と cost/turns。中身は
   **検証 + clarity パス** (ADR-0017) の実測。ok=false が続くなら呼2 の timeout /
   max-turns / プロトコルの見直し候補
+- **effort**: record の `effort {call1, call2}` は各呼び出しに渡した `--effort`。値の変わった日で期間を分けて
+  turns・cost・verification・本文字数を比べ、品質の揺れが effort の違いによるものかを切り分ける。
+  `effort` の無い record (`--effort` を渡す前) は運用者の対話用 settings と model の既定で決まっていて、値は不明
 
 ### 2. 品質 signal
 
