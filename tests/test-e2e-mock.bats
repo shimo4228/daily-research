@@ -266,7 +266,9 @@ if [[ "$PROTOCOL" == *repo-research-protocol.md || "$PROTOCOL" == *ecosystem-res
   # .nosearch_<track> があれば検索 0 回の run を返す (quiet-suspect テスト用)
   SEARCH_USAGE=',"modelUsage":{"mock-haiku":{"webSearchRequests":4}}'
   [ -f "$MOCK_HOME_DIR/.nosearch_$TRACK" ] && SEARCH_USAGE=''
-  echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.05,"num_turns":3,"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}'"$SEARCH_USAGE"'}]'
+  # num_turns seam (H14): .turns_<track> があればその値 (既定 3)
+  TURNS=$(cat "$MOCK_HOME_DIR/.turns_$TRACK" 2>/dev/null || echo 3)
+  echo '[{"type":"assistant","message":{"content":[]}},{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.05,"num_turns":'"$TURNS"',"duration_ms":30000,"usage":{"input_tokens":2000,"output_tokens":800}'"$SEARCH_USAGE"'}]'
   exit 0
 fi
 
@@ -587,6 +589,22 @@ install_timeout_spy() {
 }
 
 # === Test: Retry (per-line, once) ===
+
+@test "E2E turns: call 1 above 90% of --max-turns warns, below does not (H14)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  echo 50 > "$MOCK_HOME/.turns_$PICKED"
+  run run_script
+  [ "$status" -eq 0 ]
+  get_log | grep -q "WARN: Line $PICKED call 1 used 50 turns (> 90% of --max-turns 55)"
+  grep -A1 -x -- '--max-turns' "$MOCK_HOME/.args_$PICKED" | grep -qx 55
+
+  echo 49 > "$MOCK_HOME/.turns_$PICKED"
+  rm -rf "$MOCK_PROJECT/logs" "$MOCK_HOME/mock-vault/daily-research" "$MOCK_PROJECT/state/$PICKED/runs"
+  mkdir -p "$MOCK_PROJECT/logs"
+  run run_script
+  [ "$status" -eq 0 ]
+  refute_grep -q "turns (> 90%" <<< "$(get_log)"
+}
 
 @test "E2E retry: transient failure retries once then succeeds" {
   echo "run-fail-once" > "$MOCK_HOME/.mock_scenario"

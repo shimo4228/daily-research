@@ -60,6 +60,9 @@ log "=== Starting daily research ==="
 # defaultMode: auto も効くので、境界は deny で書く。
 # Write は Edit(//abs) 規則が同じ path に許可する (呼2 は verify.json の新規作成に要る)。
 CALL1_TOOLS="WebSearch,WebFetch,Read,Glob,Grep,Edit,Write"
+# 呼1 の --max-turns。result の num_turns が 90% を超えたら WARN (turns-near-cap) — 上限切れの
+# silent fail (ADR-0006 の発端) の前兆を log に出す
+CALL1_MAX_TURNS=55
 CALL2_TOOLS="Read,WebFetch,Edit,Write"
 # 無人 run で model に絶対に渡さないツールと読ませない場所 (呼1 / 呼2・全 line 共通)。
 # Bash 等の理由は ALLOWED_TOOLS の注記。Read deny は 2 つの穴を塞ぐ:
@@ -490,7 +493,7 @@ $LINE_TEMPLATE"
       --append-system-prompt-file "$LINE_PROTOCOL" \
       --allowedTools "$ALLOWED_TOOLS" \
       --disallowedTools "$LINE_DISALLOWED" \
-      --max-turns 55 \
+      --max-turns "$CALL1_MAX_TURNS" \
       --model opus \
       --output-format json \
       --no-session-persistence \
@@ -499,6 +502,11 @@ $LINE_TEMPLATE"
     if [ -n "$LINE_JSON" ]; then
       echo "$LINE_JSON" >> "$LOG_FILE"
       log_summary "$LINE_JSON" "Run($TRACK)"
+      LINE_TURNS_NEAR=$(printf '%s' "$LINE_JSON" | python3 "$DR_PY" turns-near-cap "$CALL1_MAX_TURNS" 2>> "$LOG_FILE") \
+        || LINE_TURNS_NEAR=""
+      if [ "${LINE_TURNS_NEAR#*$'\t'}" = "1" ]; then
+        log "WARN: Line $TRACK call 1 used ${LINE_TURNS_NEAR%%$'\t'*} turns (> 90% of --max-turns $CALL1_MAX_TURNS)"
+      fi
     fi
     # attempt ごとに蓄積する — ループ後に 1 回だと retry 日の 1 回目のコストが metrics から
     # 消える (2026-08-14 に $1.51 欠落)。pass2 は全 attempt の合算になる

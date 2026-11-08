@@ -186,6 +186,29 @@ def cmd_searches(argv: list[str]) -> int:
     return 0
 
 
+# --- turns-near-cap <max_turns>: stdin の claude -p JSON の num_turns が上限の 90% を超えたか ---
+# stdout: "num_turns<TAB>near" (near = 1 は num_turns * 10 > max_turns * 9)。解析失敗は "0<TAB>0" (rc 0)。
+# max_turns が正の整数でなければ rc 64。num_turns と --max-turns は数え方が同じとは限らない
+# (2026-11 の live で num_turns 59 > --max-turns 55 の success がある) — WARN は失敗の前兆を見せるだけ。
+def cmd_turns_near_cap(argv: list[str]) -> int:
+    try:
+        cap = int(argv[0]) if argv else 0
+    except ValueError:
+        cap = 0
+    if cap < 1:
+        print(
+            "usage: turns-near-cap <max_turns (>= 1)>  (claude -p JSON on stdin)", file=sys.stderr
+        )
+        return 64
+    try:
+        d = _result_dict(json.loads(sys.stdin.read() or "null")) or {}
+        turns = _nonneg_int(d.get("num_turns")) if isinstance(d, dict) else 0
+    except (ValueError, TypeError):
+        turns = 0
+    print(f"{turns}\t{1 if turns * 10 > cap * 9 else 0}")
+    return 0
+
+
 # --- error-fields: stdin JSON から "api_error_status<TAB>is_error<TAB>kind" を出力 ---
 # kind は課金系の失敗の種類: "billing" = 429 (rate limit) / 402 / クレジット残高不足 —
 # 再試行で踏み抜かず止める (rules: debugging.md の policy signal)。"budget" = 呼び出しごとの
@@ -1923,6 +1946,7 @@ COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "verify-diff": cmd_verify_diff,
     "config-get": cmd_config_get,
     "searches": cmd_searches,
+    "turns-near-cap": cmd_turns_near_cap,
     "metrics-append": cmd_metrics_append,
     "metrics-backfill": cmd_metrics_backfill,
     "report-lint": cmd_report_lint,
