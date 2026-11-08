@@ -70,7 +70,7 @@ daily-research.sh (05:00)
 │   [api mode: a spend gate before each line (day / month caps), --max-budget-usd per call,
 │    each call's cost appended to state/api-spend.jsonl; 429 / credit balance stops the run]
 │   [mode = "ecosystem" lines have no target_repo: cwd = state/<line>,
-│    prompts/ecosystem-research-protocol.md, plus --safe-mode — ADR-0018]
+│    prompts/ecosystem-research-protocol.md — ADR-0018; every line runs with --safe-mode — ADR-0019]
 │   ├── Read a short context (line brief + state/<line>/brief.md + question history + pending.md)
 │   ├── Diff-first pass over watched sources + wide search · pick one of 3–6 candidate
 │   │   questions (or quiet / hold) · read context_files after the pick · research with
@@ -147,7 +147,7 @@ launchctl list | grep daily-research
 | `Rotation pick: a, b, c (ADR-0010/0017)` | The rotation window picked for today |
 | `Today's lines: N` | How many lines run today (`lines_per_day` + any daily lines) |
 | `=== Line: <track> (<repo path>) ===` | Per-line run starting with that repo as cwd (an ecosystem line has no repo and logs `no target repo`) |
-| `Line <track> mode: ecosystem (cwd = state/<track>, safe mode)` | The line is `mode = "ecosystem"`: it runs from its state directory under the ecosystem protocol (ADR-0018). Every line runs with `--safe-mode` (ADR-0019) |
+| `Line <track> mode: ecosystem (cwd = state/<track>)` | The line is `mode = "ecosystem"`: it runs from its state directory under the ecosystem protocol (ADR-0018). Every line runs with `--safe-mode` (ADR-0019) |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | Per-line run statistics (cost, turns, duration, tokens) |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | Transient failure; the single retry is starting |
 | `ERROR: Line <track> returned 401 — aborting remaining lines (…)` | Auth failed mid-run (401 / 403: expired OAuth or rejected key); remaining lines are skipped, finished lines' results are kept |
@@ -231,7 +231,7 @@ rm -rf .daily-research.lock
 **Causes**:
 - Rate limit hit (the plan's quota in subscription mode; in api mode a 429 stops the run instead, see issue 5) or network issues during WebSearch
 - The 25-minute per-line timeout expiring on an unusually deep run
-- The line's `target_repo` path in `config.toml` missing or moved (a `mode = "ecosystem"` line has no `target_repo` — it runs from `state/<line>`, which the script creates, and logs `Line <track> mode: ecosystem (cwd = state/<track>, safe mode)`)
+- The line's `target_repo` path in `config.toml` missing or moved (a `mode = "ecosystem"` line has no `target_repo` — it runs from `state/<line>`, which the script creates, and logs `Line <track> mode: ecosystem (cwd = state/<track>)`)
 
 **Fix**: Check the specific exit class in the log (`E_TRANSIENT` / `E_FATAL`). One line failing does not stop the others — their reports still land and get ingested; the day's final class is then `E_PARTIAL` (exit 1, `=== Failed (E_PARTIAL:<lines>, exit code 1) ===`), while `E_NO_REPORT` is reserved for a day where no line passed the gate (ADR-0011 / ADR-0017 — a day where every line ended quiet is a success, not `E_NO_REPORT`). Verify `target_repo` exists, then re-run the script manually. A 401 (`E_AUTH`) means the OAuth token expired (issue 1) or, in api mode, the key was rejected (issue 5).
 

@@ -70,7 +70,7 @@ daily-research.sh (05:00)
 │   [api モード: ラインの前に支出ゲート（日・月の上限）、呼び出しごとに --max-budget-usd、
 │    呼び出しごとの費用を state/api-spend.jsonl に追記。429 とクレジット切れは run を止める]
 │   [mode = "ecosystem" のラインは target_repo を持たない: cwd = state/<line>、
-│    prompts/ecosystem-research-protocol.md、--safe-mode 付き — ADR-0018]
+│    prompts/ecosystem-research-protocol.md — ADR-0018。--safe-mode は全ラインに付く — ADR-0019]
 │   ├── 短い文脈（line brief + state/<line>/brief.md + 問いの履歴 + pending.md）を Read
 │   ├── watched sources の diff-first 確認 + 広い探索 · 問いの候補 3〜6 件から 1 つ選ぶ
 │   │   （または quiet / hold）· 選定後に context_files を Read · citation ゲート付き
@@ -145,7 +145,7 @@ launchctl list | grep daily-research
 | `Rotation pick: a, b, c (ADR-0010/0017)` | 当日担当ラインの輪番 window 選択結果 |
 | `Today's lines: N` | 当日実行するライン数（`lines_per_day` + daily ライン） |
 | `=== Line: <track> (<repo パス>) ===` | その repo を cwd にしたライン run の開始（ecosystem ラインは repo を持たず `no target repo` と出る） |
-| `Line <track> mode: ecosystem (cwd = state/<track>, safe mode)` | `mode = "ecosystem"` のライン。state ディレクトリを cwd に、ecosystem プロトコルで走る（ADR-0018）。`--safe-mode` は全ラインに付く（ADR-0019） |
+| `Line <track> mode: ecosystem (cwd = state/<track>)` | `mode = "ecosystem"` のライン。state ディレクトリを cwd に、ecosystem プロトコルで走る（ADR-0018）。`--safe-mode` は全ラインに付く（ADR-0019） |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | ライン run の実行統計（コスト、ターン数、所要時間、トークン数） |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | transient 失敗。1 回きりのリトライを開始 |
 | `ERROR: Line <track> returned 401 — aborting remaining lines (…)` | run 中に認証が失敗（401 / 403: OAuth 期限切れか key の拒否）。残ラインは中断、完走済みラインの成果は保持 |
@@ -229,7 +229,7 @@ rm -rf .daily-research.lock
 **原因**:
 - レート制限（subscription モードではプラン枠の消費。api モードの 429 は run を止める — 問題 5）または WebSearch 中のネットワーク障害
 - 深掘りしすぎた run がライン単位の 25 分タイムアウトを超過
-- `config.toml` の `target_repo` パスが存在しない・移動した（`mode = "ecosystem"` のラインは `target_repo` を持たない — スクリプトが作る `state/<line>` で走り、`Line <track> mode: ecosystem (cwd = state/<track>, safe mode)` を出力する）
+- `config.toml` の `target_repo` パスが存在しない・移動した（`mode = "ecosystem"` のラインは `target_repo` を持たない — スクリプトが作る `state/<line>` で走り、`Line <track> mode: ecosystem (cwd = state/<track>)` を出力する）
 
 **対処**: ログで exit 分類（`E_TRANSIENT` / `E_FATAL`）を確認する。1 ラインの失敗は他のラインを止めない — 他のレポートは生成・ingest され、その日の final class は `E_PARTIAL`（exit 1、`=== Failed (E_PARTIAL:<lines>, exit code 1) ===`）になる。`E_NO_REPORT` はゲートを通ったラインが 1 本も無い日に限る（ADR-0011 / ADR-0017 — 全ラインが quiet で終わった日は成功であって `E_NO_REPORT` ではない）。`target_repo` の存在を確認してから手動で再実行する。401（`E_AUTH`）は OAuth 期限切れ（問題 1）か、api モードでの key の拒否（問題 5）。
 
