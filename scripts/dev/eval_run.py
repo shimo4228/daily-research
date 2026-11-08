@@ -88,10 +88,11 @@ TAIL_HEADINGS = ("## 機会メモ", "## ソース")
 # --- note の解析 ----------------------------------------------------------------------
 
 
-def split_note(text):
+def split_note(text: str) -> tuple[dict[str, str], str, str]:
     """(frontmatter dict, body, sources_section) を返す。body は frontmatter と H1 の後から、
     末尾固定節 (機会メモ / ソース) の最初の見出しの前まで。"""
-    fm, rest = {}, text
+    fm: dict[str, str] = {}
+    rest = text
     m = re.match(r"---\n(.*?)\n---\n?", text, re.DOTALL)
     if m:
         rest = text[m.end() :]
@@ -107,9 +108,9 @@ def split_note(text):
     return fm, body, sources
 
 
-def paragraphs(body):
+def paragraphs(body: str) -> list[str]:
     """空行で区切った塊のうち、見出しと短い塊を除いたもの。"""
-    out = []
+    out: list[str] = []
     for block in re.split(r"\n\s*\n", body):
         block = block.strip()
         if not block or block.startswith("#"):
@@ -119,18 +120,18 @@ def paragraphs(body):
     return out
 
 
-def first_sentence(body):
+def first_sentence(body: str) -> str:
     for p in paragraphs(body):
         return re.split(r"(?<=[。．.!?！？])\s*", p, maxsplit=1)[0][:300]
     return ""
 
 
-def body_chars(body):
+def body_chars(body: str) -> int:
     """本文の字数 = 空白とリンク先 URL を除いた文字数 (プロトコルの「本文 3,000 字以内」の目安)。"""
     return len(re.sub(r"\s", "", re.sub(r"\]\([^)]*\)", "]", body)))
 
 
-def _lint(note_path, date, config):
+def _lint(note_path: str, date: str, config: str | None) -> dict[str, object]:
     """dr_pipeline report-lint を、この note だけを置いた一時 dir に当てる。"""
     with tempfile.TemporaryDirectory() as d:
         with open(note_path, encoding="utf-8") as f:
@@ -150,7 +151,7 @@ def _lint(note_path, date, config):
     return {"hard": r.get("hard", []), "soft": r.get("soft", [])}
 
 
-def analyze_note(path, date, config=None):
+def analyze_note(path: str, date: str, config: str | None = None) -> dict[str, object]:
     """note 1 本の決定論の指標。"""
     with open(path, encoding="utf-8") as f:
         text = f.read()
@@ -162,6 +163,7 @@ def analyze_note(path, date, config=None):
     first = first_sentence(body)
     urls = list(dict.fromkeys(URL_RE.findall(text)))
     lint = _lint(path, date, config)
+    hard, soft = lint.get("hard"), lint.get("soft")
     return {
         "name": os.path.basename(path),
         "kind": fm.get("kind", "article"),
@@ -181,15 +183,15 @@ def analyze_note(path, date, config=None):
         "first_sentence": first,
         "first_sentence_internal": bool(FIRST_SENTENCE_INTERNAL_RE.search(first)),
         "lint": lint,
-        "lint_hard": len(lint.get("hard", [])) if "error" not in lint else None,
-        "lint_soft": len(lint.get("soft", [])) if "error" not in lint else None,
+        "lint_hard": len(hard) if isinstance(hard, list) else None,
+        "lint_soft": len(soft) if isinstance(soft, list) else None,
     }
 
 
 # --- 呼び出し・検証・receipt ----------------------------------------------------------
 
 
-def call_metrics(d):
+def call_metrics(d: object) -> dict[str, object] | None:
     """claude -p の result JSON 1 つの費用相当・turns・token・検索。サブスクでも total_cost_usd は
     API 単価での換算値として出る (請求額ではない)。"""
     if not isinstance(d, dict) or not d:
@@ -226,7 +228,7 @@ _SUMMED_CALL_KEYS = (
 )
 
 
-def calls_metrics(results):
+def calls_metrics(results: list[object]) -> dict[str, object] | None:
     """同じ呼び出しの全 attempt (retry を含む) の合算。費用・turns・token・検索・denial は足し、
     is_error / subtype は最後の attempt のもの。retry の日に 1 回目の費用を落とさない。"""
     per = [m for m in (call_metrics(d) for d in results) if m]
@@ -242,9 +244,9 @@ def calls_metrics(results):
     return total
 
 
-def call_results(out_dir, name):
+def call_results(out_dir: str, name: str) -> list[object]:
     """sandbox_lib collect が書いた <name>.attempt<i>.json (i 昇順) と <name>.json (最後の attempt)。"""
-    found = []
+    found: list[object] = []
     i = 1
     while (d := _load_json(os.path.join(out_dir, f"{name}.attempt{i}.json"))) is not None:
         found.append(d)
@@ -255,7 +257,7 @@ def call_results(out_dir, name):
     return found
 
 
-def verify_metrics(d):
+def verify_metrics(d: object) -> dict[str, object]:
     if not isinstance(d, dict):
         return {"ran": False}
     counts = {k: dr_pipeline._nonneg_int(d.get(k)) for k in dr_pipeline.VERIFY_KEYS}
@@ -268,7 +270,7 @@ def verify_metrics(d):
     }
 
 
-def receipt_metrics(path, date, line, note_name):
+def receipt_metrics(path: str, date: str, line: str, note_name: str | None) -> dict[str, object]:
     if not os.path.isfile(path):
         return {"present": False, "valid": False}
     proc = subprocess.run(
@@ -277,6 +279,7 @@ def receipt_metrics(path, date, line, note_name):
         text=True,
         check=False,
     )
+    d: object
     try:
         with open(path, encoding="utf-8") as f:
             d = json.load(f)
@@ -299,7 +302,7 @@ def receipt_metrics(path, date, line, note_name):
     }
 
 
-def evidence_metrics(path):
+def evidence_metrics(path: str) -> dict[str, object]:
     """根拠ファイルの表の claim 行 (| C1 | …) の件数と fetch_status の内訳。"""
     if not os.path.isfile(path):
         return {"present": False, "claims": 0}
@@ -316,27 +319,29 @@ def evidence_metrics(path):
 # --- 重複 (過去の問いとの類似度) ------------------------------------------------------
 
 
-def _norm(s):
-    s = unicodedata.normalize("NFKC", str(s or "")).lower()
-    return "".join(ch for ch in s if ch.isalnum())
+def _norm(s: object) -> str:
+    text = unicodedata.normalize("NFKC", str(s or "")).lower()
+    return "".join(ch for ch in text if ch.isalnum())
 
 
-def ngrams(s, n=2):
-    s = _norm(s)
-    return {s[i : i + n] for i in range(len(s) - n + 1)} if len(s) >= n else ({s} if s else set())
+def ngrams(s: object, n: int = 2) -> set[str]:
+    t = _norm(s)
+    return {t[i : i + n] for i in range(len(t) - n + 1)} if len(t) >= n else ({t} if t else set())
 
 
-def jaccard(a, b, n=2):
+def jaccard(a: object, b: object, n: int = 2) -> float:
     x, y = ngrams(a, n), ngrams(b, n)
     return round(len(x & y) / len(x | y), 3) if x and y else 0.0
 
 
-def novelty(question, history, n=2, top=3):
+def novelty(question: object, history: list[object], n: int = 2, top: int = 3) -> dict[str, object]:
     """問いと、同じ line の過去の問い (無ければ題) との文字 n-gram Jaccard の最大値と上位。"""
     if not question:
         return {"question": None, "n_past": len(history), "max_jaccard": None, "top": []}
-    scored = []
+    scored: list[tuple[float, object, str]] = []
     for t in history:
+        if not isinstance(t, dict):
+            continue
         past = t.get("question") or t.get("title")
         if past:
             scored.append((jaccard(question, past, n), t.get("date"), str(past)[:160]))
@@ -350,7 +355,7 @@ def novelty(question, history, n=2, top=3):
     }
 
 
-def draft_vs_final(draft_path, final_path):
+def draft_vs_final(draft_path: str, final_path: str) -> dict[str, object] | None:
     """呼2 の改稿量: 行単位の差分 (追加・削除行) と文字の類似度。"""
     import difflib
 
@@ -375,7 +380,7 @@ def draft_vs_final(draft_path, final_path):
 # --- 出典 URL の HTTP 状態 (--check-links) ---------------------------------------------
 
 
-def _http_status(url, timeout=15):
+def _http_status(url: str, timeout: float = 15) -> int | str:
     import urllib.error
     import urllib.request
 
@@ -396,7 +401,7 @@ def _http_status(url, timeout=15):
     return "error: unreachable"
 
 
-def check_links(urls):
+def check_links(urls: list[str]) -> dict[str, int | str]:
     from concurrent.futures import ThreadPoolExecutor
 
     with ThreadPoolExecutor(max_workers=8) as ex:
@@ -406,7 +411,7 @@ def check_links(urls):
 # --- 全体 -----------------------------------------------------------------------------
 
 
-def _load_json(path):
+def _load_json(path: str) -> object:
     try:
         with open(path, encoding="utf-8") as f:
             return json.load(f)
@@ -414,21 +419,39 @@ def _load_json(path):
         return None
 
 
-def evaluate(out_dir, links=False):
+def _load_dict(path: str) -> dict[str, object]:
+    d = _load_json(path)
+    return d if isinstance(d, dict) else {}
+
+
+def evaluate(out_dir: str, links: bool = False) -> dict[str, object]:
     """出力 dir 1 つの指標 dict。"""
 
-    def p(name):
+    def p(name: str) -> str:
         return os.path.join(out_dir, name)
 
-    meta = _load_json(p("meta.json")) or {}
-    date, line = meta.get("date", ""), meta.get("line", "")
-    config = os.path.join(out_dir, "sandbox", "project", "config.toml")
-    config = config if os.path.isfile(config) else None
-    note_name = meta.get("note_name")
+    meta = _load_dict(p("meta.json"))
+    date, line = str(meta.get("date") or ""), str(meta.get("line") or "")
+    config_path = os.path.join(out_dir, "sandbox", "project", "config.toml")
+    config = config_path if os.path.isfile(config_path) else None
+    raw_note = meta.get("note_name")
+    note_name = raw_note if isinstance(raw_note, str) and raw_note else None
     receipt = receipt_metrics(p("receipt.json"), date, line, note_name)
     # 原稿の写しは呼2 の開始前に取れたときだけ呼1 の出力として使う (meta.draft は collect の判定)
     draft_ok = meta.get("draft") == "clean" and os.path.isfile(p("draft.md"))
-    result = {
+    note = (
+        analyze_note(p(note_name), date, config)
+        if note_name and os.path.isfile(p(note_name))
+        else None
+    )
+    if links and note:
+        urls = note["urls"]
+        status = check_links([str(u) for u in urls] if isinstance(urls, list) else [])
+        note["link_status"] = status
+        note["links_bad"] = sum(1 for s in status.values() if not (isinstance(s, int) and s < 400))
+    written = meta.get("notes_written")
+    history = _load_json(p("past_topics.line.json"))
+    result: dict[str, object] = {
         "dir": os.path.abspath(out_dir),
         "line": line,
         "date": date,
@@ -443,18 +466,16 @@ def evaluate(out_dir, links=False):
             "dr_exit": meta.get("dr_exit"),
             "duration_s": meta.get("duration_s"),
             "call1_attempts": meta.get("call1_attempts"),
-            "notes_written": len(meta.get("notes_written") or []),
+            "notes_written": len(written) if isinstance(written, list) else 0,
             "draft": meta.get("draft"),
         },
         "state": {
             "receipt_status": receipt.get("status"),
             "reason_code": receipt.get("reason_code"),
-            "line_states": (_load_json(p("metrics.json")) or {}).get("line_states"),
+            "line_states": _load_dict(p("metrics.json")).get("line_states"),
         },
         "receipt": {k: v for k, v in receipt.items() if k not in ("status", "reason_code")},
-        "note": analyze_note(p(note_name), date, config)
-        if note_name and os.path.isfile(p(note_name))
-        else None,
+        "note": note,
         "draft": analyze_note(p("draft.md"), date, config) if draft_ok else None,
         "draft_vs_final": draft_vs_final(p("draft.md"), p(note_name))
         if draft_ok and note_name
@@ -463,20 +484,12 @@ def evaluate(out_dir, links=False):
         "call2": calls_metrics(call_results(out_dir, "call2")),
         "verify": verify_metrics(_load_json(p("verify.json"))),
         "evidence": evidence_metrics(p("evidence.md")),
-        "novelty": novelty(receipt.get("question"), _load_json(p("past_topics.line.json")) or []),
+        "novelty": novelty(receipt.get("question"), history if isinstance(history, list) else []),
     }
-    if links and result["note"]:
-        result["note"]["link_status"] = check_links(result["note"]["urls"])
-        bad = [
-            u
-            for u, s in result["note"]["link_status"].items()
-            if not (isinstance(s, int) and s < 400)
-        ]
-        result["note"]["links_bad"] = len(bad)
     return result
 
 
-def main(argv):
+def main(argv: list[str]) -> int:
     args = [a for a in argv if not a.startswith("--")]
     if len(args) != 1:
         print("usage: eval_run.py <out_dir> [--check-links] [--write]", file=sys.stderr)

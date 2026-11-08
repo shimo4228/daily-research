@@ -221,8 +221,9 @@ fi
 # 課金経路の事前確認。key は env だけでなく cwd の .claude/settings*.json (env / apiKeyHelper) からも
 # 入るので、本番が claude を起動する 3 つの条件をそれぞれ probe する:
 #   call1    = 呼1 の cwd (repo line は接地 repo、ecosystem line は state/<line>) + --safe-mode
-#   call2    = 呼2 の cwd (PROJECT_DIR) + --safe-mode
-#   dr_probe = daily-research.sh 自身の auth probe (cwd = PROJECT_DIR、--safe-mode なし)
+#   call2    = 呼2 の cwd (PROJECT_DIR) + --safe-mode。今の版の auth probe (lib/auth.sh) も同じ条件
+#   dr_probe = PROJECT_DIR、--safe-mode なし。auth probe が safe mode を持たない版 (2300c1c より前) を
+#              --ref / --tree で試すときの条件
 # auth-probe は stream-json の init event を読んだ時点で claude を止め、応答を待たない (timeout 付き)。
 # 最初に none 以外を見た probe で止め、残りは起動しない
 if [ "$LINE_MODE" = "ecosystem" ]; then CALL1_CWD="$PROJ/state/$LINE"; else CALL1_CWD="$TARGET_REPO"; fi

@@ -132,6 +132,31 @@ def test_parse_log_splits_call1_attempts_and_call2():
     assert [d["num_turns"] for d in p["call2"]] == [8]
     assert p["clarity_ts"] == "2026-11-08 05:13:43"
     assert p["clarity_note"] == "2026-11-08_desire_x.md"
+    # 呼び出し回数の期待値: 呼1 = 1 + retry 1 回、呼2 = Clarity pass の行 1 本
+    assert (p["call1_expected"], p["call2_expected"]) == (2, 1)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "log,expected",
+    [
+        # cwd が無い line は attempt loop に入らない
+        (
+            "[t] === Line: x (/gone) ===\n[t] WARN: target_repo が存在しない: /gone — line x を skip\n",
+            0,
+        ),
+        # retry を告げた後で見送った (attempt 1 がノートを書いていた)
+        (
+            "[t] === Line: x (/r) ===\n[t] WARN: Line x failed (E_TRANSIENT, exit 124) — retrying once\n"
+            "[t] WARN: Line x attempt 1 left a report or receipt — skipping retry, going to gate\n",
+            1,
+        ),
+        ("[t] === Line: x (/r) ===\n", 1),
+    ],
+    ids=["cwd-missing", "retry-skipped", "one-attempt"],
+)
+def test_parse_log_counts_the_call1_attempts_from_the_loop_lines(log, expected):
+    assert sandbox_lib.parse_log(log)["call1_expected"] == expected
 
 
 @pytest.mark.unit
@@ -243,6 +268,8 @@ def test_collect_gathers_artifacts_and_validates(tmp_path):
     assert json.loads((out / "meta.json").read_text())["billing_ok"] is True
     assert [r["call"] for r in meta["call_auth"]] == ["call1#1", "call1#2", "call2#1"]
     assert all(r["ok"] for r in meta["call_auth"])
+    assert meta["call_evidence"]["ok"] is True
+    assert meta["call_evidence"]["call1"] == {"expected": 2, "results": 2}
 
 
 _SUB = "subscription (Max plan OAuth)"
@@ -259,8 +286,19 @@ _MARK = ',"credential_expires_at":"2026-12-01T00:00:00Z"'
         (_SUB, "none", LOG.replace('"num_turns":8' + _MARK, '"num_turns":8')),
         # result が key の経路を名乗る版
         (_SUB, "none", LOG.replace('"num_turns":3', '"num_turns":3,"apiKeySource":"x"')),
+        # retry の attempt 2 が result を残さずに終わった (timeout で kill) — 証拠の無い呼び出し
+        (_SUB, "none", LOG.replace('{"type":"result","is_error":false,"num_turns":28', "{")),
+        # 呼2 が result を残さなかった
+        (_SUB, "none", LOG.replace('{"type":"result","is_error":false,"num_turns":8', "{")),
     ],
-    ids=["log-says-api", "probe-saw-a-key", "result-without-oauth-marker", "result-names-a-key"],
+    ids=[
+        "log-says-api",
+        "probe-saw-a-key",
+        "result-without-oauth-marker",
+        "result-names-a-key",
+        "call1-attempt-without-result",
+        "call2-without-result",
+    ],
 )
 def test_collect_marks_a_non_subscription_run_invalid(tmp_path, billing_line, key_source, log):
     args, _ = _fake_run(tmp_path, billing_line, key_source, log)

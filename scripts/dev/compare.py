@@ -11,6 +11,7 @@ markdown の表で出す。--all は平らにした全キー、--json は {label
 import json
 import os
 import sys
+from collections.abc import Iterable
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import eval_run  # 同じ dir の指標の正本
@@ -59,10 +60,12 @@ DEFAULT_KEYS = (
 )
 
 
-def flatten(d, prefix=""):
+def flatten(d: object, prefix: str = "") -> dict[str, object]:
     """入れ子の dict を "a.b.c" キーの dict にする。list は JSON 文字列のまま 1 値。"""
-    out = {}
-    for k, v in (d or {}).items():
+    out: dict[str, object] = {}
+    if not isinstance(d, dict):
+        return out
+    for k, v in d.items():
         key = f"{prefix}{k}"
         if isinstance(v, dict):
             out.update(flatten(v, f"{key}."))
@@ -71,7 +74,7 @@ def flatten(d, prefix=""):
     return out
 
 
-def load(out_dir):
+def load(out_dir: str) -> object:
     path = os.path.join(out_dir, "eval.json")
     if os.path.isfile(path):
         with open(path, encoding="utf-8") as f:
@@ -79,23 +82,27 @@ def load(out_dir):
     return eval_run.evaluate(out_dir)
 
 
-def _num(v):
+def _num(v: object) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
-def _cell(v, base=None):
+def _cell(v: object, base: object = None) -> str:
     if v is None:
         return "—"
-    if isinstance(v, (list, dict)):
-        v = json.dumps(v, ensure_ascii=False)
-    text = str(v)
-    if _num(v) and _num(base) and v != base:
+    text = json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else str(v)
+    if (
+        isinstance(v, (int, float))
+        and isinstance(base, (int, float))
+        and _num(v)
+        and _num(base)
+        and v != base
+    ):
         delta = v - base
         text += f" ({'+' if delta > 0 else ''}{round(delta, 4)})"
     return text.replace("|", "\\|")
 
 
-def table(rows, labels, keys):
+def table(rows: list[dict[str, object]], labels: list[str], keys: Iterable[str]) -> list[str]:
     """rows: [flat dict]、labels: 列名。markdown の表の行のリスト。"""
     lines = ["| metric | " + " | ".join(labels) + " |", "|---|" + "---|" * len(labels)]
     for k in keys:
@@ -108,9 +115,9 @@ def table(rows, labels, keys):
     return lines
 
 
-def main(argv):
+def main(argv: list[str]) -> int:
     dirs = [a for a in argv if not a.startswith("--")]
-    labels = None
+    labels: list[str] | None = None
     for a in argv:
         if a.startswith("--labels="):
             labels = a.split("=", 1)[1].split(",")
@@ -126,10 +133,7 @@ def main(argv):
     if "--json" in argv:
         print(json.dumps(dict(zip(labels, rows, strict=True)), ensure_ascii=False, indent=1))
         return 0
-    if "--all" in argv:
-        keys = sorted({k for r in rows for k in r})
-    else:
-        keys = DEFAULT_KEYS
+    keys = sorted({k for r in rows for k in r}) if "--all" in argv else list(DEFAULT_KEYS)
     print("\n".join(table(rows, labels, keys)))
     return 0
 
