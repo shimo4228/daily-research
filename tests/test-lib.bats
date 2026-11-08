@@ -147,10 +147,36 @@ echo "not reached"')"
 @test "acquire_lock fails when a live lock is held" {
   LOCK_DIR="$TMP/lock"
   mkdir "$LOCK_DIR"
-  echo $$ > "$LOCK_DIR/pid"   # 自プロセス = 生きている PID
+  # 生きている別インスタンス = コマンド行が daily-research.sh の process (fd 3 は bats の出力)
+  printf '#!/bin/bash\nsleep 30\n' > "$TMP/daily-research.sh"
+  /bin/bash "$TMP/daily-research.sh" >/dev/null 2>&1 3>&- &
+  local owner=$! i
+  for i in $(seq 1 50); do   # fork 直後は exec 前の親のコマンド行が見える
+    case "$(ps -ww -p "$owner" -o command= 2>/dev/null)" in *daily-research.sh*) break ;; esac
+    sleep 0.1
+  done
+  echo "$owner" > "$LOCK_DIR/pid"
   source "$LIB_DIR/lock.sh"
   run acquire_lock
+  pkill -P "$owner" 2>/dev/null || true
+  kill "$owner" 2>/dev/null || true
   [ "$status" -ne 0 ]
+  [ "$(cat "$LOCK_DIR/pid")" = "$owner" ]
+}
+
+@test "acquire_lock steals a lock whose pid now belongs to another process (pid reused after reboot)" {
+  # run 中の再起動 (夜間の OS 更新など) で lock dir が残り、再起動後に同じ PID を同 user の長命 process が
+  # 使うと kill -0 が通り、以後の run が全部 "Another instance is running" で skip になっていた
+  LOCK_DIR="$TMP/lock"
+  mkdir "$LOCK_DIR"
+  sleep 30 >/dev/null 2>&1 3>&- &
+  local other=$!
+  echo "$other" > "$LOCK_DIR/pid"
+  source "$LIB_DIR/lock.sh"
+  run acquire_lock
+  kill "$other" 2>/dev/null || true
+  [ "$status" -eq 0 ]
+  [ "$(cat "$LOCK_DIR/pid")" = "$$" ]
 }
 
 @test "acquire_lock steals a stale lock (dead pid)" {

@@ -7,17 +7,23 @@
 # mkdir はアトミック (既存なら必ず失敗する) なので、これでロック取得を不可分にする。
 
 # acquire_lock: 取得成功で 0、他インスタンス実行中で 1。
-# 既存ロックの PID が死んでいれば stale とみなして奪取する。
+# 既存ロックの PID が死んでいれば stale とみなして奪取する。PID が生きていても、その process の
+# コマンド行が daily-research.sh でないと読めたときは stale とみなす — run 中の再起動で lock dir が
+# 残り、再起動後に同じ PID を別の process が使うと kill -0 が通り、以後の run が全部 skip になる。
+# ps が何も返さないときは実行中として扱う (二重実行より skip の方が安全)。
 acquire_lock() {
   if mkdir "$LOCK_DIR" 2>/dev/null; then
     echo $$ > "$LOCK_DIR/pid"
     return 0
   fi
   # 既存ロックあり: PID で stale 判定
-  local pid
+  local pid cmd
   pid=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "")
   if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-    return 1  # 実行中
+    cmd=$(ps -ww -p "$pid" -o command= 2>/dev/null || true)
+    case "$cmd" in
+      ""|*daily-research.sh*) return 1 ;;  # 実行中
+    esac
   fi
   # stale ロック: 奪取を試みる。
   # 注: rm→mkdir の間に残存 race がある (2 プロセスが同時に stale を検出すると両方が
