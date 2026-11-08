@@ -33,10 +33,11 @@ scan_exclude="scripts/pre-commit.sh"
 # NUL 区切り + read -d '' で空白・非 ASCII のパスも 1 要素として扱う。unquoted 展開で
 # 語分割すると `my notes.md` は 2 片に、日本語名は core.quotePath の "\350\250..." に
 # なり、どちらも `git diff -- "$f"` が空を返して走査されない (2026-08-22 review、PoC 済み)
+# R を含める: git diff は rename を既定で検出し、`git mv` + 編集は R として stage される
 staged_files=()
 while IFS= read -r -d '' f; do
   staged_files+=("$f")
-done < <(git diff --cached --name-only --diff-filter=ACM -z)
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
 
 if [ ${#staged_files[@]} -gt 0 ]; then
   for pattern in "${secret_patterns[@]}"; do

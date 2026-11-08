@@ -311,6 +311,23 @@ precommit_fixture_commit() {
   refute_grep -q "unbound variable" <<< "$output"
 }
 
+@test "pre-commit: a renamed file with an added secret is scanned and blocked" {
+  precommit_repo
+  local i
+  for i in $(seq 1 30); do echo "line $i of a note body long enough for rename detection"; done > a.md
+  git add a.md
+  precommit_fixture_commit init
+  git mv a.md b.md
+  # token は実行時に組み立てる (この test file 自体が secret scan に掛からないように)
+  printf 'token %s%s\n' "sk-" "ant-api03-EXAMPLEONLY" >> b.md
+  git add b.md
+  # 前提: git がこの変更を rename (R) として stage している
+  [ "$(git diff --cached --name-status | cut -c1)" = "R" ]
+  run /bin/bash "$PROJECT_DIR/scripts/pre-commit.sh"
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -qF "Secret pattern in b.md: sk-""ant-"
+}
+
 # === Defensive programming ===
 
 @test "set -Eeuo pipefail is configured (-E: ERR trap reaches function bodies)" {
