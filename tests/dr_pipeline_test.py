@@ -2379,6 +2379,92 @@ def test_billing_config_defaults_to_subscription(monkeypatch, capsys, tmp_path):
     assert (monthly, daily, c1, c2) == ("100", "10", "4", "1.5")
 
 
+# --- effort-config ([effort]: 呼1 / 呼2 の --effort) ---
+
+
+@pytest.mark.unit
+def test_effort_config_defaults_pin_the_levels_before_the_flag(monkeypatch, capsys, tmp_path):
+    # 既定は --effort を渡す前の実効値: 呼1 (Opus 5.5) は運用者の settings の high、呼2 (Sonnet 5.5) は model の既定 medium
+    cfg = _write(tmp_path, "c.toml", "[general]\n")
+    rc, out, err = run_cmd(monkeypatch, capsys, ["effort-config", cfg])
+    assert rc == 0, err
+    assert out == "high\tmedium\n"
+
+
+@pytest.mark.unit
+def test_effort_config_overrides_each_call(monkeypatch, capsys, tmp_path):
+    cfg = _write(tmp_path, "c.toml", '[effort]\ncall2 = "xhigh"\n')
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["effort-config", cfg])
+    assert rc == 0
+    assert out == "high\txhigh\n"
+    cfg = _write(tmp_path, "c.toml", '[effort]\ncall1 = "max"\ncall2 = "low"\n')
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["effort-config", cfg])
+    assert out == "max\tlow\n"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "body,named",
+    [
+        ('[effort]\ncall1 = "hgih"', "[effort].call1 must be one of low, medium, high, xhigh, max"),
+        ('[effort]\ncall2 = "HIGH"', "[effort].call2 must be one of"),  # CLI の値は小文字
+        ("[effort]\ncall1 = 3", "[effort].call1 must be one of"),
+        ('[effort]\ncall3 = "high"', "[effort].call3 is not a known key (call1, call2)"),
+        ('effort = "high"', "[effort] must be a table"),
+    ],
+    ids=["typo", "upper-case", "number", "unknown-key", "not-a-table"],
+)
+def test_effort_config_rejects_and_names_the_key(monkeypatch, capsys, tmp_path, body, named):
+    # daily-research.sh はこの stderr を ERROR 行の直前に log し、line を始めずに止める
+    cfg = _write(tmp_path, "c.toml", body + "\n")
+    rc, out, err = run_cmd(monkeypatch, capsys, ["effort-config", cfg])
+    assert rc == 2
+    assert out == ""
+    assert err.startswith("effort-config: ")
+    assert named in err
+
+
+@pytest.mark.unit
+def test_effort_config_unreadable_config(monkeypatch, capsys, tmp_path):
+    rc, out, err = run_cmd(monkeypatch, capsys, ["effort-config", str(tmp_path / "missing.toml")])
+    assert rc == 2
+    assert out == ""
+    assert err.startswith("effort-config: ")
+    rc, _, err = run_cmd(monkeypatch, capsys, ["effort-config"])
+    assert rc == 64
+
+
+@pytest.mark.unit
+def test_metrics_append_records_the_effort_line(monkeypatch, capsys, tmp_path):
+    # EFFORT\t<call1>\t<call2> (daily-research.sh が run の頭で 1 行) → effort。行の無い日 (導入前) は None
+    metrics = tmp_path / "metrics.jsonl"
+    rc, _, _ = run_cmd(
+        monkeypatch,
+        capsys,
+        ["metrics-append", str(metrics), "2026-11-09", "OK", "1", "0"],
+        f"EFFORT\thigh\tmedium\nRUN\t{RUN1_JSON}\n",
+    )
+    assert rc == 0
+    rec = json.loads(metrics.read_text())
+    assert rec["effort"] == {"call1": "high", "call2": "medium"}
+    assert rec["pass2"]["turns"] == 16  # EFFORT 行は RUN の集計に混ざらない
+
+    for stdin, expected in [
+        (f"RUN\t{RUN1_JSON}\n", None),
+        ("EFFORT\tturbo\tlow\n", {"call1": None, "call2": "low"}),  # 値の集合の外は None
+        ("EFFORT\thigh\n", {"call1": "high", "call2": None}),
+    ]:
+        metrics.unlink()
+        rc, _, _ = run_cmd(
+            monkeypatch,
+            capsys,
+            ["metrics-append", str(metrics), "2026-11-09", "OK", "1", "0"],
+            stdin,
+        )
+        assert rc == 0
+        assert json.loads(metrics.read_text())["effort"] == expected
+
+
 @pytest.mark.unit
 def test_billing_config_api(monkeypatch, capsys, tmp_path):
     cfg = _write(

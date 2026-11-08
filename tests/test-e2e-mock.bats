@@ -151,6 +151,8 @@ if [[ "$PROTOCOL" == *repo-research-protocol.md || "$PROTOCOL" == *ecosystem-res
   pwd -P > "$MOCK_HOME_DIR/.cwd_$TRACK"
   printf '%s' "$PROTOCOL" > "$MOCK_HOME_DIR/.protocol_$TRACK"
   printf '%s\n' "$@" > "$MOCK_HOME_DIR/.args_$TRACK"
+  # effort の env (lib/env.sh が unset する) が claude まで届いたか
+  printf '%s' "${CLAUDE_CODE_EFFORT_LEVEL-unset}" > "$MOCK_HOME_DIR/.effort_env_$TRACK"
   # 呼び出し回数カウンタ (retry テスト用)
   COUNT_FILE="$MOCK_HOME_DIR/.calls_$TRACK"
   COUNT=$(( $(cat "$COUNT_FILE" 2>/dev/null || echo 0) + 1 ))
@@ -292,6 +294,7 @@ if [[ "$PROTOCOL" == *verification-protocol.md ]]; then
   printf '%s' "$ALLOWED" > "$MOCK_HOME_DIR/.allowed_clarity"
   printf '%s' "$DISALLOWED" > "$MOCK_HOME_DIR/.disallowed_clarity"
   printf '%s\n' "$@" > "$MOCK_HOME_DIR/.args_clarity"
+  printf '%s' "${CLAUDE_CODE_EFFORT_LEVEL-unset}" > "$MOCK_HOME_DIR/.effort_env_clarity"
 
   if [[ "$SCENARIO" == "clarity-fail" ]]; then
     echo "ERROR: simulated clarity failure" >&2
@@ -614,6 +617,60 @@ install_timeout_spy() {
   get_log | grep -q "SUMMARY Run($PICKED):.* turns=59 "
   get_log | grep -q "Line $PICKED report gate passed"
   refute_grep -q "WARN: Line $PICKED call 1 used" <<< "$(get_log)"
+}
+
+# === Test: effort (呼1 / 呼2 の --effort を固定して記録する) ===
+
+# 引数の記録 (.args_*) で --effort の直後の値
+effort_arg() {
+  grep -A1 -x -- '--effort' "$MOCK_HOME/.args_$1" | sed -n 2p
+}
+
+@test "E2E effort: call 1 and call 2 get --effort from the defaults; the log and metrics record them" {
+  # 既定は flag を渡す前の実効値 (呼1 は運用者の settings の Opus の high、呼2 は Sonnet の既定 medium)
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  run run_script
+  [ "$status" -eq 0 ]
+  [ "$(effort_arg "$PICKED")" = "high" ]
+  [ "$(effort_arg clarity)" = "medium" ]
+  get_log | grep -qF "Effort: call1 high (model opus), call2 medium (model sonnet)"
+  run python3 - "$MOCK_PROJECT/metrics.jsonl" << 'PYEOF'
+import json, sys
+rec = json.loads(open(sys.argv[1]).read().splitlines()[0])
+assert rec["effort"] == {"call1": "high", "call2": "medium"}, rec
+PYEOF
+  [ "$status" -eq 0 ]
+}
+
+@test "E2E effort: [effort] in config.toml overrides each call's level" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  printf '\n[effort]\ncall1 = "xhigh"\ncall2 = "low"\n' >> "$MOCK_PROJECT/config.toml"
+  run run_script
+  [ "$status" -eq 0 ]
+  [ "$(effort_arg "$PICKED")" = "xhigh" ]
+  [ "$(effort_arg clarity)" = "low" ]
+  grep -qF '"effort": {"call1": "xhigh", "call2": "low"}' "$MOCK_PROJECT/metrics.jsonl"
+}
+
+@test "E2E effort: an inherited CLAUDE_CODE_EFFORT_LEVEL reaches neither call (it outranks --effort)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  export CLAUDE_CODE_EFFORT_LEVEL=max
+  run run_script
+  [ "$status" -eq 0 ]
+  [ "$(cat "$MOCK_HOME/.effort_env_$PICKED")" = "unset" ]
+  [ "$(cat "$MOCK_HOME/.effort_env_clarity")" = "unset" ]
+  [ "$(effort_arg "$PICKED")" = "high" ]
+}
+
+@test "E2E effort: an invalid [effort] value stops before any line run" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  printf '\n[effort]\ncall1 = "hgih"\n' >> "$MOCK_PROJECT/config.toml"
+  run run_script
+  [ "$status" -eq 1 ]
+  [ ! -f "$MOCK_HOME/.prompt_$PICKED" ]
+  get_log | grep -qF '[effort].call1 must be one of low, medium, high, xhigh, max'
+  get_log | grep -qF 'ERROR: [effort] in config.toml is invalid'
+  notified "config.toml の [effort] に誤りがあります"
 }
 
 @test "E2E retry: transient failure retries once then succeeds" {

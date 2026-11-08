@@ -1247,6 +1247,17 @@ def _event_ages(date_s: str, lines: list[str]) -> dict[str, int | None] | None:
     return ages or None
 
 
+def _effort_used(lines: list[str]) -> dict[str, str | None] | None:
+    """metrics-append の stdin の EFFORT\t<call1>\t<call2> 行 → {call1, call2} (EFFORT_LEVELS の外の値は None)。
+    行が無ければ None (flag を渡す前の run)。本体のループは EFFORT を未知ラベルとして読み飛ばす。"""
+    for line in lines:
+        label, _, payload = line.strip().partition("\t")
+        if label == "EFFORT":
+            c1, _, c2 = payload.partition("\t")
+            return {k: v if v in EFFORT_LEVELS else None for k, v in (("call1", c1), ("call2", c2))}
+    return None
+
+
 def _sum_verification(verifies: list[dict[str, object]]) -> dict[str, int] | None:
     """VERIFY 行群を合算する。行が無ければ None (呼2 が走らなかった日)。"""
     if not verifies:
@@ -1271,6 +1282,8 @@ def _sum_verification(verifies: list[dict[str, object]]) -> dict[str, int] | Non
 #                        event_age_days に line → run 日付からの日数 (不明は null)。EVENT 行が無い日は None
 #   CSCAN\t{json}\t{json} — clarity-scan --counts の呼2 前・後 (H05)。verification に clarity_* と
 #                        cscan_lines を足す (CSCAN 行が無い日は足さない。_sum_cscan)
+#   EFFORT\t<call1>\t<call2> — run の頭で 1 行。呼1 / 呼2 に渡した --effort (effort-config の出力) を
+#                        effort {call1, call2} に記録する (EFFORT_LEVELS の外の値は None)。行が無い日は None
 # ラベル不明・payload 破損の行は skip (収集は non-fatal)。
 # pass1 は per-repo 化で廃止 (None 固定)。第 5 引数はリトライ発生の有無で、
 # レコード互換のため旧フィールド名 fallback_used に記録する。
@@ -1372,6 +1385,7 @@ def cmd_metrics_append(argv: list[str]) -> int:
         "line_states": line_states,
         "verification": _sum_verification(verifies),
         "event_age_days": _event_ages(date_s, stdin_lines),
+        "effort": _effort_used(stdin_lines),
     }
     if record["verification"] is not None and vdiffs:
         record["verification"].update(_sum_vdiff(vdiffs))
@@ -1979,6 +1993,50 @@ def cmd_billing_config(argv: list[str]) -> int:
     return 0
 
 
+# === effort: 呼1 / 呼2 の claude -p に渡す --effort ([effort]) ===
+#
+# [effort] (省略可):
+#   call1   呼1 (調査と執筆、--model opus) の --effort
+#   call2   呼2 (clarity 改稿と原典照合、[verification].model) の --effort
+# 値の集合は CLI の `--effort <level>` (2.1.319 の --help: low, medium, high, xhigh, max)。
+# 既定は flag を渡す前 (〜2026-11-08) の実効値を固定したもの。Claude Code の effort は env
+# CLAUDE_CODE_EFFORT_LEVEL > --effort > settings (modelSettings.<model>.effortLevel) > model の既定 の順で決まり
+# (https://code.claude.com/docs/en/model-config.md、2026-11-08 確認)、flag の無い頃の呼1 (Opus 5.5) は運用者の
+# ~/.claude/settings.json の modelSettings.claude-opus-5-5.effortLevel = "high"、呼2 (Sonnet 5.5) は設定が無く
+# model の既定 "medium" だった。flag で渡すので、以後は対話用の settings の変更が無人 run を動かさない。
+EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
+_EFFORT_DEFAULTS = {"call1": "high", "call2": "medium"}
+
+
+def _effort(cfg: dict[str, object]) -> dict[str, str]:
+    e = dict(_EFFORT_DEFAULTS)
+    raw = cfg.get("effort", {})
+    if not isinstance(raw, dict):
+        raise ValueError("[effort] must be a table")
+    for k, v in raw.items():
+        if k not in e:
+            raise ValueError(f"[effort].{k} is not a known key ({', '.join(e)})")
+        if not isinstance(v, str) or v not in EFFORT_LEVELS:
+            raise ValueError(f"[effort].{k} must be one of {', '.join(EFFORT_LEVELS)}, got {v!r}")
+        e[k] = v
+    return e
+
+
+# --- effort-config <config_path>: [effort] を検証して "call1 \t call2" を 1 行で出力。不正・読めないは rc 2 ---
+def cmd_effort_config(argv: list[str]) -> int:
+    if not argv:
+        print("usage: effort-config <config_path>", file=sys.stderr)
+        return 64
+    try:
+        with open(argv[0], "rb") as f:
+            e = _effort(tomllib.load(f))
+    except (OSError, ValueError) as err:
+        print(f"effort-config: {err}", file=sys.stderr)
+        return 2
+    print(f"{e['call1']}\t{e['call2']}")
+    return 0
+
+
 # --- env-key <env_file>: env ファイルの ANTHROPIC_API_KEY の値を出力 ---
 # KEY=VALUE / export KEY=VALUE、前後の引用符を外す。無い・空・読めないは rc 1 (値は出さない)。
 # 呼ぶ側は出力を変数に取るだけで、ログにもエラー文にも値を載せない。
@@ -2505,6 +2563,7 @@ COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "expect-check": cmd_expect_check,
     "event-age-stats": cmd_event_age_stats,
     "billing-config": cmd_billing_config,
+    "effort-config": cmd_effort_config,
     "env-key": cmd_env_key,
     "spend-add": cmd_spend_add,
     "spend-gate": cmd_spend_gate,

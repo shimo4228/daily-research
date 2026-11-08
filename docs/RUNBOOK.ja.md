@@ -66,7 +66,7 @@ daily-research.sh (05:00)
 ├── rotation-pick — 当日担当ラインを決定論選択: 輪番 window（開始 = date.toordinal() × K
 │   mod N、そこから連続 K 本。K = [general] lines_per_day、ADR-0010 / ADR-0017）
 │   + `daily = true` の全ライン（毎日実行、ADR-0011）
-├── 呼1: claude -p, cwd = 担当ラインの target_repo (Opus, --max-turns 55,
+├── 呼1: claude -p, cwd = 担当ラインの target_repo (Opus, --effort は [effort].call1, --max-turns 55,
 │   25 分タイムアウト, transient 失敗時リトライ 1 回; 401 は中止)
 │   [api モード: ラインの前に支出ゲート（日・月の上限）、呼び出しごとに --max-budget-usd、
 │    呼び出しごとの費用を state/api-spend.jsonl に追記。429 とクレジット切れは run を止める]
@@ -83,7 +83,7 @@ daily-research.sh (05:00)
 ├── ctl-015 レポート存在ゲート（receipt 駆動: receipt 無し / 不正 → 失敗、article・brief は
 │   vault の {date}_{track}_*.md を要求、quiet・hold はファイル無しで成功）
 │   → past-topics-append が receipt から問いの履歴を past_topics.json に記録
-├── 呼2: fresh-context の検証 + clarity (既定 Sonnet, --max-turns 30, 20 分タイムアウト,
+├── 呼2: fresh-context の検証 + clarity (既定 Sonnet, --effort は [effort].call2, --max-turns 30, 20 分タイムアウト,
 │   研究文脈なし, Read + WebFetch, Edit は対象ノートと runs/{date}.verify.json のみ,
 │   WebSearch は disallow, 失敗は fail-open — 未検証版が残り run は成功のまま, ADR-0017。
 │   認証・課金のエラーは呼1 と同じく残りのラインを止める)
@@ -93,7 +93,7 @@ daily-research.sh (05:00)
 │   kind: brief は機会メモと文字数の soft を免除）
 ├── Pass 3: Obsidian wiki ingest（vault 側スクリプト、non-fatal。外側の timeout = ingest 自身の claude の上限
 │   （`WIKI_INGEST_TIMEOUT`、無ければ vault 側の既定）+ 余裕の下。`Pass 3 outer timeout: …` として log に出る）
-└── metrics.jsonl 追記 (clarity_pass / line_states / verification / event_age_days 含む) + /dr-review 経過日数チェック
+└── metrics.jsonl 追記 (clarity_pass / line_states / verification / event_age_days / effort 含む) + /dr-review 経過日数チェック
 ```
 
 (07:00 の morning-brief.sh は ADR-0009 で廃止 — レポートは承認を求めない読み物になった)
@@ -154,6 +154,8 @@ launchctl list | grep daily-research
 | `ERROR: Could not verify the lock (…). Skipping.` | ロックを確かめられなかったので run を始めなかった（通知は `ロックを確かめられず実行しませんでした`）。括弧の中が理由: mutex を 10 秒で取れない・`python3` の失敗・mutex のファイルかロックディレクトリを作れない |
 | `Config schema check passed` | `config.toml` が現行 (ADR-0008) schema に適合 |
 | `ERROR: config.toml schema check failed (the reason is on the line above; see config.example.toml)` | `dr_pipeline.py tracks` が `config.toml` を拒否した（旧 schema、line 名の形、`daily` / `template` / `mode` の型、`mode` の未知の値、`mode = "ecosystem"` の line に書いた `repos` / `context_files`、壊れた `repos`、`lines_per_day` の値）。理由は直前に log された行にある。どのラインも始めずに停止（exit 1） |
+| `Effort: call1 <level> (model opus), call2 <level> (model <model>) — passed as --effort` | 各呼び出しに渡す `--effort`（`[effort]`、既定はコード）。同じ組を `metrics.jsonl` の `effort` に記録する |
+| `ERROR: [effort] in config.toml is invalid (the reason is on the line above; see config.example.toml)` | `[effort]` に未知の key か、`low` / `medium` / `high` / `xhigh` / `max` 以外の値がある。理由は直前に log された行にある。どのラインも始めずに停止（exit 1） |
 | `Rotation pick: a, b, c (ADR-0010/0017)` | 当日担当ラインの輪番 window 選択結果 |
 | `Today's lines: N` | 当日実行するライン数（`lines_per_day` + daily ライン） |
 | `=== Line: <track> (<repo パス>) ===` | その repo を cwd にしたライン run の開始（ecosystem ラインは repo を持たず `no target repo` と出る） |

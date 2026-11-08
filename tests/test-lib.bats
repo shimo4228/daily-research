@@ -450,6 +450,13 @@ _fixtures() {
   [[ "$output" == *"UNSET"* ]]
 }
 
+@test "env.sh unsets CLAUDE_CODE_EFFORT_LEVEL (it outranks the --effort the calls pass)" {
+  export CLAUDE_CODE_EFFORT_LEVEL=max
+  run /bin/bash -c "source '$LIB_DIR/env.sh'; printenv CLAUDE_CODE_EFFORT_LEVEL || echo UNSET"
+  [ "$status" -eq 0 ]
+  [ "$output" = "UNSET" ]
+}
+
 @test "env.sh puts Claude install paths before homebrew bins" {
   run /bin/bash -c "source '$LIB_DIR/env.sh'; echo \"\$PATH\""
   [ "$status" -eq 0 ]

@@ -229,6 +229,17 @@ TEMPLATE=$(cat "$PROJECT_DIR/templates/report-template.md")
 VERIFY_MODEL=$(python3 "$DR_PY" config-get "$PROJECT_DIR/config.toml" verification.model sonnet 2>> "$LOG_FILE") \
   || VERIFY_MODEL="sonnet"
 [ -n "$VERIFY_MODEL" ] || VERIFY_MODEL="sonnet"
+# 呼1 / 呼2 の --effort ([effort] の call1 / call2。既定・値の集合・検証は dr_pipeline.py の _effort)。flag が
+# 無いと実効値は運用者の対話用の ~/.claude/settings.json (modelSettings.<model>.effortLevel) と model の既定で
+# 決まり、settings の変更が無人 run の質と費用を記録なしに動かす。env の CLAUDE_CODE_EFFORT_LEVEL は --effort
+# より優先されるので lib/env.sh が unset する。実効値は下の Effort 行と metrics の effort (EFFORT 行) に残す
+if ! EFFORT_TSV=$(python3 "$DR_PY" effort-config "$PROJECT_DIR/config.toml" 2>> "$LOG_FILE"); then
+  log "ERROR: [effort] in config.toml is invalid (the reason is on the line above; see config.example.toml)"
+  notify "config.toml の [effort] に誤りがあります。理由は log、書き方は config.example.toml を見てください" "Daily Research Error"
+  exit 1
+fi
+IFS=$'\t' read -r CALL1_EFFORT CALL2_EFFORT <<< "$EFFORT_TSV"
+log "Effort: call1 $CALL1_EFFORT (model opus), call2 $CALL2_EFFORT (model $VERIFY_MODEL) — passed as --effort"
 
 # === Per-repo line 実行 (ADR-0008 / 出力形式は ADR-0009 / 輪番は ADR-0010・ADR-0017) ===
 # rotation (ADR-0017): 毎朝、config.toml の line 群から当日担当 line 群を決定論選択
@@ -317,7 +328,8 @@ fi
 
 FAILED_LINES=""       # ctl-015 (receipt gate) に落ちた line (空 = 全 line 成功)
 OK_LINES=""
-METRICS_STDIN=""      # metrics-append へ渡す RUN / CLARITY / STATE / EVENT / VERIFY / VDIFF 行の蓄積 (1 日 1 レコード)
+# metrics-append へ渡す EFFORT / RUN / CLARITY / STATE / EVENT / VERIFY / VDIFF 行の蓄積 (1 日 1 レコード)
+METRICS_STDIN="EFFORT"$'\t'"$CALL1_EFFORT"$'\t'"$CALL2_EFFORT"$'\n'
 AUTH_ABORT=0          # 401 検出 — 残 line は中断するが、完走済み line の集計は捨てない
 BILLING_ABORT=0       # 429 / クレジット切れ — 同上 (再試行で踏み抜かない、harness の rules: boundary.md)
 BUDGET_STOP=0         # 支出 gate が残 line を止めた: 1 = 上限 (月・日) に届いた、2 = 上限を確かめられない (billing_gate の rc)
@@ -547,6 +559,7 @@ $LINE_TEMPLATE"
       --disallowedTools "$LINE_DISALLOWED" \
       --max-turns "$CALL1_MAX_TURNS" \
       --model opus \
+      --effort "$CALL1_EFFORT" \
       --output-format json \
       --no-session-persistence \
       2>> "$LOG_FILE") || LINE_EXIT=$?
@@ -798,6 +811,7 @@ $CLARITY_HINTS}"
     --disallowedTools "$DISALLOWED_TOOLS,WebSearch,Edit(//${PRE_VERIFY_DIR#/}/**)" \
     --max-turns 30 \
     --model "$VERIFY_MODEL" \
+    --effort "$CALL2_EFFORT" \
     --output-format json \
     --no-session-persistence \
     2>> "$LOG_FILE") || CLARITY_EXIT=$?
@@ -1018,7 +1032,7 @@ fi
 # === 自己改善ループの計測 (ADR-0006): run 記録の永続化 + review リマインダー ===
 # logs/ は 30 日ローテーションで消えるため、metrics.jsonl (gitignore) に恒久保存する。
 # 収集は non-fatal — 計測の失敗で生成ジョブの成否を変えない。
-# stdin framing は "LABEL\t[meta\t]payload" で統一 (RUN / LINT / CLARITY / STATE / EVENT / VERIFY / VDIFF)。
+# stdin framing は "LABEL\t[meta\t]payload" で統一 (EFFORT / RUN / LINT / CLARITY / STATE / EVENT / VERIFY / VDIFF / CSCAN)。
 # dr_pipeline 側がラベルで判別し pass2 等に写像する (レコード形は旧来互換 —
 # expect-check / /dr-review が消費)。1 日複数 line の RUN / CLARITY / STATE / VERIFY は
 # METRICS_STDIN に蓄積済みで、dr_pipeline が 1 レコードへ合算する。

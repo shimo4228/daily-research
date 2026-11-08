@@ -21,6 +21,16 @@ min_sources = 5
 [verification]
 model = "sonnet"
 
+# Effort of the two calls, passed as `claude -p --effort` (call1 = research and writing, call2 =
+# verification + clarity). Optional: the defaults live in code (dr_pipeline.py _effort) and pin the
+# levels the calls ran at before the flag was passed, so changes to your interactive Claude Code
+# settings no longer move the unattended run. Values: low, medium, high, xhigh, max; anything else
+# stops the run at startup. The run logs "Effort: …" and records `effort` in metrics.jsonl.
+# lib/env.sh drops an inherited CLAUDE_CODE_EFFORT_LEVEL (it would outrank --effort).
+# [effort]
+# call1 = "high"
+# call2 = "medium"
+
 # Billing path (scripts/lib/billing.sh; the contract lives in dr_pipeline.py's [billing]).
 # mode = "subscription" (default): claude -p uses your Claude Code login (Max plan OAuth);
 #   any ANTHROPIC_API_KEY inherited from the environment is dropped.

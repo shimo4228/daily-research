@@ -71,7 +71,7 @@ daily-research/
 
 | スクリプト | 説明 | 使い方 |
 |-----------|------|--------|
-| `scripts/daily-research.sh` | メインエントリポイント。決定論輪番 window (`rotation-pick`、ADR-0010 / ADR-0017) の `lines_per_day` 本 + `daily = true` の全ライン (ADR-0011) を当日担当に選び、ラインごとに呼1 = `claude -p` を cwd = そのラインの `target_repo` で実行（Opus、25 分タイムアウト、認証・課金・呼び出しごとの上限以外の失敗でリトライ 1 回。401 は中止）。`[tracks.<name>].mode = "ecosystem"` のラインは cwd = `state/<line>`、ecosystem プロトコルで実行する（ADR-0018。分岐はライン名ではなく `mode` が決める）。続けて呼2 = fresh-context の検証 + clarity（既定 sonnet、20 分、fail-open）を実行する。両呼び出しと認証 probe は `--safe-mode` で起動する（ADR-0019）。`lib/` を source し、環境サニタイズ、課金経路の設定（`[billing]`）、認証 probe、config schema チェック、receipt 駆動のレポートゲート (ctl-015)、問いの履歴の追記（`past-topics-append`）、呼2 の改稿前の写しと `verify-diff`、レポート lint (ctl-016)、metrics 追記（`clarity_pass` / `line_states` / `verification` / `event_age_days` 含む）を含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
+| `scripts/daily-research.sh` | メインエントリポイント。決定論輪番 window (`rotation-pick`、ADR-0010 / ADR-0017) の `lines_per_day` 本 + `daily = true` の全ライン (ADR-0011) を当日担当に選び、ラインごとに呼1 = `claude -p` を cwd = そのラインの `target_repo` で実行（Opus、25 分タイムアウト、認証・課金・呼び出しごとの上限以外の失敗でリトライ 1 回。401 は中止）。`[tracks.<name>].mode = "ecosystem"` のラインは cwd = `state/<line>`、ecosystem プロトコルで実行する（ADR-0018。分岐はライン名ではなく `mode` が決める）。続けて呼2 = fresh-context の検証 + clarity（既定 sonnet、20 分、fail-open）を実行する。両呼び出しと認証 probe は `--safe-mode` で起動する（ADR-0019）。`lib/` を source し、環境サニタイズ、課金経路の設定（`[billing]`）、認証 probe、config schema チェック、receipt 駆動のレポートゲート (ctl-015)、問いの履歴の追記（`past-topics-append`）、呼2 の改稿前の写しと `verify-diff`、レポート lint (ctl-016)、metrics 追記（`clarity_pass` / `line_states` / `verification` / `event_age_days` / `effort` 含む）を含む。launchd が AM 5:00 に呼び出す。 | `./scripts/daily-research.sh` |
 | `scripts/check-auth.sh` | `real_auth_probe()`（共有 `lib/auth.sh`; `claude --version` ではなく実 Haiku API probe。`--version` は期限切れトークンでも成功するため）で、`[billing] mode` が選んだ経路（OAuth、または `env_file` の API key）の認証を確認する。api モードでは今月の支出も表示。失敗時に macOS 通知を表示。 | `./scripts/check-auth.sh` |
 | `scripts/pre-commit.sh` | git pre-commit hook として走る secret / 構文ガード。 | （git が自動実行） |
 
@@ -82,6 +82,7 @@ daily-research/
 | `PATH` | plist + スクリプト | `$HOME/.local/bin`（現行 Claude installer）、`$HOME/.claude/local`（旧配置）、`/opt/homebrew/bin`、`/usr/local/bin` を含む必要がある |
 | `HOME` | plist | Claude CLI が認証トークンを見つけるために必要 |
 | `ANTHROPIC_API_KEY` | `[billing].env_file` だけ | `lib/env.sh` が親の環境の値を捨てる。`api` モードでは `lib/billing.sh` が `env_file` から読んで export し、`subscription` モードでは unset のまま（OAuth） |
+| `CLAUDE_CODE_EFFORT_LEVEL` | `lib/env.sh` が捨てる | Claude Code では `--effort` より優先されるので、親の環境の値が `[effort]` を上書きする。スクリプトが unset する |
 | `CLAUDE_TIMEOUT` | スクリプト（内部） | `run_claude()` 経由の `claude -p` 呼び出しのタイムアウト（秒）。0 = 無制限（デフォルト）。呼1 (研究 run) は 1500秒 (25 分)、呼2 (検証 + clarity) は 1200秒 (20 分) を設定 |
 | `WIKI_INGEST_TIMEOUT` | ユーザー設定（plist / 環境） | vault の `scripts/daily_wiki_ingest.sh` が自分の `claude` 呼び出しの上限として読む（未設定なら vault 側の既定）。`daily-research.sh` はそのまま渡し、Pass 3 の外側の `timeout` をその上限 + 余裕にする（外側が先に切らない）。整数の秒（接尾辞 `s` / `m` / `h` / `d` は可）以外の値は WARN を出し、外側の上限は vault 側の既定から導く |
 | `DEBUG` | ユーザー設定 | `1` に設定するとデバッグログ（PATH、CLAUDE_CMD）を出力 |
@@ -96,6 +97,7 @@ daily-research/
 | `[general]` | Obsidian vault パス（`vault_path`）、出力ディレクトリ（`output_dir`）、`lines_per_day`（1 日に走らせる本数 = 輪番 window の幅。int ≥ 1、既定 1、違反は fail-fast）、`self_signals`（自己汚染ガード: 運用者自身の成果物を外部シグナルとして数えない）。`language` / `date_format` は参考情報 — スクリプトは読まない |
 | `[report]` | `min_sources` — 出典 URL がこの数を下回ると、レポート lint (ctl-016) が soft の指摘として記録する |
 | `[verification]` | `model` — 呼2（検証 + clarity）のモデル。既定 `sonnet` |
+| `[effort]` | `call1` / `call2` — 呼1 / 呼2 に渡す `--effort`（`low`、`medium`、`high`、`xhigh`、`max`。それ以外は起動時に止まる）。省略可: 既定はコード（`dr_pipeline.py` の `_effort`）にあり、flag を渡す前の実効値を固定したもの。運用者の対話用の Claude Code の設定を変えても無人 run は動かない。run は `Effort: …` を log に出し、`metrics.jsonl` に `effort` を記録する |
 | `[tracks.<name>]` | ライン 1 つにつき 1 ブロック: `name`, `focus`（そのラインが扱う主題の説明。選択条件ではない）, `aliases`, `context_files`（問いを選んだ後 = Step 3b に Read する repo 相対パス — タスク台帳・open questions・実施履歴）, `sources`, `template`（任意。節構成の上書き、ADR-0015）, `daily`（bool。`true` で輪番の外で毎朝実行、ADR-0011）, `mode`（既定 `"repo"` で省略可、または `"ecosystem"`。未知の値は schema チェックで fail-fast、ADR-0018）+ repo ラインでは `[[tracks.<name>.repos]]` エントリ 1 つ（`key`, `target_repo` — run の cwd になる。`target_doi` は参考情報でスクリプトは読まない）。`repos` は array of tables で、どのエントリも `key` と `target_repo` を空でない文字列で持つ — 単一の `[tracks.<name>.repos]` table や、どちらかを欠いたエントリは起動時の schema チェックで落ちる。`mode = "ecosystem"` のラインは `repos` も `context_files` も書けない — repo 文脈を持たないため schema が拒否する |
 | `[user_profile]` | 参考情報のみ — スクリプトは読まない |
 

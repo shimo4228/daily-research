@@ -7,6 +7,10 @@
 unset ANTHROPIC_API_KEY
 # CLAUDECODE が残っているとネストチェック・起動挙動が変わるため除去
 unset CLAUDECODE 2>/dev/null || true
+# 呼1 / 呼2 の effort は daily-research.sh が [effort] から --effort で渡す。CLAUDE_CODE_EFFORT_LEVEL は
+# --effort より優先される (https://code.claude.com/docs/en/model-config.md の effort の優先順位、2026-11-08 確認)
+# ので、親の環境 (対話 session の中から手で回した run など) の値を持ち込まない
+unset CLAUDE_CODE_EFFORT_LEVEL
 
 # launchd 環境は PATH が最小限。homebrew python3 (tomllib 必須, >=3.11) を /usr/bin より前に置く。
 # 最終的な先頭は下の 2 つ (~/.local/bin、~/.claude/local) で、その後ろに homebrew が続く。

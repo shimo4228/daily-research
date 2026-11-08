@@ -66,7 +66,7 @@ daily-research.sh (05:00)
 ├── rotation-pick — deterministic selection of today's lines: a rotation window
 │   (start = date.toordinal() × K mod N, then K consecutive lines, K = [general]
 │   lines_per_day — proleptic Gregorian ordinal, ADR-0010 / ADR-0017) + every `daily = true` line (ADR-0011)
-├── Call 1: claude -p, cwd = the picked line's target_repo (Opus, --max-turns 55,
+├── Call 1: claude -p, cwd = the picked line's target_repo (Opus, --effort from [effort].call1, --max-turns 55,
 │   25-min timeout, one retry on transient failure; 401 aborts)
 │   [api mode: a spend gate before each line (day / month caps), --max-budget-usd per call,
 │    each call's cost appended to state/api-spend.jsonl; 429 / credit balance stops the run]
@@ -83,7 +83,7 @@ daily-research.sh (05:00)
 ├── ctl-015 report-existence gate (receipt-driven: missing / invalid receipt fails the line,
 │   article & brief require {date}_{track}_*.md in the vault, quiet & hold pass without a file)
 │   → past-topics-append records the question history in past_topics.json from the receipt
-├── Call 2: fresh-context verification + clarity (Sonnet by default, --max-turns 30, 20-min
+├── Call 2: fresh-context verification + clarity (Sonnet by default, --effort from [effort].call2, --max-turns 30, 20-min
 │   timeout, no research context, Read + WebFetch, Edit limited to the day's note and
 │   runs/{date}.verify.json, WebSearch denied; failure is fail-open — the unverified note
 │   survives, ADR-0017; an auth / billing error stops the remaining lines as in call 1)
@@ -93,7 +93,7 @@ daily-research.sh (05:00)
 │   report-template.md; kind: brief is exempt from the 機会メモ and length soft checks)
 ├── Pass 3: Obsidian wiki ingest (vault-side script, non-fatal, under an outer timeout = the ingest's own claude
 │   limit (`WIKI_INGEST_TIMEOUT`, else the vault default) plus a margin; logged as `Pass 3 outer timeout: …`)
-└── metrics.jsonl append (incl. clarity_pass / line_states / verification / event_age_days) + /dr-review age check
+└── metrics.jsonl append (incl. clarity_pass / line_states / verification / event_age_days / effort) + /dr-review age check
 ```
 
 (The 07:00 morning-brief.sh was retired in ADR-0009 — notes are now reading
@@ -155,6 +155,8 @@ launchctl list | grep daily-research
 | `ERROR: Could not verify the lock (…). Skipping.` | The lock could not be checked, so the run did not start (notification: `ロックを確かめられず実行しませんでした`). The reason in parentheses: the mutex was not free within 10 s, `python3` failed, or the mutex file / lock directory could not be created |
 | `Config schema check passed` | `config.toml` matches the current (ADR-0008) schema |
 | `ERROR: config.toml schema check failed (the reason is on the line above; see config.example.toml)` | `dr_pipeline.py tracks` rejected `config.toml` (legacy schema, a bad line name, a wrong type for `daily` / `template` / `mode`, an unknown `mode` value, `repos` / `context_files` on a `mode = "ecosystem"` line, a malformed `repos`, or a bad `lines_per_day`); the reason is the line logged just before. The run stops before any line (exit 1) |
+| `Effort: call1 <level> (model opus), call2 <level> (model <model>) — passed as --effort` | The `--effort` each call gets (`[effort]`, defaults in code); the same pair is recorded as `effort` in `metrics.jsonl` |
+| `ERROR: [effort] in config.toml is invalid (the reason is on the line above; see config.example.toml)` | `[effort]` has an unknown key or a level outside `low` / `medium` / `high` / `xhigh` / `max`; the reason is the line logged just before. The run stops before any line (exit 1) |
 | `Rotation pick: a, b, c (ADR-0010/0017)` | The rotation window picked for today |
 | `Today's lines: N` | How many lines run today (`lines_per_day` + any daily lines) |
 | `=== Line: <track> (<repo path>) ===` | Per-line run starting with that repo as cwd (an ecosystem line has no repo and logs `no target repo`) |
