@@ -35,9 +35,10 @@ daily-research/
 │   └── lib/                             # sourced shell ライブラリ + Python 解析モジュール
 │       ├── env.sh / log.sh / notify.sh / lock.sh / auth.sh / claude.sh / billing.sh
 │       └── dr_pipeline.py              # JSON/TOML 解析の単一 stdlib モジュール
-├── state/                               # ラインごとの brief.md / pending.md / watched-sources.md /
-│                                        #   runs/{date}.md（根拠ファイル）/ runs/{date}.json
-│                                        #   （run receipt）/ runs/{date}.verify.json（gitignored）
+├── state/                               # ラインごとの brief.md / pending.md /
+│                                        #   watched-sources.md + watched-archive.md（ecosystem ライン）/ runs/{date}.md（根拠ファイル）/
+│                                        #   runs/{date}.json（run receipt）/ runs/{date}.verify.json / pre-verify/{date}.md
+│                                        #   （呼2 の改稿前の写し。script が書き、モデルは書かない）（gitignored）
 ├── graph.jsonld                         # 凍結アーカイブ（退役した concept-graph パイプライン）
 ├── com.example.daily-research.plist    # launchd スケジュール（AM 5:00、リサーチ）
 ├── tests/
@@ -171,7 +172,7 @@ run は `cd "$TARGET_REPO"` で起動されるため、repo 自身の CLAUDE.md 
 | `-p` | 原稿パス + 根拠ファイルのパス + `runs/{date}.verify.json` のパス（書き込みはこの 2 ファイルだけ） | 非対話モード |
 | `--append-system-prompt-file` | `prompts/verification-protocol.md` | clarity（Step A）と原典照合（Step B）の手順を注入 |
 | `--allowedTools` | `Read,WebFetch` + 当日ノートと `runs/{date}.verify.json` の `Edit` | 原稿と検証結果だけを書き換え可能にする |
-| `--disallowedTools` | `Bash,Task,NotebookEdit` + `WebSearch` | 照合は根拠ファイル・ソース節の URL の再取得だけで行う（新しい探索をさせない） |
+| `--disallowedTools` | `Bash,Task,NotebookEdit` + `WebSearch` + `Edit(state/<line>/pre-verify/**)` | 照合は根拠ファイル・ソース節の URL の再取得だけで行う（新しい探索をさせない）。verify-diff が比べる改稿前の写しには触れさせない |
 | `--max-turns` | `30` | 全 claim の WebFetch 照合に必要な深さ |
 | `--model` | `[verification] model`（既定 `sonnet`） | 見逃しが目立つなら opus へ上げる |
 
@@ -187,7 +188,7 @@ per-repo 単一パス設計は、2026-08-04 に旧中央 2 パス（Opus テー�
 
 レポート存在ゲート（ctl-015）は run receipt `state/<line>/runs/{date}.json` を読む: receipt 無し・不正は失敗、`article` / `brief` は run スコープのレポートを要求、`quiet` / `hold` はファイル無しで成功する。run スコープの判定は bash 3.2 の `-nt` が秒精度で信用できないため `find -newer "$LOCK_DIR/pid"` で行う。receipt が quiet/hold なのに記事がある場合は記事を優先し（file wins）`mismatch` を、`reason_code = fetch_failed` か web 検索 0 回の quiet/hold は `suspect` を計上する。
 
-呼2（検証 + clarity、ADR-0017）はゲートの後に走る: fresh-context のプロセス（`--max-turns 30`、`CLAUDE_TIMEOUT=1200`、`--allowedTools` = Read + WebFetch + 当日ノートと `runs/{date}.verify.json` のみの Edit、`--disallowedTools` に WebSearch を追加）が、初見読者としてつまずき箇所を直したうえで根拠ファイルの全 claim を原典と突き合わせる。失敗は fail-open — ログに `WARN: clarity pass failed` を記録し、未検証（timeout 時は部分改稿）の版が残り、`FINAL_EXIT` には影響しない。ただしそのラインは `unverified` として metrics と通知に出る。
+呼2（検証 + clarity、ADR-0017）はゲートの後に走る: fresh-context のプロセス（`--max-turns 30`、`CLAUDE_TIMEOUT=1200`、`--allowedTools` = Read + WebFetch + 当日ノートと `runs/{date}.verify.json` のみの Edit、`--disallowedTools` に WebSearch を追加）が、初見読者としてつまずき箇所を直したうえで根拠ファイルの全 claim を原典と突き合わせる。失敗は fail-open — ログに `WARN: clarity pass failed` を記録し、未検証（timeout 時は部分改稿）の版が残り、`FINAL_EXIT` には影響しない。ただしそのラインは `unverified` として metrics と通知に出る。呼2 の前に script が原稿を `state/<line>/pre-verify/{date}.md`（モデルのどの書き込み先の外。先に path を消し、通常ファイルになったことを確かめる）へ写し、呼2 の後に `dr_pipeline.py verify-diff` が両者を比べて `VERIFY_DIFF` を log に出す — 呼2 の実際の改稿量が、呼2 自身の報告と別に記録される。
 
 `metrics.jsonl` は `expect-check` / `/dr-review` との互換のため ADR-0008 以前のレコード形を維持する: リサーチ run の JSON は `pass2` フィールドに合算され、`pass1` は常に `None`、`fallback_used` は「リトライが発生した」の意味（`pass2` は全 attempt の合算）、`source` は `live` / `test`（`DR_FORCE_TRACK` / `DR_ONLY_TRACK` の run は `test` で記録され `expect-check` / `/dr-review` の集計から除かれる）、`clarity_pass` は呼2 の `{ran, ok, cost, turns, ...}` を記録する（ラベルは互換のため据え置きで、中身は検証 + clarity パスの実測）。これに加えて `line_states {article, brief, quiet, hold, mismatch, suspect, unverified}`（零でも常に出す）と `verification {supported, partial, unsupported, unverifiable, edits, lines_verified}`（VERIFY 行が無い日は `None`）を持つ。判定そのものは保存しない — eval は in-loop 型（ADR-0010）で、残るのは照合結果の内訳だけ。
 

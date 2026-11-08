@@ -153,11 +153,16 @@ launchctl list | grep daily-research
 | `ERROR: Line <track> returned 401 — aborting remaining lines (…)` | Auth failed mid-run (401 / 403: expired OAuth or rejected key); remaining lines are skipped, finished lines' results are kept |
 | `Line <track> state: <status>` | The content state the receipt declared (article / brief / quiet / hold) |
 | `Line <track> report gate passed` | ctl-015: the line delivered what its receipt declared (article / brief: `{date}_{track}_*.md` exists in the vault; quiet / hold: no file needed) |
+| `Line <track> pending.md: items A→B, chars C→D` | Items and size of the line's `pending.md` before call 1 and after the gate (headings, bold-led bullets and table rows count as items) |
+| `WARN: Line <track> pending.md の項目が <state> の run で N 件増えた (…)` | A run other than hold added more `pending.md` items than its note's dated-deadline opportunities. The protocols add items only for hold questions and dated-deadline opportunities; log only, the line still succeeds |
 | `WARN: report gate failed for line <track> — no <date>_<track>_*.md (ctl-015)` | The receipt says article / brief but no report exists — counted as failed |
 | `WARN: report gate failed for line <track> — ... receipt ... (ctl-015)` | The run-scoped receipt is missing or invalid — counted as failed (a run that died before writing it) |
 | `Report existence gate passed: N report(s)` | Every picked line passed ctl-015 (partial failure logs `Failed (E_PARTIAL: ...)` instead) |
 | `Line states: article=N brief=N quiet=N hold=N (...)` | Today's breakdown; the published / quiet / unverified / suspected-fetch-failure segments appear only when non-empty |
 | `VERIFY <track>: {...}` | Call 2's verification tally (supported / partial / unsupported / unverifiable / edits / ran) |
+| `VERIFY_DIFF <track>: {...}` | What call 2 actually changed, compared against the before-copy `state/<line>/pre-verify/{date}.md` that the script writes before call 2: changed spans, characters added / removed, removed sentences, numbers added / removed, new URLs, and whether the frontmatter, 機会メモ or ソース section changed. Summed into the metrics record's `verification` |
+| `WARN: Line <track> clarity pass: …` | verify-diff found an edit the verification protocol forbids (frontmatter, 機会メモ, ソース beyond `(未解決 …)` marks, a URL the draft did not have) or a count mismatch between `verify.json` and call 2's completion report |
+| `WARN: Line <track> pre-verify copy failed — …` / `WARN: Line <track> verify-diff could not run (non-fatal)` | The before-copy could not be written or compared; call 2's result is kept, its edits are not diffed |
 | `WARN: clarity pass failed ...` | Call 2 (verification + clarity) failed (fail-open — the run still succeeds and the line is counted `unverified`) |
 | `WARN: report lint hard fail (ctl-016): ...` | Deterministic lint found a missing sources section / zero citations |
 | `Completed successfully` | All of the day's picked lines completed and passed the report gate (including an all-quiet day) |

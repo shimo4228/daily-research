@@ -151,11 +151,16 @@ launchctl list | grep daily-research
 | `ERROR: Line <track> returned 401 — aborting remaining lines (…)` | run 中に認証が失敗（401 / 403: OAuth 期限切れか key の拒否）。残ラインは中断、完走済みラインの成果は保持 |
 | `Line <track> state: <status>` | receipt が申告した内容状態（article / brief / quiet / hold） |
 | `Line <track> report gate passed` | ctl-015: そのラインが receipt どおりの成果を残した（article / brief は `{date}_{track}_*.md` が vault に存在、quiet / hold はファイル無しで通過） |
+| `Line <track> pending.md: items A→B, chars C→D` | そのラインの `pending.md` の項目数と字数の、呼1 の前とゲート通過後（見出し・太字で始まる箇条・表の行を項目と数える） |
+| `WARN: Line <track> pending.md の項目が <state> の run で N 件増えた (…)` | hold 以外の run が、ノートの日付付き締切の機会の数より多く `pending.md` に項目を足した。プロトコルが項目を足してよいとするのは hold の問いと日付付き締切の機会だけ。log だけで、ラインは成功のまま |
 | `WARN: report gate failed for line <track> — no <date>_<track>_*.md (ctl-015)` | receipt が article / brief なのにレポートが無い — 失敗として計上 |
 | `WARN: report gate failed for line <track> — ... receipt ... (ctl-015)` | run スコープの receipt が無い・壊れている — 失敗として計上（timeout で receipt を書く前に落ちた run） |
 | `Report existence gate passed: N report(s)` | 当日担当ラインが全て ctl-015 を通過（一部失敗時は `Failed (E_PARTIAL: ...)` になる） |
 | `Line states: article=N brief=N quiet=N hold=N (...)` | 当日の内訳（今朝 / 更新なし / 未検証 / 取得失敗の疑い の各段は該当があるときだけ出る） |
 | `VERIFY <track>: {...}` | 呼2 の照合結果（supported / partial / unsupported / unverifiable / edits / ran） |
+| `VERIFY_DIFF <track>: {...}` | 呼2 が実際に変えた量。script が呼2 の前に書く改稿前の写し `state/<line>/pre-verify/{date}.md` と比べる: 変更範囲の数・字数の増減・消えた文・数字の増減・新しい URL・frontmatter / 機会メモ / ソース節の変更の有無。metrics の `verification` に合算する |
+| `WARN: Line <track> clarity pass: …` | verify-diff が verification プロトコルの禁止事項（frontmatter、機会メモ、`(未解決 …)` の付記以外のソース節、原稿に無かった URL）の改稿か、`verify.json` と呼2 の完了報告の件数の食い違いを見つけた |
+| `WARN: Line <track> pre-verify copy failed — …` / `WARN: Line <track> verify-diff could not run (non-fatal)` | 改稿前の写しを書けなかったか比べられなかった。呼2 の結果は残り、改稿の差分だけが記録されない |
 | `WARN: report lint hard fail (ctl-016): ...` | 決定論 lint がソース節不在・出典 0 件を検出 |
 | `WARN: clarity pass failed ...` | 呼2（検証 + clarity）の失敗 (fail-open — run 全体は成功のまま、そのラインは `unverified` として計上) |
 | `Completed successfully` | 当日担当ラインが全て完了・レポートゲート通過（全ライン quiet の日も含む） |

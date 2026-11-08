@@ -36,8 +36,9 @@ daily-research/
 │       ├── env.sh / log.sh / notify.sh / lock.sh / auth.sh / claude.sh / billing.sh
 │       └── dr_pipeline.py              # Single stdlib-only JSON/TOML parsing module
 ├── state/                               # Per-line brief.md (static, written by you) / pending.md /
-│                                        #   watched-sources.md (ecosystem lines) / runs/{date}.md (evidence file) / runs/{date}.json
-│                                        #   (run receipt) / runs/{date}.verify.json (gitignored)
+│                                        #   watched-sources.md + watched-archive.md (ecosystem lines) / runs/{date}.md (evidence file) /
+│                                        #   runs/{date}.json (run receipt) / runs/{date}.verify.json / pre-verify/{date}.md
+│                                        #   (call 2's before-copy, written by the script, not the model) (gitignored)
 ├── graph.jsonld                         # FROZEN archive (retired concept-graph pipeline)
 ├── com.example.daily-research.plist    # launchd schedule (AM 5:00, research)
 ├── tests/
@@ -171,7 +172,7 @@ The run is invoked with `cd "$TARGET_REPO"` so the repo's own CLAUDE.md auto-loa
 | `-p` | Paths of the note, the evidence file, and `runs/{date}.verify.json` (the only two writable files) | Non-interactive mode |
 | `--append-system-prompt-file` | `prompts/verification-protocol.md` | Inject clarity (Step A) then source verification (Step B) |
 | `--allowedTools` | `Read,WebFetch` + `Edit` of the day's note and `runs/{date}.verify.json` | Only the note and the verification result can be written |
-| `--disallowedTools` | `Bash,Task,NotebookEdit` + `WebSearch` | Verification re-fetches the sources in the evidence file and the ソース section; it starts no new search |
+| `--disallowedTools` | `Bash,Task,NotebookEdit` + `WebSearch` + `Edit(state/<line>/pre-verify/**)` | Verification re-fetches the sources in the evidence file and the ソース section; it starts no new search. The before-copy that verify-diff compares against stays out of reach |
 | `--max-turns` | `30` | Enough depth to WebFetch every claim |
 | `--model` | `[verification] model` (default `sonnet`) | Raise to opus if misses become visible |
 
@@ -187,7 +188,7 @@ The research run is bounded two ways: `--max-turns 55` and a 25-minute external 
 
 The report-existence gate (ctl-015) reads the run receipt `state/<line>/runs/{date}.json`: a missing or invalid receipt fails the line, `article` / `brief` require a run-scoped report, and `quiet` / `hold` pass without a file. Run scope is decided with `find -newer "$LOCK_DIR/pid"` because bash 3.2's `-nt` only has second resolution. A receipt claiming quiet/hold while a report exists loses to the file (file wins) and is counted as `mismatch`; a quiet/hold with `reason_code = fetch_failed` or zero web searches is counted as `suspect`.
 
-Call 2 (verification + clarity, ADR-0017) runs after the gate: a fresh-context process (`--max-turns 30`, `CLAUDE_TIMEOUT=1200`, `--allowedTools` = Read + WebFetch + Edit of the day's note and `runs/{date}.verify.json`, with WebSearch added to `--disallowedTools`) reads the finished note as a first-contact reader, fixes comprehension stumbles, and then checks every claim in the evidence file against its source. Its failure is fail-open: the log records `WARN: clarity pass failed`, the unverified (or, on timeout, partially revised) note survives, and `FINAL_EXIT` is unaffected — but the line is reported as `unverified` in the metrics and the notification.
+Call 2 (verification + clarity, ADR-0017) runs after the gate: a fresh-context process (`--max-turns 30`, `CLAUDE_TIMEOUT=1200`, `--allowedTools` = Read + WebFetch + Edit of the day's note and `runs/{date}.verify.json`, with WebSearch added to `--disallowedTools`) reads the finished note as a first-contact reader, fixes comprehension stumbles, and then checks every claim in the evidence file against its source. Its failure is fail-open: the log records `WARN: clarity pass failed`, the unverified (or, on timeout, partially revised) note survives, and `FINAL_EXIT` is unaffected — but the line is reported as `unverified` in the metrics and the notification. Before call 2 the script copies the note to `state/<line>/pre-verify/{date}.md` (outside every model write path; the path is removed first and must end up a regular file); after call 2, `dr_pipeline.py verify-diff` compares the two and logs `VERIFY_DIFF`, so call 2's real edits are recorded independently of its own report.
 
 `metrics.jsonl` keeps the pre-ADR-0008 record shape for compatibility with `expect-check` / `/dr-review`: the research run JSON is aggregated into the `pass2` field, `pass1` is always `None`, `fallback_used` means "a retry occurred" (`pass2` sums every attempt), `source` is `live` or `test` (runs under `DR_FORCE_TRACK` / `DR_ONLY_TRACK` are recorded as `test` and excluded from `expect-check` / `/dr-review` aggregation), and `clarity_pass` records call 2's `{ran, ok, cost, turns, ...}` (the label is kept for compatibility; what it measures is the verification + clarity pass). Each record also carries `line_states {article, brief, quiet, hold, mismatch, suspect, unverified}` (always emitted, zeros included) and `verification {supported, partial, unsupported, unverifiable, edits, lines_verified}` (`None` on a day with no VERIFY line). Verdicts themselves are never stored — the eval is in-loop (ADR-0010) and only the verification tally survives.
 
