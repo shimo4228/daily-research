@@ -1025,6 +1025,60 @@ def test_metrics_append_sums_audit_lines_and_adds_cost_to_total(monkeypatch, cap
     assert rec["total_cost"] == pytest.approx(1.4)
 
 
+BACKFILL_LOG_AUDIT = """\
+[2026-11-08 05:00:00] === Starting daily research ===
+[2026-11-08 05:10:00] SUMMARY Run(akc): cost=$1.0000 turns=10 duration=100s tokens_in=100 tokens_out=200 searches=5
+[2026-11-08 05:15:00] SUMMARY Clarity: cost=$0.5000 turns=5 duration=50s tokens_in=10 tokens_out=20
+[2026-11-08 05:20:00] SUMMARY Audit: cost=$0.3000 turns=12 duration=60s tokens_in=9000 tokens_out=900
+[2026-11-08 05:21:00] SUMMARY AuditConfirm: cost=$0.0500 turns=4 duration=9s tokens_in=900 tokens_out=100
+[2026-11-08 05:21:00] AUDIT akc: {"ran": true, "reason": null, "claims": 10, "candidates": 1, "confirmed": 1, "applied": 1, "cost": 0.35, "turns": 12}
+[2026-11-08 05:22:00] AUDIT wide: {"ran": false, "reason": "E_TRANSIENT", "cost": 0.1}
+[2026-11-08 05:22:00] AUDIT broken: {not json
+[2026-11-08 05:23:00] === Completed successfully ===
+"""
+
+
+@pytest.mark.unit
+def test_metrics_backfill_restores_the_audit_from_audit_lines(monkeypatch, capsys, tmp_path):
+    # 救済した record の total_cost に監査の費用が入る。SUMMARY Audit / AuditConfirm 行は数えない (2 重になる)
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "2026-11-08.log").write_text(BACKFILL_LOG_AUDIT)
+    metrics = tmp_path / "metrics.jsonl"
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)])
+    assert rc == 0 and "backfilled 1 run(s)" in out
+    rec = json.loads(metrics.read_text())
+    audits = [
+        json.loads(x.split(": ", 1)[1])
+        for x in BACKFILL_LOG_AUDIT.splitlines()
+        if "] AUDIT akc" in x or "] AUDIT wide" in x
+    ]
+    v = rec["verification"]
+    assert v == dr_pipeline._sum_audit(audits)
+    assert (v["audit_lines"], v["audit_ran"], v["audit_applied"], v["audit_cost"]) == (
+        2,
+        1,
+        1,
+        0.45,
+    )
+    assert rec["total_cost"] == pytest.approx(1.0 + 0.5 + 0.45)
+    assert not {"audit", "auditconfirm", "audits"} & set(rec)
+
+
+@pytest.mark.unit
+def test_metrics_backfill_without_audit_lines_keeps_verification_none(
+    monkeypatch, capsys, tmp_path
+):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    log = "".join(x + "\n" for x in BACKFILL_LOG_AUDIT.splitlines() if "] AUDIT " not in x)
+    (logs / "2026-11-08.log").write_text(log)
+    metrics = tmp_path / "metrics.jsonl"
+    run_cmd(monkeypatch, capsys, ["metrics-backfill", str(metrics), str(logs)])
+    rec = json.loads(metrics.read_text())
+    assert rec["verification"] is None and rec["total_cost"] == pytest.approx(1.5)
+
+
 @pytest.mark.unit
 def test_metrics_append_without_audit_keeps_the_old_shape(monkeypatch, capsys, tmp_path):
     v = metrics_append(monkeypatch, capsys, tmp_path, VERIFY_LINE)["verification"]

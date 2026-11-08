@@ -1417,11 +1417,14 @@ def cmd_metrics_append(argv: list[str]) -> int:
 
 # Pass[12] = 旧 2-pass 形式 (〜2026-08)、Run(<track>) = per-repo 形式 (ADR-0008)、
 # Clarity = 呼2 clarity 改稿 (ADR-0010)。per-repo の Run 行は pass2 に合算して
-# 旧レコード形へ写像する。
+# 旧レコード形へ写像する。呼3 の SUMMARY Audit / AuditConfirm 行は読まない — 同じ費用と件数を
+# AUDIT 行 (_AUDIT_LOG_RE) が持ち、両方を読むと監査の費用を 2 重に数える。
 _SUMMARY_RE = re.compile(
     r"\[([\d: -]+)\] SUMMARY (Pass[12]|Run\([\w-]+\)|Clarity): cost=\$([\d.]+) turns=(\d+) "
     r"duration=(\d+)s tokens_in=(\d+) tokens_out=(\d+)(?: searches=(\d+))?"
 )
+# 呼3 の AUDIT 行 (producer = daily-research.sh audit_pass の log "AUDIT <track>: <audit-apply の 1 行目>")
+_AUDIT_LOG_RE = re.compile(r"\] AUDIT [\w-]+: (\{.*\})\s*$")
 
 
 # 試験 seam の run がログに残す行 (producer = scripts/daily-research.sh の
@@ -1433,6 +1436,29 @@ def _backfill_kind(source: object) -> str:
     """record の source → 重複判定の種別 "live" | "test"。backfill と source の無い旧 record は
     metrics-append の live run と同じ種別 (試験 run の rescue は source "test" で書く)。"""
     return "test" if source == "test" else "live"
+
+
+def _backfill_add_summary(run: dict, m: re.Match) -> None:
+    """_SUMMARY_RE の 1 行を backfill の run に足す。Run(<track>) は pass2 に合算、Clarity は clarity_pass、
+    Pass1 / Pass2 はそのまま。"""
+    ts, label = m.group(1), m.group(2)
+    run["ts"] = ts.replace(" ", "T")
+    metrics = {
+        "cost": float(m.group(3)),
+        "turns": int(m.group(4)),
+        "duration_s": int(m.group(5)),
+        "tokens_in": int(m.group(6)),
+        "tokens_out": int(m.group(7)),
+        "searches": int(m.group(8) or 0),
+    }
+    if label.startswith("Run("):
+        # per-repo 形式 (ADR-0008): 全 Run を pass2 に合算
+        run["pass2"] = _sum_pass_metrics([run["pass2"], metrics] if run["pass2"] else [metrics])
+    elif label == "Clarity":
+        # ok はログの WARN 行から後追いで False にする (cmd_metrics_backfill)
+        run["clarity_pass"] = {"ran": True, "ok": True, **metrics}
+    else:
+        run[label.lower()] = metrics
 
 
 # metrics-append が record を書いた run の印 (producer = cmd_metrics_append の print。daily-research.sh が
@@ -1451,6 +1477,8 @@ _APPENDED_LOG_PREFIX = "metrics: appended "
 # 印の無い run (metrics-append の前に死んだ再実行など) は、同じ日に記録済みの run があっても救う。
 # 種別はログの run が試験 seam の行を持てば test、無ければ live。書く record の source は live なら
 # "backfill"、test なら "test" (_load_metrics の既定が本番の集計から除く)。
+# verification はログから復元しない。例外は呼3 の AUDIT 行で、run に AUDIT 行があれば verification を
+# _sum_audit の audit_* だけにする (audit_cost が total_cost に入る。呼2 の VERIFY の件数は戻さない)。
 def cmd_metrics_backfill(argv: list[str]) -> int:
     import os
 
@@ -1501,28 +1529,15 @@ def cmd_metrics_backfill(argv: list[str]) -> int:
                     if _SEAM_LOG_RE.search(line):
                         run["source"] = "test"
                         continue
+                    am = _AUDIT_LOG_RE.search(line)
+                    if am:
+                        audit = _json_object(am.group(1))
+                        if audit is not None:
+                            run.setdefault("audits", []).append(audit)
+                        continue
                     m = _SUMMARY_RE.search(line)
                     if m:
-                        ts, label = m.group(1), m.group(2)
-                        run["ts"] = ts.replace(" ", "T")
-                        metrics = {
-                            "cost": float(m.group(3)),
-                            "turns": int(m.group(4)),
-                            "duration_s": int(m.group(5)),
-                            "tokens_in": int(m.group(6)),
-                            "tokens_out": int(m.group(7)),
-                            "searches": int(m.group(8) or 0),
-                        }
-                        if label.startswith("Run("):
-                            # per-repo 形式 (ADR-0008): 全 Run を pass2 に合算
-                            run["pass2"] = _sum_pass_metrics(
-                                [run["pass2"], metrics] if run["pass2"] else [metrics]
-                            )
-                        elif label == "Clarity":
-                            # ok はログの WARN 行から後追いで False にする (下記)
-                            run["clarity_pass"] = {"ran": True, "ok": True, **metrics}
-                        else:
-                            run[label.lower()] = metrics
+                        _backfill_add_summary(run, m)
                         continue
                     if "WARN: clarity pass failed" in line:
                         # SUMMARY 行なし (出力ゼロの失敗 = 典型) でも発動事実は残す
@@ -1545,6 +1560,7 @@ def cmd_metrics_backfill(argv: list[str]) -> int:
                         run["final_class"] = fm.group(1) if fm else "FAIL"
 
             for run in runs:
+                audits = run.pop("audits", [])
                 if run["pass1"] is None and run["pass2"] is None:
                     continue  # SUMMARY 行のない中断 run はデータなし
                 was_appended = run.pop("appended", False)
@@ -1552,6 +1568,8 @@ def cmd_metrics_backfill(argv: list[str]) -> int:
                 backfilled_before = (run["date"], run["ts"]) in recorded_ts
                 if backfilled_before or (was_appended and kind in recorded_kinds):
                     continue
+                if audits:
+                    run["verification"] = _sum_audit(audits)
                 run["total_cost"] = _total_cost(run)
                 out.write(json.dumps(run, ensure_ascii=False) + "\n")
                 appended += 1
