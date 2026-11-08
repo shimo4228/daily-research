@@ -1467,9 +1467,14 @@ def _spend_totals(ledger: str, date_s: str) -> tuple[float, float, list[str]]:
         if not isinstance(r, dict):
             unreadable.append(f"line {n} (not an object)")
             continue
+        # spend-add は cost_usd を必ず数で書く。無い・null の行 (手で編集した台帳) を 0 ドルに
+        # 数えると、その費用が累計から黙って消える。偽値 ("" / {}) も 0 に読み替えない
+        if r.get("cost_usd") is None:
+            unreadable.append(f"line {n} (no cost_usd)")
+            continue
         try:
             d = str(r.get("date", ""))
-            c = float(r.get("cost_usd", 0) or 0)
+            c = float(r["cost_usd"])
         except (ValueError, TypeError, OverflowError):  # OverflowError: float に収まらない整数
             unreadable.append(f"line {n} (cost_usd is not a number)")
             continue

@@ -185,10 +185,46 @@ def test_spend_gate_reports_count_of_unreadable_lines(monkeypatch, capsys, tmp_p
     )
     assert rc == 2
     assert out == ""
-    # 2 行 (非 JSON と非 object) が読めない。1 行目で数え止めず、行番号と理由を名指す
+    # 3 行 (非 JSON・非 object・cost_usd の無い行) が読めない。1 行目で数え止めず、行番号と理由を名指す
     assert err == (
-        f"spend-gate: 2 unreadable line(s) in {ledger}: line 1 (not JSON), line 3 (not an object)\n"
+        f"spend-gate: 3 unreadable line(s) in {ledger}: line 1 (not JSON), line 3 (not an object), "
+        "line 4 (no cost_usd)\n"
     )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "row,reason",
+    [
+        ('{"date": "2026-11-02"}', "no cost_usd"),
+        ('{"date": "2026-11-02", "cost_usd": null}', "no cost_usd"),
+        # 偽値を 0 に読み替えない (`or 0` で "" / {} が 0 ドルになっていた)
+        ('{"date": "2026-11-02", "cost_usd": ""}', "cost_usd is not a number"),
+        ('{"date": "2026-11-02", "cost_usd": {}}', "cost_usd is not a number"),
+    ],
+    ids=["missing", "null", "empty-string", "empty-object"],
+)
+def test_spend_gate_row_without_cost_is_unreadable(monkeypatch, capsys, tmp_path, row, reason):
+    # spend-add は必ず cost_usd を数で書く。無い行 (手で編集した台帳) を 0 ドルに数えると、その行の
+    # 費用が累計から黙って消え、上限の判定が甘くなる
+    ledger = _write(tmp_path, "l.jsonl", '{"date": "2026-11-02", "cost_usd": 1}\n' + row + "\n")
+    rc, out, err = run_cmd(
+        monkeypatch, capsys, ["spend-gate", ledger, "2026-11-02", "100", "10", "1"]
+    )
+    assert rc == 2
+    assert out == ""
+    assert err == f"spend-gate: 1 unreadable line(s) in {ledger}: line 2 ({reason})\n"
+
+
+@pytest.mark.unit
+def test_spend_gate_zero_cost_is_a_readable_row(monkeypatch, capsys, tmp_path):
+    # 0 は報告された費用 (spend-add が total_cost_usd: 0 を記録する)。読めない行にしない
+    ledger = _write(tmp_path, "l.jsonl", '{"date": "2026-11-02", "cost_usd": 0}\n')
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["spend-gate", ledger, "2026-11-02", "100", "10", "1"]
+    )
+    assert rc == 0
+    assert out == "ok\t0.00\t0.00\n"
 
 
 @pytest.mark.unit
