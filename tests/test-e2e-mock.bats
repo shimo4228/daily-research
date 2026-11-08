@@ -1479,6 +1479,8 @@ PY
   # repo line は watchlist を書かない
   refute_grep -q "watched-sources" "$MOCK_HOME/.allowed_$PICKED"
   refute_grep -q "watched-archive" "$MOCK_HOME/.allowed_$PICKED"
+  # watchlist は ecosystem line の書き込み先なので eco の deny には入らない (repo line の deny には入る — 下の厳密一致)
+  refute_grep -q "watched-" "$MOCK_HOME/.disallowed_eco"
   grep -qF "Edit(//${MOCK_PROJECT#/}/state/$PICKED/pending.md)" "$MOCK_HOME/.allowed_$PICKED"
 
   # repo line の実行形は不変
@@ -1488,7 +1490,7 @@ PY
   grep -qx -- "--safe-mode" "$MOCK_HOME/.args_$PICKED"
   grep -A1 -x -- '--tools' "$MOCK_HOME/.args_$PICKED" | grep -qx "WebSearch,WebFetch,Read,Glob,Grep,Edit,Write"
   grep -A1 -x -- '--tools' "$MOCK_HOME/.args_eco" | grep -qx "WebSearch,WebFetch,Read,Glob,Grep,Edit,Write"
-  [ "$(cat "$MOCK_HOME/.disallowed_$PICKED")" = "Bash,Task,NotebookEdit,Read(//${MOCK_HOME#/}/.claude/**),Read(//${MOCK_HOME#/}/.claude.json),Read(//${MOCK_HOME#/}/.codex/**),Read(//${MOCK_HOME#/}/.config/**),Read(//${MOCK_HOME#/}/.ssh/**),Read(//${MOCK_HOME#/}/.aws/**),Read(//${MOCK_HOME#/}/.gnupg/**),Read(//${MOCK_HOME#/}/.netrc),Read(//${MOCK_HOME#/}/**/logs/episodes/**),Read(//${MOCK_HOME#/}/.config/daily-research/**),Edit(//${MOCK_PROJECT#/}/state/$PICKED/brief.md),Edit(//${MOCK_PROJECT#/}/state/$PICKED/playbook.md),Edit(//${MOCK_PROJECT#/}/past_topics.json)" ]
+  [ "$(cat "$MOCK_HOME/.disallowed_$PICKED")" = "Bash,Task,NotebookEdit,Read(//${MOCK_HOME#/}/.claude/**),Read(//${MOCK_HOME#/}/.claude.json),Read(//${MOCK_HOME#/}/.codex/**),Read(//${MOCK_HOME#/}/.config/**),Read(//${MOCK_HOME#/}/.ssh/**),Read(//${MOCK_HOME#/}/.aws/**),Read(//${MOCK_HOME#/}/.gnupg/**),Read(//${MOCK_HOME#/}/.netrc),Read(//${MOCK_HOME#/}/**/logs/episodes/**),Read(//${MOCK_HOME#/}/.config/daily-research/**),Edit(//${MOCK_PROJECT#/}/state/$PICKED/brief.md),Edit(//${MOCK_PROJECT#/}/state/$PICKED/playbook.md),Edit(//${MOCK_PROJECT#/}/past_topics.json),Edit(//${MOCK_PROJECT#/}/state/$PICKED/watched-sources.md),Edit(//${MOCK_PROJECT#/}/state/$PICKED/watched-archive.md)" ]
 }
 
 @test "E2E ecosystem: past themes are the line's own plus other lines' titles of the last 7 days (H01)" {

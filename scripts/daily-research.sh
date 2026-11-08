@@ -361,6 +361,10 @@ if [ "$LINE_MODE" = "ecosystem" ]; then
 else
   LINE_CWD="$TARGET_REPO"
   LINE_DISALLOWED="$DISALLOWED_TOOLS,$STATE_DENY"
+  # watchlist とその archive は ecosystem line だけの書き込み先 (repo line の watched-sources は ADR-0019
+  # Decision 3 で撤去)。repo line では書き込み先から外した場所なので deny でも塞ぐ
+  LINE_DISALLOWED="$LINE_DISALLOWED,Edit(//${STATE_DIR#/}/watched-sources.md)"
+  LINE_DISALLOWED="$LINE_DISALLOWED,Edit(//${STATE_DIR#/}/watched-archive.md)"
   LINE_CWD_MISSING="target_repo が存在しない"
   LINE_PROTOCOL="$PROJECT_DIR/prompts/repo-research-protocol.md"
   LINE_RUN_LABEL="今日のデイリーリサーチ (per-repo line 実行) を、システムプロンプトに追記された
