@@ -191,8 +191,9 @@ fi
 # 共通注入素材 (テンプレート)
 # TEMPLATE は既定 (共通テンプレート)。[tracks.<x>].template を持つ line は
 # ループ内で LINE_TEMPLATE に上書き解決される (template-path subcommand)。
-# 過去テーマ履歴 (PAST_THEMES) は line ごとにループ内で再計算する — 同日の先行 line が
-# past_topics.json に追記した問いを後続 line が見られるように (ADR-0017)。
+# 過去テーマ履歴 (PAST_THEMES) は line ごとにループ内で再計算する — 当該 line の節だけを出し
+# (呼1 の照合は line 内の問い単位)、ecosystem line には他 line の直近 7 日の題を足す。同日の先行 line が
+# past_topics.json に追記した題もここで入る (ADR-0017)。
 TEMPLATE=$(cat "$PROJECT_DIR/templates/report-template.md")
 # 呼2 (clarity + 原典照合) のモデル。[verification].model、既定 sonnet (ADR-0017)
 VERIFY_MODEL=$(python3 "$DR_PY" config-get "$PROJECT_DIR/config.toml" verification.model sonnet 2>> "$LOG_FILE") \
@@ -364,8 +365,13 @@ LINE_JSON=""
 if [ ! -d "$LINE_CWD" ]; then
   log "WARN: $LINE_CWD_MISSING: $LINE_CWD — line $TRACK を skip"
 else
-  # 過去の問い履歴 (line ごとに再計算。同日の先行 line の追記を反映する)
-  PAST_THEMES=$(python3 "$DR_PY" past-themes 2>> "$LOG_FILE") \
+  # 過去の問い履歴 (line ごとに再計算)。他 line の全履歴は毎 request 読まれる土台を太らせるだけなので
+  # 当該 line に絞る。ecosystem line (広域) は同じ出来事を同日に重ねないよう他 line の直近の題も見る。
+  PAST_THEMES_ARGS=(--line "$TRACK")
+  if [ "$LINE_MODE" = "ecosystem" ]; then
+    PAST_THEMES_ARGS+=(--others-days 7 --date "$DATE")
+  fi
+  PAST_THEMES=$(python3 "$DR_PY" past-themes "${PAST_THEMES_ARGS[@]}" 2>> "$LOG_FILE") \
     || PAST_THEMES="(過去テーマ履歴の生成失敗。past_topics.json を Read して重複を確認すること)"
 
   # line 定義 (name / focus / sources / self_signals + 選定後に読む context_files) を config から生成

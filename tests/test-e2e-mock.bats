@@ -1271,7 +1271,7 @@ PY
 
 # === ADR-0017: lines_per_day window ===
 
-@test "E2E window: lines_per_day = 2 runs both lines and line 2 sees line 1's question" {
+@test "E2E window: lines_per_day = 2 runs both lines; each line's history is its own (H01)" {
   echo "normal" > "$MOCK_HOME/.mock_scenario"
   # [general] に lines_per_day を差し込む (既存 mock config は K=1 のまま)
   python3 - "$MOCK_PROJECT/config.toml" << 'PY'
@@ -1290,8 +1290,10 @@ PY
   echo "$log_content" | grep -q "Line akc report gate passed"
   echo "$log_content" | grep -q "Line authorship report gate passed"
   echo "$log_content" | grep -q "Line states: article=2 brief=0 quiet=0 hold=0 (今朝: akc, authorship)"
-  # past-themes は line ごとに再計算 — 後続 line は先行 line の問いを見る (orchestrator が receipt から追記)
-  grep -q "mock question for akc — mock scope" "$MOCK_HOME/.prompt_authorship"
+  # past-themes は当該 line だけ (H01) — repo line は同日の先行 line の問いを履歴に持たない
+  refute_grep -q "mock question for akc" "$MOCK_HOME/.prompt_authorship"
+  grep -q "過去テーマ履歴 (この line の直近 10 件" "$MOCK_HOME/.prompt_authorship"
+  refute_grep -q "他 line の直近" "$MOCK_HOME/.prompt_authorship"
   python3 - "$MOCK_PROJECT/past_topics.json" "$DR_DATE" << 'PY'
 import json, sys
 topics = json.load(open(sys.argv[1]))["topics"]
@@ -1369,6 +1371,33 @@ PY
   grep -A1 -x -- '--tools' "$MOCK_HOME/.args_$PICKED" | grep -qx "WebSearch,WebFetch,Read,Glob,Grep,Edit,Write"
   grep -A1 -x -- '--tools' "$MOCK_HOME/.args_eco" | grep -qx "WebSearch,WebFetch,Read,Glob,Grep,Edit,Write"
   [ "$(cat "$MOCK_HOME/.disallowed_$PICKED")" = "Bash,Task,NotebookEdit,Read(//${MOCK_HOME#/}/.claude/**),Read(//${MOCK_HOME#/}/.claude.json),Read(//${MOCK_HOME#/}/.codex/**),Read(//${MOCK_HOME#/}/.config/**),Read(//${MOCK_HOME#/}/.ssh/**),Read(//${MOCK_HOME#/}/.aws/**),Read(//${MOCK_HOME#/}/.gnupg/**),Read(//${MOCK_HOME#/}/.netrc),Read(//${MOCK_HOME#/}/**/logs/episodes/**),Read(//${MOCK_HOME#/}/.config/daily-research/**),Edit(//${MOCK_PROJECT#/}/state/$PICKED/brief.md),Edit(//${MOCK_PROJECT#/}/state/$PICKED/playbook.md),Edit(//${MOCK_PROJECT#/}/past_topics.json)" ]
+}
+
+@test "E2E ecosystem: past themes are the line's own plus other lines' titles of the last 7 days (H01)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  add_ecosystem_daily_line
+  cat > "$MOCK_PROJECT/past_topics.json" << EOF
+{"topics": [
+  {"date": "2026-08-01", "track": "eco", "title": "", "question": "eco old question"},
+  {"date": "2026-08-01", "track": "akc", "title": "akc stale title", "question": "akc stale question"},
+  {"date": "2026-08-10", "track": "akc", "title": "akc recent title", "question": "akc recent question"}
+]}
+EOF
+
+  run run_script
+  [ "$status" -eq 0 ]
+
+  # ecosystem line: 自 line の問い + 他 line の直近 7 日の題 (同日の先行 line = 輪番の line を含む)
+  grep -q "eco old question" "$MOCK_HOME/.prompt_eco"
+  grep -q "=== 他 line の直近 7 日の題" "$MOCK_HOME/.prompt_eco"
+  grep -qx -- "- 2026-08-10 akc: akc recent title" "$MOCK_HOME/.prompt_eco"
+  grep -qx -- "- $DR_DATE $PICKED: mock title for $PICKED" "$MOCK_HOME/.prompt_eco"
+  refute_grep -q "akc stale" "$MOCK_HOME/.prompt_eco"
+  refute_grep -q "akc recent question" "$MOCK_HOME/.prompt_eco"   # 他 line は題だけ
+  # repo line: 自 line の節だけ、他 line 節なし
+  refute_grep -q "eco old question" "$MOCK_HOME/.prompt_$PICKED"
+  refute_grep -q "akc recent" "$MOCK_HOME/.prompt_$PICKED"
+  refute_grep -q "他 line の直近" "$MOCK_HOME/.prompt_$PICKED"
 }
 
 @test "E2E ecosystem: the prompt carries no repo wording; the repo line's prompt is unchanged" {

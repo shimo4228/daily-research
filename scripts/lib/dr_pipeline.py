@@ -342,12 +342,98 @@ def cmd_rotation_pick(argv: list[str]) -> int:
     return 0
 
 
-# --- past-themes [past_topics_path] [config_path]: line 別直近 10 件の履歴を出力 ---
+# --- past-themes [past_topics_path] [config_path] [--line T [--others-days N [--date D]]] ---
+# line 別直近 10 件の問いの履歴を出力する (呼1 のタスクプロンプトに注入される dedup 用データ)。
+# --line T: T (と aliases) の節だけを出す。呼1 の照合は line 内の問い単位 (両プロトコル Step 3) なので、
+#   他 line の履歴は毎 request 読まれる土台を太らせるだけ (全 7 line で ~15k 字、当該 line は ~2k 字)。
+#   無指定は全 line (運用者が手で全体を見る用)。
+# --others-days N (--line 必須): 他 line の [D-(N-1), D] の題を 1 行ずつ足す。同日に別 line が同じ出来事を
+#   書く重複を避ける参考で、SH は ecosystem line (広域) にだけ渡す。--date D の既定は今日。
+# flag は位置引数の前後どちらに置いてもよい。flag の誤りは rc 64、未知の line は rc 1 (stdout 空)。
+_PAST_THEMES_FLAGS = ("--line", "--others-days", "--date")
+_PAST_THEMES_TITLE_MAX = 100
+
+
+def _past_themes_args(argv: list[str]) -> tuple[str, str, str | None, int | None, str]:
+    """past-themes の argv を (past_path, config_path, line|None, others_days|None, anchor) に解く。
+    anchor は検証済みの YYYY-MM-DD。誤りは ValueError(msg) — 呼ぶ側が rc 64 にする。"""
+    from datetime import date as _date
+
+    positional: list[str] = []
+    opts: dict[str, str] = {}
+    i = 0
+    while i < len(argv):
+        if argv[i] in _PAST_THEMES_FLAGS:
+            if i + 1 >= len(argv):
+                raise ValueError(f"{argv[i]} needs a value")
+            opts[argv[i]] = argv[i + 1]
+            i += 2
+        else:
+            positional.append(argv[i])
+            i += 1
+    only = opts.get("--line")
+    others_days = None
+    if "--others-days" in opts:
+        if not only:
+            raise ValueError("--others-days needs --line")
+        try:
+            others_days = int(opts["--others-days"])
+        except ValueError:
+            raise ValueError(f"invalid --others-days {opts['--others-days']!r}") from None
+        if others_days < 1:
+            raise ValueError("--others-days must be >= 1")
+    try:
+        anchor = (
+            _date.fromisoformat(opts["--date"]) if "--date" in opts else _date.today()
+        ).isoformat()
+    except ValueError:
+        raise ValueError(f"invalid --date {opts['--date']!r}") from None
+    past_path = positional[0] if len(positional) >= 1 else "past_topics.json"
+    config_path = positional[1] if len(positional) >= 2 else "config.toml"
+    return past_path, config_path, only, others_days, anchor
+
+
+def _print_other_lines(
+    by_line: dict[str, list[dict[str, object]]], only: str, days: int, anchor: str
+) -> None:
+    """他 line の [anchor-(days-1), anchor] の題を日付順に 1 行ずつ出す (自 line は除く)。
+    anchor は _past_themes_args が検証した YYYY-MM-DD。"""
+    from datetime import date, timedelta
+
+    start = (date.fromisoformat(anchor) - timedelta(days=days - 1)).isoformat()
+    end = anchor
+    recent = sorted(
+        (
+            (str(t.get("date", "")), line, t)
+            for line, items in by_line.items()
+            if line != only
+            for t in items
+            if start <= str(t.get("date", "")) <= end
+        ),
+        key=lambda r: (r[0], r[1]),
+    )
+    print(
+        f"=== 他 line の直近 {days} 日の題 (同じ出来事を同日に重ねて書かないための参考。"
+        "重複の判定は上の line 内の問い単位) ==="
+    )
+    if not recent:
+        print("(該当なし)")
+    for d, line, t in recent:
+        head = re.sub(r"\s+", " ", str(t.get("title") or t.get("question"))).strip()
+        if len(head) > _PAST_THEMES_TITLE_MAX:
+            head = head[:_PAST_THEMES_TITLE_MAX] + "…"
+        print(f"- {d} {line}: {head}")
+    print()
+
+
 def cmd_past_themes(argv: list[str]) -> int:
     from collections import defaultdict
 
-    past_path = argv[0] if len(argv) >= 1 else "past_topics.json"
-    config_path = argv[1] if len(argv) >= 2 else "config.toml"
+    try:
+        past_path, config_path, only, others_days, anchor = _past_themes_args(argv)
+    except ValueError as e:
+        print(f"past-themes: {e}", file=sys.stderr)
+        return 64
 
     try:
         with open(past_path) as f:
@@ -359,6 +445,9 @@ def cmd_past_themes(argv: list[str]) -> int:
         _, tracks = _load_tracks(config_path)
     except ValueError as e:
         print(str(e), file=sys.stderr)
+        return 1
+    if only is not None and only not in tracks:
+        print(f"past-themes: unknown line {only!r}", file=sys.stderr)
         return 1
 
     # 旧 track 名 (aliases) を新 line に写像し、再編後も履歴 dedup を継続する
@@ -374,13 +463,16 @@ def cmd_past_themes(argv: list[str]) -> int:
         if line and (t.get("title") or t.get("question")):
             by_line[line].append(t)
 
-    print("=== 過去テーマ履歴 (line 別直近 10 件、問い単位) ===")
+    scope = "この line の直近 10 件" if only else "line 別直近 10 件"
+    print(f"=== 過去テーマ履歴 ({scope}、問い単位) ===")
     print("各行は「問い — 答えの範囲 (answer_scope)」。判定は問い単位で行う:")
     print("- 同じ問い + 同じ答え = 再選定禁止")
     print("- 同じ問い + 新証拠 = 更新として可 (何が新しい証拠かを本文に書く)")
     print("- 同じ topic + 別の問い = 可")
     print()
     for line, v in tracks.items():
+        if only is not None and line != only:
+            continue
         items = by_line.get(line, [])
         if not items:
             continue
@@ -395,6 +487,8 @@ def cmd_past_themes(argv: list[str]) -> int:
             suffix = f" — {str(scope)[:120]}" if scope else ""
             print(f"  - {t.get('date', '?')} {head}{suffix}")
         print()
+    if others_days is not None:
+        _print_other_lines(by_line, only, others_days, anchor)
     return 0
 
 

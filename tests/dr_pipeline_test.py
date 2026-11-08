@@ -1657,6 +1657,106 @@ def test_past_themes_groups_ecosystem_line(monkeypatch, capsys, tmp_path):
     assert "X は初めて動くコードを公開したか — v0.1.0 の release と依存関係まで" in out
 
 
+# --- past-themes --line: 呼1 の土台に載せる履歴を当該 line に絞る (hillclimb H01) ---
+
+
+def _past_multi(tmp_path):
+    past = tmp_path / "past.json"
+    past.write_text(
+        json.dumps(
+            {
+                "topics": [
+                    {"date": "2026-09-10", "track": "akc", "question": "akc old Q"},
+                    {"date": "2026-09-18", "track": "akc", "question": "akc recent Q"},
+                    {"date": "2026-09-19", "track": "agent_cognition", "question": "akc alias Q"},
+                    {"date": "2026-09-20", "track": "aap", "title": "aap T1", "question": "aap Q1"},
+                    {
+                        "date": "2026-09-13",
+                        "track": "aap",
+                        "title": "aap T-old",
+                        "question": "aap Q0",
+                    },
+                    {"date": "2026-09-14", "track": "ans", "title": "ans T", "question": "ans Q"},
+                    {"date": "2026-09-21", "track": "eco", "question": "eco Q", "title": ""},
+                    {"date": "2026-09-22", "track": "desire", "title": "future T"},
+                ]
+            }
+        )
+    )
+    return past
+
+
+@pytest.mark.unit
+def test_past_themes_line_flag_emits_only_that_line(monkeypatch, capsys, tmp_path):
+    past = _past_multi(tmp_path)
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["past-themes", str(past), CONFIG, "--line", "akc"])
+    assert rc == 0
+    assert "Track: akc (旧 track: agent_systems, agent_cognition を含む)" in out
+    assert "akc old Q" in out and "akc recent Q" in out
+    assert "akc alias Q" in out  # alias は当該 line に集約
+    assert "aap Q1" not in out and "Track: aap" not in out
+    assert "同じ問い + 同じ答え" in out  # 判定規則の見出しは残す
+    assert "他 line の直近" not in out  # --others-days なしでは他 line 節を出さない
+
+
+@pytest.mark.unit
+def test_past_themes_line_flag_position_is_free(monkeypatch, capsys, tmp_path):
+    # SH は既定パスのまま `past-themes --line X` と呼ぶ — flag は位置引数の前でもよい
+    past = _past_multi(tmp_path)
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["past-themes", "--line", "aap", str(past), CONFIG])
+    assert rc == 0
+    assert "aap Q1" in out and "akc old Q" not in out
+
+
+@pytest.mark.unit
+def test_past_themes_others_days_lists_recent_titles_of_other_lines(monkeypatch, capsys, tmp_path):
+    past = _past_multi(tmp_path)
+    args = ["past-themes", str(past), CONFIG_ECO, "--line", "eco", "--others-days", "7"]
+    rc, out, _ = run_cmd(monkeypatch, capsys, [*args, "--date", "2026-09-21"])
+    assert rc == 0
+    main, _, others = out.partition("=== 他 line の直近 7 日の題")
+    assert "eco Q" in main and "aap Q1" not in main
+    lines = [ln for ln in others.splitlines() if ln.startswith("- ")]
+    # 窓は date の 6 日前〜当日 (7 日)。title を優先し 1 行ずつ、日付順
+    assert lines == ["- 2026-09-18 akc: akc recent Q", "- 2026-09-20 aap: aap T1"], lines
+    assert (
+        "akc alias Q" not in others
+    )  # config に無い track (この config では alias なし) は出さない
+    assert "aap T-old" not in others  # 窓の外 (09-13)
+    assert "ans T" not in others  # 窓の外 (09-14)
+    assert "future T" not in others  # date より後は出さない
+    assert "eco Q" not in others  # 自 line は他 line 節に出さない
+
+
+@pytest.mark.unit
+def test_past_themes_others_days_section_present_when_empty(monkeypatch, capsys, tmp_path):
+    past = _past_multi(tmp_path)
+    args = ["past-themes", str(past), CONFIG_ECO, "--line", "eco", "--others-days", "7"]
+    rc, out, _ = run_cmd(monkeypatch, capsys, [*args, "--date", "2026-12-01"])
+    assert rc == 0
+    assert "=== 他 line の直近 7 日の題" in out
+    assert "(該当なし)" in out
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "extra,code",
+    [
+        (["--line", "nope"], 1),  # 未知の line
+        (["--others-days", "7"], 64),  # --line なし
+        (["--line", "akc", "--others-days", "x"], 64),
+        (["--line", "akc", "--others-days", "7", "--date", "bad"], 64),
+        (["--line"], 64),  # 値の欠落
+    ],
+)
+def test_past_themes_line_flag_errors(monkeypatch, capsys, tmp_path, extra, code):
+    past = _past_multi(tmp_path)
+    rc, out, err = run_cmd(monkeypatch, capsys, ["past-themes", str(past), CONFIG, *extra])
+    assert rc == code
+    assert out == ""
+    assert err
+
+
 # === billing (API 課金の設定・key・支出台帳・上限) ===
 
 
