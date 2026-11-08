@@ -144,14 +144,14 @@ launchctl list | grep daily-research
 | `Auth probe passed` | The real auth probe succeeded |
 | `ERROR: Auth probe failed (<mode>) — status=… result=…` | The probe failed (expired OAuth, or in api mode a rejected key / low credit / 429); the run stops before any line (exit 1) |
 | `WARN: API spend gate stopped the run (month $… / $…, day $… / $…, need $… per line) — stopping remaining lines` | api mode: the remaining budget can't cover one more line, or (after an `ERROR: … spend …` line) the ledger could not be written or read; the rest are skipped and named in `Lines not started: …` |
-| `ERROR: API spend gate failed (rc 2): spend-gate: N unreadable line(s) in …: line K (reason), … — cannot check the caps` | api mode: the gate could not total the ledger, so it stops instead of guessing. The message names each unreadable line of `state/api-spend.jsonl` and why (fix or remove those lines); `cannot read …` means the file itself could not be opened |
+| `ERROR: API spend gate failed (rc 2): spend-gate: N unreadable line(s) in …: line K (reason), … — cannot check the caps` | api mode: the gate could not total the ledger, so it stops instead of guessing. The message names the first five unreadable lines of `state/api-spend.jsonl` with their reasons and counts the rest as `and N more` (fix or remove those lines); `cannot read …` means the file itself could not be opened |
 | `Lines not started: a, b` | Lines the run stopped before starting (spend cap, or an auth / billing error) |
 | `ERROR: Line <track> hit a billing/rate-limit error — aborting remaining lines, no retry` | api mode: 429 or credit balance too low (`E_BILLING`) |
 | `WARN: Line <track> reached --max-budget-usd $… — no retry, going to gate` | The per-call cap stopped call 1; whatever it wrote goes to the gate |
 | `API spend: today $… / $…, month $… / $…` | api mode: totals from `state/api-spend.jsonl` after the run |
 | `ERROR: Another instance is running. Skipping.` | Lock directory `.daily-research.lock/` is held by a live `daily-research.sh` process |
 | `Config schema check passed` | `config.toml` matches the current (ADR-0008) schema |
-| `ERROR: config.toml schema check failed (the reason is on the line above; see config.example.toml)` | `dr_pipeline.py tracks` rejected `config.toml` (legacy schema, a bad line name, a wrong type for `daily` / `template` / `mode`, a malformed `repos`, or a bad `lines_per_day`); the reason is the line logged just before. The run stops before any line (exit 1) |
+| `ERROR: config.toml schema check failed (the reason is on the line above; see config.example.toml)` | `dr_pipeline.py tracks` rejected `config.toml` (legacy schema, a bad line name, a wrong type for `daily` / `template` / `mode`, an unknown `mode` value, `repos` / `context_files` on a `mode = "ecosystem"` line, a malformed `repos`, or a bad `lines_per_day`); the reason is the line logged just before. The run stops before any line (exit 1) |
 | `Rotation pick: a, b, c (ADR-0010/0017)` | The rotation window picked for today |
 | `Today's lines: N` | How many lines run today (`lines_per_day` + any daily lines) |
 | `=== Line: <track> (<repo path>) ===` | Per-line run starting with that repo as cwd (an ecosystem line has no repo and logs `no target repo`) |
@@ -168,7 +168,7 @@ launchctl list | grep daily-research
 | `WARN: Line <track> pending.md の項目が <state> の run で N 件増えた (…)` | A run other than hold added more `pending.md` items than its note's dated-deadline opportunities. The protocols add items only for hold questions and dated-deadline opportunities; log only, the line still succeeds |
 | `WARN: report gate failed for line <track> — no <date>_<track>_*.md (ctl-015)` | The receipt says article / brief but no report exists — counted as failed |
 | `WARN: report gate failed for line <track> — ... receipt ... (ctl-015)` | The run-scoped receipt is missing or invalid — counted as failed (a run that died before writing it) |
-| `Report existence gate passed: N report(s)` | Every picked line passed ctl-015. A day with a failed line, or one where an auth / billing error left picked lines unstarted, logs `=== Failed (E_PARTIAL:<failed lines>, exit code 1) ===` instead (the list after the colon is empty when only the unstarted lines are missing) |
+| `Report existence gate passed: N report(s)` | Every picked line passed ctl-015. A day with a failed line, or one where an auth / billing error left picked lines unstarted, logs `=== Failed (E_PARTIAL:<failed lines>, exit code 1) ===` instead when at least one line passed the gate, and `=== Failed (E_NO_REPORT:<failed lines>, exit code 1) ===` when none did (the list after the colon is empty when only the unstarted lines are missing) |
 | `Line states: article=N brief=N quiet=N hold=N (...)` | Today's breakdown; the published / quiet / unverified / suspected-fetch-failure segments appear only when non-empty |
 | `VERIFY <track>: {...}` | Call 2's verification tally (supported / partial / unsupported / unverifiable / edits / ran) |
 | `VERIFY_DIFF <track>: {...}` | What call 2 actually changed, compared against the before-copy `state/<line>/pre-verify/{date}.md` that the script writes before call 2: changed spans, characters added / removed, removed sentences, numbers added / removed, new URLs, and whether the frontmatter, 機会メモ or ソース section changed. Summed into the metrics record's `verification` |
@@ -184,7 +184,7 @@ launchctl list | grep daily-research
 |---------|------|
 | `今朝のリサーチレポートが完成しました (今朝: … / 更新なし: … / 未検証: …)` | All lines succeeded and at least one report was published |
 | `今朝は更新なし (更新なし: …)` | Every line ended quiet / hold (a success) |
-| `リサーチが一部失敗しました (今朝: … / 更新なし: … / failed: …)。ログを確認してください。` | E_PARTIAL — the failed lines are named. When an auth / billing error (401 / 403 / 429 / credit) stops the run while picked lines are still unstarted, the day is E_PARTIAL even if no line failed the gate, and those lines are listed under 未実行. An error in the last picked line leaves nothing unstarted, so that day's notification follows the gate alone (a note whose call 2 failed is listed under 未検証) |
+| `リサーチが一部失敗しました (今朝: … / 更新なし: … / failed: …)。ログを確認してください。` | E_PARTIAL — the failed lines are named. When an auth / billing error (401 / 403 / 429 / credit) stops the run while picked lines are still unstarted and at least one line passed the gate, the day is E_PARTIAL even if no line failed the gate, and those lines are listed under 未実行. A day where no line passed the gate is E_NO_REPORT instead, and its notification `リサーチが失敗しました (lines:…)` lists only the failed lines. An error in the last picked line leaves nothing unstarted, so that day's notification follows the gate alone (a note whose call 2 failed is listed under 未検証) |
 
 未検証 (unverified) lists lines whose call 2 failed or left no verify.json; their notes are published anyway. A quiet / hold flagged as a suspected fetch failure (zero web searches, or `reason_code = fetch_failed`) points at a network-side problem rather than a quiet day.
 
@@ -260,7 +260,7 @@ rm -rf .daily-research.lock
 - `Your credit balance is too low`: add credit on platform.claude.com.
 - `status=429`: rate limit. The run stops on purpose instead of backing off (a burst of rate limits is a policy signal). Re-run later by hand.
 - `API spend gate stopped the run`: the day's or month's remaining budget is below one line's reserve (`call1_max_usd + call2_max_usd`). Check `state/api-spend.jsonl`; raise the caps in `[billing]` only if the credit covers it.
-- `API spend gate stopped the run` right after `ERROR: API spend gate failed (rc 2): …` or `ERROR: API spend ledger could not be written …`: the caps could not be checked, so no line started. The rc 2 message names each unreadable ledger line and its reason; fix or remove those lines in `state/api-spend.jsonl` (or make the file writable again), then re-run.
+- `API spend gate stopped the run` right after `ERROR: API spend gate failed (rc 2): …` or `ERROR: API spend ledger could not be written …`: the caps could not be checked, so the gate stopped before the next line: every remaining line stays unstarted (all of them when this happens before the first line), and lines that already finished keep their results. The rc 2 message names the first five unreadable ledger lines with their reasons, plus `and N more`; fix or remove those lines in `state/api-spend.jsonl` (or make the file writable again), then re-run.
 
 The billing path never changes on its own: in subscription mode an `ANTHROPIC_API_KEY` exported in your shell is dropped, and in api mode only the key in `env_file` is used.
 

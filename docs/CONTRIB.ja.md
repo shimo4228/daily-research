@@ -188,7 +188,7 @@ run は `cd "$TARGET_REPO"` で起動される。`mode = "ecosystem"` のライ�
 |--------|---|------|
 | `-p` | 原稿パス + 根拠ファイルのパス（読み取りのみ）+ `runs/{date}.verify.json` のパス（書き込みは原稿と `verify.json` の 2 ファイルだけ） | 非対話モード |
 | `--max-budget-usd` | `[billing] call2_max_usd`（api モードのみ） | 呼び出しごとの支出上限 |
-| `--safe-mode` / `--tools` | `CALL2_TOOLS` | 呼1 と同じ起動形。daily-research 自身の CLAUDE.md も読み込まない — 記述規律は verification プロトコルとテンプレートが持つ |
+| `--safe-mode` / `--tools` | `CALL2_TOOLS` | 呼1 と同じ起動形。daily-research 自身の CLAUDE.md も読み込まない — 記述規律は verification プロトコルだけが持つ（呼2 のプロンプトが渡すのは原稿・根拠ファイル・`verify.json` のパスだけで、テンプレートは渡さない） |
 | `--permission-mode` | `default` | デフォルトの権限処理を使用 |
 | `--append-system-prompt-file` | `prompts/verification-protocol.md` | clarity（Step A）と原典照合（Step B）の手順を注入 |
 | `--allowedTools` | `Read,WebFetch` + 当日ノートと `runs/{date}.verify.json` の `Edit` | 原稿と検証結果だけを書き換え可能にする |
@@ -204,7 +204,7 @@ run は `cd "$TARGET_REPO"` で起動される。`mode = "ecosystem"` のライ�
 
 per-repo 単一パス設計は、2026-08-04 に旧中央 2 パス（Opus テーマ選定 → Sonnet リサーチ）パイプラインを置き換えた。同期 concept graph 越しのテーマ選定は裏付けサーベイに収束し、「進めるべき価値」を知る運用文脈は各 repo の中にあるため（ADR-0008）。
 
-リサーチ run は二重に制限される: `--max-turns 55` と 25 分の外部タイムアウト（`run_claude()` 経由の `CLAUDE_TIMEOUT=1500`。coreutils `timeout` が必要）。`classify_exit`（`lib/claude.sh`）が結果を分類する: `E_TRANSIENT`（timeout）と `E_FATAL` は 1 回だけリトライする — ただし attempt 1 がレポートか receipt を残していれば、リトライせずゲートへ進む。`E_AUTH`（401。api モードでは 403 も）と、api モードの `E_BILLING`（429 / クレジット残高）は、同じ認証・アカウントがどこでも失敗するため、リトライせずにこのラインと残りのラインを止める。`E_BUDGET`（呼び出しごとの `--max-budget-usd`）はリトライせずゲートへ進む。止める前に完走したラインの成果は残る。止めたことで当日担当ラインが始まらずに残ったら、ゲートに落ちたラインが無くてもその日は `E_PARTIAL`（exit 1。ゲートを通ったラインが無ければ `E_NO_REPORT`）になり、始めなかったラインは `Lines not started:` としてログに出て、通知の「未実行」に並ぶ。最後の担当ラインでのエラーは始めずに残るラインを作らないので、その日の分類はゲートだけで決まる。
+リサーチ run は二重に制限される: `--max-turns 55` と 25 分の外部タイムアウト（`run_claude()` 経由の `CLAUDE_TIMEOUT=1500`。coreutils `timeout` が必要）。`classify_exit`（`lib/claude.sh`）が結果を分類する: `E_TRANSIENT`（timeout）と `E_FATAL` は 1 回だけリトライする — ただし attempt 1 がレポートか receipt を残していれば、リトライせずゲートへ進む。`E_AUTH`（401。api モードでは 403 も）と、api モードの `E_BILLING`（429 / クレジット残高）は、同じ認証・アカウントがどこでも失敗するため、リトライせずにこのラインと残りのラインを止める。`E_BUDGET`（呼び出しごとの `--max-budget-usd`）はリトライせずゲートへ進む。止める前に完走したラインの成果は残る。止めたことで当日担当ラインが始まらずに残ったら、ゲートに落ちたラインが無くてもその日は `E_PARTIAL`（exit 1。ゲートを通ったラインが無ければ `E_NO_REPORT`）になり、始めなかったラインは `Lines not started:` としてログに出る。`E_PARTIAL` の通知はそれを「未実行」に並べ、`E_NO_REPORT` の通知（`リサーチが失敗しました (lines:…)`）は失敗したラインだけを並べる。最後の担当ラインでのエラーは始めずに残るラインを作らないので、その日の分類はゲートだけで決まる。
 
 レポート存在ゲート（ctl-015）は run receipt `state/<line>/runs/{date}.json` を読む: receipt 無し・不正は失敗、`article` / `brief` は run スコープのレポートを要求、`quiet` / `hold` はファイル無しで成功する。run スコープの判定は bash 3.2 の `-nt` が秒精度で信用できないため `find -newer "$LOCK_DIR/pid"` で行う。receipt が quiet/hold なのに記事がある場合は記事を優先し（file wins）`mismatch` を、`reason_code = fetch_failed` か web 検索 0 回の quiet/hold は `suspect` を計上する。
 

@@ -143,14 +143,14 @@ launchctl list | grep daily-research
 | `Auth probe passed` | 実際に呼び出す認証 probe が成功 |
 | `ERROR: Auth probe failed (<mode>) — status=… result=…` | probe が失敗（OAuth 期限切れ、または api モードで key の拒否・クレジット不足・429）。ライン実行前に停止（exit 1） |
 | `WARN: API spend gate stopped the run (month $… / $…, day $… / $…, need $… per line) — stopping remaining lines` | api モード: 残額があと 1 ライン分に満たない、または（直前の `ERROR: … spend …` 行のとおり）台帳が書けない・読めない。残りは止め、`Lines not started: …` に名前が出る |
-| `ERROR: API spend gate failed (rc 2): spend-gate: N unreadable line(s) in …: line K (理由), … — cannot check the caps` | api モード: 台帳を合計できなかったので、推測せずに止めた。`state/api-spend.jsonl` の読めない行を行番号と理由で名指す（その行を直すか消す）。`cannot read …` はファイル自体を開けなかった |
+| `ERROR: API spend gate failed (rc 2): spend-gate: N unreadable line(s) in …: line K (理由), … — cannot check the caps` | api モード: 台帳を合計できなかったので、推測せずに止めた。`state/api-spend.jsonl` の読めない行のうち先頭 5 件を行番号と理由で名指し、残りは `and N more` と数だけ出す（その行を直すか消す）。`cannot read …` はファイル自体を開けなかった |
 | `Lines not started: a, b` | run が始める前に止めたライン（支出の上限、または認証・課金のエラー） |
 | `ERROR: Line <track> hit a billing/rate-limit error — aborting remaining lines, no retry` | api モード: 429 またはクレジット残高不足（`E_BILLING`） |
 | `WARN: Line <track> reached --max-budget-usd $… — no retry, going to gate` | 呼び出しごとの上限で呼1 が止まった。書けた分でゲートへ進む |
 | `API spend: today $… / $…, month $… / $…` | api モード: run 後の `state/api-spend.jsonl` の合計 |
 | `ERROR: Another instance is running. Skipping.` | ロックディレクトリ `.daily-research.lock/` を生存中の `daily-research.sh` の process が保持している |
 | `Config schema check passed` | `config.toml` が現行 (ADR-0008) schema に適合 |
-| `ERROR: config.toml schema check failed (the reason is on the line above; see config.example.toml)` | `dr_pipeline.py tracks` が `config.toml` を拒否した（旧 schema、line 名の形、`daily` / `template` / `mode` の型、壊れた `repos`、`lines_per_day` の値）。理由は直前に log された行にある。どのラインも始めずに停止（exit 1） |
+| `ERROR: config.toml schema check failed (the reason is on the line above; see config.example.toml)` | `dr_pipeline.py tracks` が `config.toml` を拒否した（旧 schema、line 名の形、`daily` / `template` / `mode` の型、`mode` の未知の値、`mode = "ecosystem"` の line に書いた `repos` / `context_files`、壊れた `repos`、`lines_per_day` の値）。理由は直前に log された行にある。どのラインも始めずに停止（exit 1） |
 | `Rotation pick: a, b, c (ADR-0010/0017)` | 当日担当ラインの輪番 window 選択結果 |
 | `Today's lines: N` | 当日実行するライン数（`lines_per_day` + daily ライン） |
 | `=== Line: <track> (<repo パス>) ===` | その repo を cwd にしたライン run の開始（ecosystem ラインは repo を持たず `no target repo` と出る） |
@@ -167,7 +167,7 @@ launchctl list | grep daily-research
 | `WARN: Line <track> pending.md の項目が <state> の run で N 件増えた (…)` | hold 以外の run が、ノートの日付付き締切の機会の数より多く `pending.md` に項目を足した。プロトコルが項目を足してよいとするのは hold の問いと日付付き締切の機会だけ。log だけで、ラインは成功のまま |
 | `WARN: report gate failed for line <track> — no <date>_<track>_*.md (ctl-015)` | receipt が article / brief なのにレポートが無い — 失敗として計上 |
 | `WARN: report gate failed for line <track> — ... receipt ... (ctl-015)` | run スコープの receipt が無い・壊れている — 失敗として計上（timeout で receipt を書く前に落ちた run） |
-| `Report existence gate passed: N report(s)` | 当日担当ラインが全て ctl-015 を通過。失敗したラインがある日と、認証・課金のエラーで始めずに残ったラインがある日は、代わりに `=== Failed (E_PARTIAL:<失敗したライン>, exit code 1) ===` が出る（始めなかったラインだけの日はコロンの後が空） |
+| `Report existence gate passed: N report(s)` | 当日担当ラインが全て ctl-015 を通過。失敗したラインがある日と、認証・課金のエラーで始めずに残ったラインがある日は、代わりに、ゲートを通ったラインが 1 本以上あれば `=== Failed (E_PARTIAL:<失敗したライン>, exit code 1) ===`、1 本も無ければ `=== Failed (E_NO_REPORT:<失敗したライン>, exit code 1) ===` が出る（始めなかったラインだけの日はコロンの後が空） |
 | `Line states: article=N brief=N quiet=N hold=N (...)` | 当日の内訳（今朝 / 更新なし / 未検証 / 取得失敗の疑い の各段は該当があるときだけ出る） |
 | `VERIFY <track>: {...}` | 呼2 の照合結果（supported / partial / unsupported / unverifiable / edits / ran） |
 | `VERIFY_DIFF <track>: {...}` | 呼2 が実際に変えた量。script が呼2 の前に書く改稿前の写し `state/<line>/pre-verify/{date}.md` と比べる: 変更範囲の数・字数の増減・消えた文・数字の増減・新しい URL・frontmatter / 機会メモ / ソース節の変更の有無。metrics の `verification` に合算する |
@@ -183,7 +183,7 @@ launchctl list | grep daily-research
 |---------|------|
 | `今朝のリサーチレポートが完成しました (今朝: … / 更新なし: … / 未検証: …)` | 全ライン成功し、公開されたレポートがある |
 | `今朝は更新なし (更新なし: …)` | 全ラインが quiet / hold で終わった（成功） |
-| `リサーチが一部失敗しました (今朝: … / 更新なし: … / failed: …)。ログを確認してください。` | E_PARTIAL — 失敗したラインを名指しする。認証・課金のエラー（401 / 403 / 429 / クレジット）で run が止まり、当日担当ラインが始まらずに残った日は、ゲートに落ちたラインが無くても E_PARTIAL で、そのラインは「未実行」に並ぶ。最後の担当ラインでのエラーは始めずに残るラインを作らないので、その日の通知はゲートだけで決まる（呼2 が失敗したノートは「未検証」に並ぶ） |
+| `リサーチが一部失敗しました (今朝: … / 更新なし: … / failed: …)。ログを確認してください。` | E_PARTIAL — 失敗したラインを名指しする。認証・課金のエラー（401 / 403 / 429 / クレジット）で run が止まり、当日担当ラインが始まらずに残り、ゲートを通ったラインが 1 本以上ある日は、ゲートに落ちたラインが無くても E_PARTIAL で、そのラインは「未実行」に並ぶ。ゲートを通ったラインが 1 本も無い日は E_NO_REPORT で、その通知 `リサーチが失敗しました (lines:…)` は失敗したラインだけを並べる。最後の担当ラインでのエラーは始めずに残るラインを作らないので、その日の通知はゲートだけで決まる（呼2 が失敗したノートは「未検証」に並ぶ） |
 
 「未検証」は呼2 が失敗した（または verify.json が無い）ラインで、レポート自体は公開されている。「取得失敗の疑い」が付く quiet / hold は、web 検索 0 回または `reason_code = fetch_failed` のラインで、ネットワーク側の問題を疑う材料になる。
 
@@ -259,7 +259,7 @@ rm -rf .daily-research.lock
 - `Your credit balance is too low`: platform.claude.com でクレジットを足す。
 - `status=429`: レート制限。backoff で踏み抜かず、意図して止めている（連発する rate limit は policy signal）。時間をおいて手で再実行する。
 - `API spend gate stopped the run`: 1 日または 1 か月の残額が 1 ライン分の予約額（`call1_max_usd + call2_max_usd`）を下回った。`state/api-spend.jsonl` を確認し、上限はクレジットが足りるときだけ `[billing]` で上げる。
-- `ERROR: API spend gate failed (rc 2): …` か `ERROR: API spend ledger could not be written …` の直後の `API spend gate stopped the run`: 上限を判定できなかったので、ラインを始めなかった。rc 2 のメッセージは台帳の読めない行を行番号と理由で名指す。`state/api-spend.jsonl` のその行を直すか消して（または書き込めるように戻して）から再実行する。
+- `ERROR: API spend gate failed (rc 2): …` か `ERROR: API spend ledger could not be written …` の直後の `API spend gate stopped the run`: 上限を判定できなかったので、gate が次のラインの前で止めた。残りのラインは始まらず（最初のラインの前なら全部）、完走済みのラインの成果は残る。rc 2 のメッセージは台帳の読めない行のうち先頭 5 件を行番号と理由で名指し、残りを `and N more` で数える。`state/api-spend.jsonl` のその行を直すか消して（または書き込めるように戻して）から再実行する。
 
 課金経路は設定なしに変わらない。subscription モードではシェルで export した `ANTHROPIC_API_KEY` を捨て、api モードでは `env_file` の key だけを使う。
 
