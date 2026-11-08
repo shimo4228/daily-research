@@ -8,7 +8,8 @@ unset ANTHROPIC_API_KEY
 # CLAUDECODE が残っているとネストチェック・起動挙動が変わるため除去
 unset CLAUDECODE 2>/dev/null || true
 
-# launchd 環境は PATH が最小限。homebrew python3 (tomllib 必須, >=3.11) を先頭に明示設定。
+# launchd 環境は PATH が最小限。homebrew python3 (tomllib 必須, >=3.11) を /usr/bin より前に置く。
+# 最終的な先頭は下の 2 つ (~/.local/bin、~/.claude/local) で、その後ろに homebrew が続く。
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 # Claude Code の旧インストール先も互換性のため維持する。
 if [ -d "$HOME/.claude/local" ]; then
