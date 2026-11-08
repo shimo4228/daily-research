@@ -191,6 +191,8 @@ run_sandbox() {
 }
 
 @test "sandbox-run: refuses an output dir in the real vault or in a tracked git tree, before creating it" {
+  # 使い捨て repo の git init と sandbox-run の git check-ignore が呼び出し元の GIT_* を継承しない
+  isolate_git_env
   HOME="$MOCK_HOME" run "$REAL_PROJECT_DIR/scripts/dev/sandbox-run.sh" --line demo --tree "$REAL_PROJECT_DIR" \
     --main "$FAKE_MAIN" --out "$MOCK_HOME/real-vault/daily-research/new/x" --prepare-only
   [ "$status" -eq 1 ]
