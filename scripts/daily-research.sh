@@ -692,8 +692,8 @@ if [ -n "$CLARITY_NOTE" ]; then
   # 当日レポートと根拠ファイルだけを読む別プロセスが、前提知識ゼロ読者としてのつまずき
   # 箇所を span 単位で改稿し、最後に主要 claim を原典 (WebFetch) で照合して verify.json に
   # 結果を書く。「fresh」の範囲 = リサーチ過程・対象 repo の文脈を持たないこと。
-  # --safe-mode で daily-research の CLAUDE.md もロードしない — 記述規律は verification プロトコルと
-  # テンプレートが自己完結して持つ (ADR-0019 Decision 2、ADR-0010 Decision 4 の旧トレードオフは不要)。
+  # --safe-mode で daily-research の CLAUDE.md もロードしない — 記述規律は verification プロトコルが
+  # 自己完結して持つ (テンプレートは渡さない。ADR-0019 Decision 2、ADR-0010 Decision 4 の旧トレードオフは不要)。
   # 書き込みは原稿と verify.json の 2 ファイルだけ。WebSearch は deny (照合は既知 URL の
   # 再取得に限る — auto mode では allow が加算なので deny で書く)。
   # fail-open: 失敗しても未改稿 (timeout 時は部分改稿) の版が残り、FINAL_EXIT に

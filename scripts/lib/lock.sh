@@ -27,10 +27,14 @@ acquire_lock() {
   fi
   # stale ロック: 奪取を試みる。
   # 保証の範囲: mkdir の原子性が守るのは 1 回の mkdir の勝者が 1 つであることだけで、奪取は不可分でない。
-  # 2 プロセスが同じ stale lock をほぼ同時に見つけると、先に rm→mkdir した側の新しい lock を遅れた側の
-  # rm -rf が消し、遅れた側の mkdir も成功して両方が走る (pid は後の側。先の側の run スコープの基準
-  # $LOCK_DIR/pid の mtime も後の側の時刻に変わる)。起きうるのは stale lock が残った朝に launchd の起動と
-  # 手動実行・試験 seam の run が重なったとき。不可分な奪取が要るなら mv -n 等で作り直す。
+  # 両方が走る窓は 2 つある:
+  #   (a) 勝者の mkdir から `echo $$ > pid` までの間。来た側は空の pid を stale と読み、rm -rf→mkdir
+  #       で奪う (stale lock が無い朝でも、2 つの起動が重なれば起きる)
+  #   (b) 2 プロセスが同じ stale lock をほぼ同時に見つけたとき。先に rm→mkdir した側の新しい lock を
+  #       遅れた側の rm -rf が消し、遅れた側の mkdir も成功する
+  # どちらも pid は後の側になり、先の側の run スコープの基準 $LOCK_DIR/pid の mtime も後の側の時刻に
+  # 変わる。launchd の起動と手動実行・試験 seam の run が重なれば起きうる。不可分な奪取が要るなら
+  # mv -n 等で作り直す。
   rm -rf "$LOCK_DIR"
   if mkdir "$LOCK_DIR" 2>/dev/null; then
     echo $$ > "$LOCK_DIR/pid"
