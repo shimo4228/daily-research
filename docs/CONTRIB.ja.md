@@ -31,6 +31,7 @@ daily-research/
 │   ├── daily-research.sh               # メインエントリポイント（輪番 window で当日 lines_per_day 本: 呼1 研究 + 呼2 検証 + clarity）; lib/ を source
 │   ├── check-auth.sh                   # [billing] の経路で認証チェック（real_auth_probe()）+ macOS 通知
 │   ├── pre-commit.sh                   # secret / 構文ガード（git pre-commit hook）
+│   ├── dev/                             # dev 専用の隔離試験 run: sandbox-run.sh / eval_run.py / compare.py
 │   └── lib/                             # sourced shell ライブラリ + Python 解析モジュール
 │       ├── env.sh / log.sh / notify.sh / lock.sh / auth.sh / claude.sh / billing.sh
 │       └── dr_pipeline.py              # JSON/TOML 解析の単一 stdlib モジュール
@@ -44,6 +45,8 @@ daily-research/
 │   ├── test-daily-research.bats        # ユニットテスト（構文、設定、セキュリティ）
 │   ├── test-e2e-mock.bats             # E2E モックテスト（ライン単位フロー）
 │   ├── test-lib.bats                  # lib/*.sh ユニットテスト（env, lock, auth, claude）
+│   ├── test-sandbox-run.bats          # scripts/dev/sandbox-run.sh の mock claude による E2E
+│   ├── dev_tools_test.py              # scripts/dev/ の pytest（config の書き換え、集約、eval の指標）
 │   ├── test_helper.bash               # bats 共通 helper（refute_grep — grep の否定 assertion は `! grep` でなくこれで書く）
 │   └── dr_pipeline_test.py            # dr_pipeline.py の pytest（dev 専用、.venv）
 ├── logs/                                # 実行ログ（日付別、30日自動ローテーション）
@@ -118,6 +121,8 @@ claude
 ```
 
 **補足**: `./scripts/daily-research.sh` は Claude Code セッション内からも実行できます — `lib/env.sh` が `CLAUDECODE` を unset するためネストセッションチェックを通ります（2026-08-22 実証）。1 ラインだけ走らせるには上記の `DR_FORCE_TRACK` / `DR_ONLY_TRACK` / `DR_DATE` seam を使います。
+
+**隔離した試験 run**: `scripts/dev/sandbox-run.sh --line <line> --out <dir> (--ref <git-ref> | --tree <dir>)` は同じ `daily-research.sh` を 1 ラインだけ、使い捨ての `PROJECT_DIR` と vault の中で、サブスクの課金経路と launchd に近い掃除した環境で回し、ノート・receipt・根拠ファイル・`verify.json`・ログ・metrics の記録・両呼び出しの result JSON を `<dir>` に集めます。`scripts/dev/eval_run.py <dir>` がそこから決定論の指標を出し、`scripts/dev/compare.py <dir>...` が複数の run を並べます（契約は各 script の冒頭）。
 
 ## テスト
 

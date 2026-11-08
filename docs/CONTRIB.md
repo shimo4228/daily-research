@@ -31,6 +31,7 @@ daily-research/
 │   ├── daily-research.sh               # Main entry point (rotation window: lines_per_day lines/day; call 1 research + call 2 verification/clarity); sources lib/
 │   ├── check-auth.sh                   # Auth check on the [billing] path via real_auth_probe() + notification
 │   ├── pre-commit.sh                   # Secret / syntax guard (git pre-commit hook)
+│   ├── dev/                             # Dev-only isolated trial runs: sandbox-run.sh / eval_run.py / compare.py
 │   └── lib/                             # Sourced shell libs + Python parser
 │       ├── env.sh / log.sh / notify.sh / lock.sh / auth.sh / claude.sh / billing.sh
 │       └── dr_pipeline.py              # Single stdlib-only JSON/TOML parsing module
@@ -44,6 +45,8 @@ daily-research/
 │   ├── test-daily-research.bats        # Unit tests (syntax, config, security)
 │   ├── test-e2e-mock.bats             # E2E mock tests (per-line flow)
 │   ├── test-lib.bats                  # lib/*.sh unit tests (env, lock, auth, claude)
+│   ├── test-sandbox-run.bats          # scripts/dev/sandbox-run.sh end to end with a mock claude
+│   ├── dev_tools_test.py              # pytest for scripts/dev/ (config rewrite, collect, eval metrics)
 │   ├── test_helper.bash               # shared bats helpers (refute_grep — write negative grep assertions with it, never `! grep`)
 │   └── dr_pipeline_test.py            # pytest for dr_pipeline.py (dev-only, .venv)
 ├── logs/                                # Execution logs (date-stamped, auto-rotated 30d)
@@ -118,6 +121,8 @@ claude
 ```
 
 **Note**: `./scripts/daily-research.sh` can also be run from inside a Claude Code session — `lib/env.sh` unsets `CLAUDECODE`, so the nested-session check passes (verified 2026-08-22). Use the `DR_FORCE_TRACK` / `DR_ONLY_TRACK` / `DR_DATE` seams above to run a single line.
+
+**Isolated trial runs**: `scripts/dev/sandbox-run.sh --line <line> --out <dir> (--ref <git-ref> | --tree <dir>)` runs the same `daily-research.sh` for one line in a throwaway `PROJECT_DIR` and vault, on the subscription path, under a launchd-like clean environment, and collects the note, receipt, evidence file, `verify.json`, log, metrics record and both result JSONs into `<dir>`; `scripts/dev/eval_run.py <dir>` turns that into deterministic metrics and `scripts/dev/compare.py <dir>...` lines several runs up (the contract is in each script's header).
 
 ## Testing
 
