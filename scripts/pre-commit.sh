@@ -73,7 +73,9 @@ done
 syntax_err=$(mktemp "${TMPDIR:-/tmp}/pre-commit-syntax.XXXXXX")
 trap 'rm -f "$syntax_err"' EXIT
 
-for f in "${staged_files[@]}"; do
+# ${arr[@]+...}: staged が 0 件 (削除だけの commit) でも bash 3.2 + set -u で落ちない。落ちると
+# EXIT trap の終了コード 0 で抜け、上の [BLOCKED] が commit を止めない
+for f in ${staged_files[@]+"${staged_files[@]}"}; do
   case "$f" in *.sh) ;; *) continue ;; esac
   if [ -f "$f" ]; then
     if ! bash -n "$f" 2>"$syntax_err"; then

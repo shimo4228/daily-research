@@ -281,6 +281,36 @@ skip_unless_private() {
   grep -q 'chmod 600 "$LOG_FILE"' "$PROJECT_DIR/scripts/lib/log.sh"
 }
 
+# === scripts/pre-commit.sh (git hook) ===
+# 使い捨て repo で /bin/bash (macOS 3.2、hook の実行形) から hook を走らせる。git は運用者の
+# global / system 設定から切り離し、fixture の commit は hook を通さない。
+precommit_repo() {
+  export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+  mkdir -p "$TEST_TMPDIR/repo"
+  cd "$TEST_TMPDIR/repo"
+  git init -q .
+  git config user.email test@example.com
+  git config user.name test
+}
+precommit_fixture_commit() {
+  git -c core.hooksPath=/dev/null commit -qm "$1"
+}
+
+@test "pre-commit: a deletion-only commit still blocks on a tracked protected file" {
+  # staged (ACM) が 0 件だと bash 3.2 + set -u で "${staged_files[@]}" が unbound variable になり、
+  # EXIT trap の終了コード 0 で hook が抜けていた — [BLOCKED] を出しても commit が通る
+  precommit_repo
+  echo "x" > config.toml
+  echo "y" > note.md
+  git add config.toml note.md
+  precommit_fixture_commit init
+  git rm -q note.md
+  run /bin/bash "$PROJECT_DIR/scripts/pre-commit.sh"
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q "Protected file is tracked by git: config.toml"
+  refute_grep -q "unbound variable" <<< "$output"
+}
+
 # === Defensive programming ===
 
 @test "set -Eeuo pipefail is configured (-E: ERR trap reaches function bodies)" {
