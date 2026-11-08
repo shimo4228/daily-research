@@ -97,7 +97,7 @@ daily-research.sh (05:00)
 │   │   置き換え文・URL・ノートの公開日を見て、文の誤りを独立に見つけ、置き換え文がそれを直しているかを判定する
 │   └── audit-apply（モデルでなくコード）: 両段が食い違いとし、第 2 段が置き換え文を訂正と認めた候補を、
 │       文が本文にちょうど 1 回現れ、置き換えが小さな書き換えで、ノートの URL・link・強調・見出しを保ち、
-│       書式の記号を足さないときだけ置き換える。状態は runs/{date}.audit.json、監査の前のノートは
+│       書式の記号を足さないときだけ置き換える。状態は state/<line>/audit/{date}.json、監査の前のノートは
 │       state/<line>/pre-audit/{date}.md、ログに AUDIT。どの失敗も fail-open — ノートは呼2 の後のまま
 ├── ctl-016 決定論的レポート lint（固定節 = 機会メモ / ソース、report-template.md に同期。
 │   kind: brief は機会メモと文字数の soft を免除）
@@ -195,7 +195,7 @@ launchctl list | grep daily-research
 | `Audit pass: on (model <m>, effort high, ADR-0020)` | `[audit] enabled = true`。article ごとに呼2 の後で呼3 が走る |
 | `AUDIT <track>: {...}` | そのラインの呼3 の集計: `ran`（第 1 段が読める結果を返したか）、`reason`（返さなかった理由: `E_TRANSIENT` などの呼び出しの分類・`parse`・`E_BUDGET_GATE`・`note_unreadable`）、確かめた主張・一致・原典が取れない主張の数、`invalid`（形が壊れていて捨てた候補）、`candidates`、`confirmed`（両段が食い違いとした）、`applied`、`rejected`、第 2 段の呼び出し数・turns・費用。metrics の `verification` に `audit_*` として合算する |
 | `WARN: Line <track> audit stage 1 did not run or failed (<class>) — …` | 第 1 段を始めなかった（支出の上限・ノートが読めない・長すぎる）か失敗した。ノートは呼2 の後のままで、run の成否は変わらない |
-| `WARN: Line <track> audit pass: 監査で確定した候補 D<n> を適用しなかった (<規則>) — …` | 両段が誤りと確定したが、置き換えが規則に外れた（`not_found` / `ambiguous` / `outside_body`: 文が本文にちょうど 1 回ない、`empty`、`unchanged`、`short`: 文が 15 字未満、`newline`、`control`、`invisible`: ゼロ幅・bidi の文字を足す、`edit_distance`: 書き換えが max(24, 元の文の 30%) 字を超える、`markup`: `` ` `` `<` `>` `[[` `![` `%` `$=` `&` のどれかをノートに足す、`url_changed` / `link_changed` / `emphasis_changed` / `heading_changed`: ノートの URL・link 先・`**` と `` ` `` の数・見出し行が変わる、`fix_unconfirmed`: 第 2 段が置き換え文を原典と両立するとしなかった、`span_mismatch`: 置き換え文が第 2 段の見つけた誤りの訂正を持たない）。誤りはノートに残る — `runs/{date}.audit.json` を見て手で直す |
+| `WARN: Line <track> audit pass: 監査で確定した候補 D<n> を適用しなかった (<規則>) — …` | 両段が誤りと確定したが、置き換えが規則に外れた（`not_found` / `ambiguous` / `outside_body`: 文が本文にちょうど 1 回ない、`empty`、`unchanged`、`short`: 文が 15 字未満、`newline`、`control`、`invisible`: ゼロ幅・bidi の文字を足す、`edit_distance`: 書き換えが max(24, 元の文の 30%) 字を超える、`markup`: `` ` `` `<` `>` `[[` `![` `%` `$=` `&` のどれかをノートに足す、`url_changed` / `link_changed` / `emphasis_changed` / `heading_changed`: ノートの URL・link 先・`**` と `` ` `` の数・見出し行が変わる、`fix_unconfirmed`: 第 2 段が置き換え文を原典と両立するとしなかった、`span_mismatch`: 置き換え文が第 2 段の見つけた誤りの訂正を持たない）。誤りはノートに残る — `state/<line>/audit/{date}.json` を見て手で直す |
 | `WARN: Line <track> audit pass: 監査の置き換えをノートに書けなかった (<エラー>) — ノートは元のまま` | 置き換えた全文をノートに書けなかった。適用した候補は全部 `rejected`（`write_failed`）として記録され、ノートは変わらない |
 | `WARN: Line <track> audit stage 2 stopped — API spend cap …` / `WARN: Line <track> audit pass skipped …` | api mode でその日の残額が次の監査の呼び出しに足りなくなった、または監査を始めなかった（認証・課金のエラーの後） |
 | `Line <track> audit pass skipped (kind: brief, only article is audited)` | brief は監査しない |
@@ -349,7 +349,7 @@ cp past_topics.json.bak past_topics.json
 
 **症状**: ノートが呼2 の後と違って読める、またはログに `audit pass: 監査で確定した候補 … を適用しなかった` / `audit stage 1 did not run or failed`。
 
-**見る場所**: `state/<line>/runs/{date}.audit.json` に候補ごとの状態（`applied`、`rejected` + 規則、`not_confirmed` + 第 2 段の判定、`confirm_failed`、`skipped` + `drift` / `url_not_in_note` / `duplicate` / `over_cap`）と、各段が読んだ原典の引用と URL、第 2 段の置き換え文の判定とそれが見つけた誤り・訂正の部分がある。`state/<line>/pre-audit/{date}.md` は監査の前のノート。
+**見る場所**: `state/<line>/audit/{date}.json` に候補ごとの状態（`applied`、`rejected` + 規則、`not_confirmed` + 第 2 段の判定、`confirm_failed`、`skipped` + `drift` / `url_not_in_note` / `duplicate` / `over_cap`）と、各段が読んだ原典の引用と URL、第 2 段の置き換え文の判定とそれが見つけた誤り・訂正の部分がある。`state/<line>/pre-audit/{date}.md` は監査の前のノート。
 
 **対処**:
 ```bash

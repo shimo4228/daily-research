@@ -1813,7 +1813,7 @@ PY
   grep -qx -- "--safe-mode" "$MOCK_HOME/.args_$PICKED"
   grep -A1 -x -- '--tools' "$MOCK_HOME/.args_$PICKED" | grep -qx "WebSearch,WebFetch,Read,Glob,Grep,Edit,Write"
   grep -A1 -x -- '--tools' "$MOCK_HOME/.args_eco" | grep -qx "WebSearch,WebFetch,Read,Glob,Grep,Edit,Write"
-  [ "$(cat "$MOCK_HOME/.disallowed_$PICKED")" = "Bash,Task,NotebookEdit,Read(//${MOCK_HOME#/}/.claude/**),Read(//${MOCK_HOME#/}/.claude.json),Read(//${MOCK_HOME#/}/.codex/**),Read(//${MOCK_HOME#/}/.config/**),Read(//${MOCK_HOME#/}/.ssh/**),Read(//${MOCK_HOME#/}/.aws/**),Read(//${MOCK_HOME#/}/.gnupg/**),Read(//${MOCK_HOME#/}/.netrc),Read(//${MOCK_HOME#/}/**/logs/episodes/**),Read(//${MOCK_HOME#/}/.config/daily-research/**),Edit(//${MOCK_PROJECT#/}/state/$PICKED/brief.md),Edit(//${MOCK_PROJECT#/}/state/$PICKED/playbook.md),Edit(//${MOCK_PROJECT#/}/past_topics.json),Edit(//${MOCK_PROJECT#/}/state/$PICKED/watched-sources.md),Edit(//${MOCK_PROJECT#/}/state/$PICKED/watched-archive.md)" ]
+  [ "$(cat "$MOCK_HOME/.disallowed_$PICKED")" = "Bash,Task,NotebookEdit,Read(//${MOCK_HOME#/}/.claude/**),Read(//${MOCK_HOME#/}/.claude.json),Read(//${MOCK_HOME#/}/.codex/**),Read(//${MOCK_HOME#/}/.config/**),Read(//${MOCK_HOME#/}/.ssh/**),Read(//${MOCK_HOME#/}/.aws/**),Read(//${MOCK_HOME#/}/.gnupg/**),Read(//${MOCK_HOME#/}/.netrc),Read(//${MOCK_HOME#/}/**/logs/episodes/**),Read(//${MOCK_HOME#/}/.config/daily-research/**),Edit(//${MOCK_PROJECT#/}/state/$PICKED/brief.md),Edit(//${MOCK_PROJECT#/}/state/$PICKED/playbook.md),Edit(//${MOCK_PROJECT#/}/past_topics.json),Edit(//${MOCK_PROJECT#/}/state/$PICKED/pre-verify/**),Edit(//${MOCK_PROJECT#/}/state/$PICKED/audit/**),Edit(//${MOCK_PROJECT#/}/state/$PICKED/pre-audit/**),Edit(//${MOCK_PROJECT#/}/state/$PICKED/watched-sources.md),Edit(//${MOCK_PROJECT#/}/state/$PICKED/watched-archive.md)" ]
 }
 
 @test "E2E ecosystem: past themes are the line's own plus other lines' titles of the last 7 days (H01)" {
@@ -2024,7 +2024,7 @@ PY
 import json, sys
 st = json.load(open(sys.argv[1]))
 assert [c["status"] for c in st["candidates"]] == ["applied"], st
-' "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.audit.json"
+' "$MOCK_PROJECT/state/$PICKED/audit/${DR_DATE}.json"
   assert_metrics << 'PY'
 v = rec["verification"]
 assert v["audit_lines"] == 1 and v["audit_ran"] == 1, v
@@ -2077,7 +2077,7 @@ PY
 import json, sys
 c = json.load(open(sys.argv[1]))["candidates"][0]
 assert (c["status"], c["reason"]) == ("skipped", "url_not_in_note"), c
-' "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.audit.json"
+' "$MOCK_PROJECT/state/$PICKED/audit/${DR_DATE}.json"
 }
 
 @test "E2E audit: a fix stage 2 does not accept is rejected with a WARN" {
@@ -2121,7 +2121,7 @@ PY
 import json, sys
 c = json.load(open(sys.argv[1]))["candidates"][0]
 assert (c["status"], c["reason"]) == ("not_confirmed", "consistent"), c
-' "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.audit.json"
+' "$MOCK_PROJECT/state/$PICKED/audit/${DR_DATE}.json"
 }
 
 @test "E2E audit: a confirmed candidate without a usable replacement is rejected with a WARN" {
@@ -2145,13 +2145,50 @@ assert (c["status"], c["reason"]) == ("not_confirmed", "consistent"), c
 }
 
 @test "E2E audit: a stale audit state from an earlier invocation is removed before stage 1" {
-  echo "audit-fail" > "$MOCK_HOME/.mock_scenario"
+  # audit-stage1 だけを失敗させる python3 の shim (今回の状態を書かせない。lib/env.sh は ~/.local/bin を PATH の
+  # 先頭に置く)。SH の rm が効かなければ、前回の confirmed の候補がこの run で当たってノートが変わる
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
   setup_audit
-  mkdir -p "$MOCK_PROJECT/state/$PICKED/runs"
-  printf '{"version": 1, "ran": true, "stage1": {}, "confirm": {}, "candidates": [{"id": "D1", "status": "confirmed", "note_sentence": "%s", "replacement": "%s"}]}\n' \
-    "$AUDIT_SENTENCE" "$AUDIT_FIXED" > "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.audit.json"
+  local real_py
+  real_py=$(command -v python3)
+  mkdir -p "$MOCK_HOME/.local/bin" "$MOCK_PROJECT/state/$PICKED/audit"
+  printf '#!/bin/bash\nif [ "$2" = "audit-stage1" ]; then cat > /dev/null; exit 1; fi\nexec "%s" "$@"\n' \
+    "$real_py" > "$MOCK_HOME/.local/bin/python3"
+  chmod +x "$MOCK_HOME/.local/bin/python3"
+  python3 -c '
+import json, sys
+c = {"id": "D1", "status": "confirmed", "note_sentence": sys.argv[1], "replacement": sys.argv[2],
+     "confirm": {"verdict": "contradicts", "replacement_verdict": "consistent",
+                 "parts": [{"wrong": "3 か国", "fixed": "4 か国"}]}}
+print(json.dumps({"version": 1, "date": "", "ran": True, "stage1": {}, "confirm": {}, "candidates": [c]},
+                 ensure_ascii=False))
+' "$AUDIT_SENTENCE" "$AUDIT_FIXED" > "$MOCK_PROJECT/state/$PICKED/audit/${DR_DATE}.json"
   run run_script
   [ "$status" -eq 0 ]
   cmp -s "$(audit_note)" "$MOCK_HOME/.report_$PICKED"
-  get_log | grep "AUDIT $PICKED:" | grep -q '"ran": false'
+  get_log | grep "AUDIT $PICKED:" | grep -q '"ran": false, "reason": "no_state"'
+}
+
+@test "E2E audit: a directory on the audit state path skips the audit; the run still succeeds" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  setup_audit
+  mkdir -p "$MOCK_PROJECT/state/$PICKED/audit/${DR_DATE}.json/x"
+  run run_script
+  [ "$status" -eq 0 ]
+  cmp -s "$(audit_note)" "$MOCK_HOME/.report_$PICKED"
+  [ ! -e "$MOCK_HOME/.prompt_audit" ]
+  get_log | grep -q "WARN: Line $PICKED audit pass skipped — the audit state path could not be cleared"
+  get_log | grep "AUDIT $PICKED:" | grep -q '"ran": false, "reason": "E_STATE"'
+  get_log | grep -q "=== Completed successfully ==="
+}
+
+@test "E2E audit: the script-only state dirs (pre-verify, audit, pre-audit) are denied to calls 1 and 2" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  run run_script
+  [ "$status" -eq 0 ]
+  local d
+  for d in pre-verify audit pre-audit; do
+    grep -qF "Edit(//${MOCK_PROJECT#/}/state/$PICKED/$d/**)" "$MOCK_HOME/.disallowed_$PICKED"
+    grep -qF "Edit(//${MOCK_PROJECT#/}/state/$PICKED/$d/**)" "$MOCK_HOME/.disallowed_clarity"
+  done
 }

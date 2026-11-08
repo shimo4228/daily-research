@@ -2599,8 +2599,8 @@ def _clarity_scan_mean(name: str, verif: list[dict[str, object]]) -> float | Non
 # 適用を持つ。モデルはノートを書かない — 両段が食い違いとし、第 2 段が B を訂正と認めた候補だけを audit-apply が
 # 決定論で置き換える。
 #
-# 状態 state/<line>/runs/<date>.audit.json は SH の rm と audit-* だけが書く (監査のモデルは書き込みの道具を
-# 持たず、呼1 は監査より前に終わる。SH は第 1 段の前に前回の状態を消す):
+# 状態 state/<line>/audit/<date>.json は SH の rm と audit-* だけが書く (監査のモデルは書き込みの道具を持たず、
+# 呼1・呼2 は deny で塞がれている。SH は第 1 段の前に前回の状態を消す):
 #   version / date            AUDIT_STATE_VERSION / ノートの公開日 (第 2 段の prompt に渡す)
 #   ran / reason              第 1 段が解析できる結果を返したか / 返さなかった理由 (classify_exit の分類か
 #                             "parse"。audit-apply が足す "note_unreadable" もここ)

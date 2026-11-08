@@ -39,8 +39,8 @@ model = "sonnet"
 # contradiction, with a fix stage 2 accepts, are replaced, by code, under fixed rules (the
 # sentence appears exactly once in the body; a small edit that keeps the note's URLs, links,
 # emphasis and headings and adds no markup). The model never writes the note. Results go to
-# state/<line>/runs/{date}.audit.json, the pre-audit note to state/<line>/pre-audit/{date}.md,
-# and the counts to metrics (verification.audit_*).
+# state/<line>/audit/{date}.json, the pre-audit note to state/<line>/pre-audit/{date}.md, and
+# the counts to metrics (verification.audit_*).
 # Any failure leaves the note as call 2 left it. Off by default.
 [audit]
 enabled = false

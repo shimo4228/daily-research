@@ -315,15 +315,23 @@ audit_call() {
 # 理由は渡さない)。候補の URL はノートの URL に限る (audit-stage1 がノートと突き合わせる)。両段が食い違いとし、
 # 第 2 段が置き換え文を訂正と認めた候補だけを dr_pipeline audit-apply が決定論で置き換える — モデルはノートを書かない
 # (規則・状態ファイルの形は dr_pipeline.py の「呼3」節)。どの段の失敗も fail-open: ノートは呼2 の後のまま、
-# AUDIT 行は ran=false で、run の成否は変えない。呼ぶ側は CLARITY_NOTE / TRACK / DATE / STATE_DIR を設定済みであること。
+# AUDIT 行は ran=false で、run の成否は変えない。呼ぶ側は CLARITY_NOTE / TRACK / DATE / STATE_DIR / AUDIT_DIR /
+# PRE_AUDIT_DIR を設定済みであること。
 audit_pass() {
-  local audit_path="$STATE_DIR/runs/${DATE}.audit.json" prompt cls="OK" ids out summary cid _aw _gate
+  local audit_path="$AUDIT_DIR/${DATE}.json" prompt cls="OK" ids out summary cid _aw _gate=0
   local -a cids=()
   log "=== Audit pass: $(basename "$CLARITY_NOTE") ==="
-  # 前回 run の状態を今回の結果と取り違えない (呼1 は runs/** を書けるので、同日の先行 invocation の残りも消す)
-  rm -f "$audit_path"
   AUDIT_JSON=""
-  _gate=0
+  # 前回 run の状態 (同日の先行 invocation の残り) を今回の結果と取り違えない。置き場 AUDIT_DIR はどのモデルの
+  # 書き込み先でもない (STATE_DENY と呼2 の deny)。dir などで消せなければ監査を回さずに続ける — set -Ee の下の
+  # rm の失敗は run ごと落とすので if で受け、AUDIT 行を ran=false (reason E_STATE) で出して返る
+  if ! { mkdir -p "$AUDIT_DIR" && rm -f "$audit_path"; } 2>> "$LOG_FILE"; then
+    log "WARN: Line $TRACK audit pass skipped — the audit state path could not be cleared ($audit_path)"
+    summary='{"ran": false, "reason": "E_STATE"}'
+    log "AUDIT $TRACK: $summary"
+    METRICS_STDIN+="AUDIT"$'\t'"$summary"$'\n'
+    return 0
+  fi
   billing_gate "$BILLING_AUDIT_RESERVE" || _gate=$?
   if [ "$_gate" -eq 1 ]; then
     log "WARN: Line $TRACK audit pass skipped — API spend cap (month \$$SPEND_MONTH, day \$$SPEND_DAY, need \$$BILLING_AUDIT_RESERVE)"
@@ -361,7 +369,7 @@ audit_pass() {
       || log "WARN: Line $TRACK audit stage 2 result for $cid could not be recorded"
   done
   # 出力の 1 行目が AUDIT 行の JSON、2 行目以降が WARN の本文 (verify-diff と同じ形)
-  out=$(python3 "$DR_PY" audit-apply "$audit_path" "$CLARITY_NOTE" "$STATE_DIR/pre-audit/${DATE}.md" 2>> "$LOG_FILE") || out=""
+  out=$(python3 "$DR_PY" audit-apply "$audit_path" "$CLARITY_NOTE" "$PRE_AUDIT_DIR/${DATE}.md" 2>> "$LOG_FILE") || out=""
   summary=${out%%$'\n'*}
   [ -n "$summary" ] || summary='{"ran": false, "reason": "apply_failed"}'
   log "AUDIT $TRACK: $summary"
@@ -507,9 +515,14 @@ STATE_DIR="$PROJECT_DIR/state/$TRACK"
 RECEIPT_PATH="$STATE_DIR/runs/${DATE}.json"
 VERIFY_PATH="$STATE_DIR/runs/${DATE}.verify.json"
 # 呼2 の改稿前の写し (verify-diff の入力)。SH が呼1 の終了後・呼2 の前に書く。置き場は呼1 の書き込み先
-# (WRITE_PATHS の runs/** 等) の外で、呼2 の allow にも入れず deny で塞ぐ — モデルの書き込み先ではない
+# (WRITE_PATHS の runs/** 等) の外で、呼2 の allow にも入れず、呼1・呼2 の deny で塞ぐ (SCRIPT_STATE_DENY)
 PRE_VERIFY_DIR="$STATE_DIR/pre-verify"
 PRE_VERIFY_PATH="$PRE_VERIFY_DIR/${DATE}.md"
+# 呼3 の状態 (<date>.json) と監査の前のノートの写し (<date>.md)。SH と dr_pipeline audit-* だけが書く
+AUDIT_DIR="$STATE_DIR/audit"
+PRE_AUDIT_DIR="$STATE_DIR/pre-audit"
+# SH だけが書く置き場。どのモデルの書き込み先でもないので、呼1 (STATE_DENY) と呼2 の deny に置く
+SCRIPT_STATE_DENY="Edit(//${PRE_VERIFY_DIR#/}/**),Edit(//${AUDIT_DIR#/}/**),Edit(//${PRE_AUDIT_DIR#/}/**)"
 mkdir -p "$STATE_DIR/runs"
 
 # 実行形は [tracks.<x>].mode が決める (ADR-0018)。line 名では分岐しない。
@@ -526,6 +539,7 @@ LINE_MODE=$(python3 "$DR_PY" config-get "$PROJECT_DIR/config.toml" "tracks.$TRAC
 # 書き込み先から外した場所は deny でも塞ぐ (allow は加算なので、境界は deny で書く — ADR-0019 Decision 3/4)。
 # brief.md は運用者の静的な文書、playbook は撤去済み、past_topics.json は orchestrator が追記する。
 STATE_DENY="Edit(//${STATE_DIR#/}/brief.md),Edit(//${STATE_DIR#/}/playbook.md),Edit(//${PROJECT_DIR#/}/past_topics.json)"
+STATE_DENY+=",$SCRIPT_STATE_DENY"
 if [ "$LINE_MODE" = "ecosystem" ]; then
   LINE_CWD="$STATE_DIR"
   LINE_PROTOCOL="$PROJECT_DIR/prompts/ecosystem-research-protocol.md"
@@ -942,7 +956,7 @@ $CLARITY_HINTS}"
     --permission-mode default \
     --append-system-prompt-file "$PROJECT_DIR/prompts/verification-protocol.md" \
     --allowedTools "Read,WebFetch,Edit(//${CLARITY_NOTE#/}),Edit(//${VERIFY_PATH#/})" \
-    --disallowedTools "$DISALLOWED_TOOLS,WebSearch,Edit(//${PRE_VERIFY_DIR#/}/**)" \
+    --disallowedTools "$DISALLOWED_TOOLS,WebSearch,$SCRIPT_STATE_DENY" \
     --max-turns 30 \
     --model "$VERIFY_MODEL" \
     --effort "$CALL2_EFFORT" \

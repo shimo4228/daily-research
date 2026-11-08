@@ -41,7 +41,7 @@ daily-research/
 │                                        #   watched-sources.md + watched-archive.md（ecosystem ライン）/ runs/{date}.md（根拠ファイル）/
 │                                        #   runs/{date}.json（run receipt）/ runs/{date}.verify.json / pre-verify/{date}.md
 │                                        #   （呼2 の改稿前の写し。script が書き、モデルは書かない）/
-│                                        #   runs/{date}.audit.json + pre-audit/{date}.md（呼3。script が書く）（gitignored）
+│                                        #   audit/{date}.json + pre-audit/{date}.md（呼3。script が書き、どのモデルも書かない）（gitignored）
 ├── graph.jsonld                         # 凍結アーカイブ（退役した concept-graph パイプライン）
 ├── com.example.daily-research.plist    # launchd スケジュール（AM 5:00、リサーチ）
 ├── tests/
@@ -222,7 +222,7 @@ run は `cd "$TARGET_REPO"` で起動される。`mode = "ecosystem"` のライ�
 | `--max-turns` / timeout | `AUDIT_STAGE1_MAX_TURNS`（40）と 600 秒 / `AUDIT_STAGE2_MAX_TURNS`（20）と 240 秒 | 第 1 段はノートの全原典を取得する。第 2 段は 1 つ |
 | `--model` / `--effort` | `[audit] model`（既定 `opus`）/ `high` | 呼2 の後に残る誤りは帰属・時点・範囲・条件のずれで、同じ層の再照合では拾えなかった |
 
-`audit-stage1` は、`url` がノートに書かれた URL（本文の link・裸の URL・ソース節）でない候補を飛ばす（`url_not_in_note`）— 第 2 段が読み始めるのはノートの原典だけになる。その後 `dr_pipeline.py audit-apply` が、両段が食い違いとし、第 2 段が置き換え文を訂正と認めた候補（`_audit_fix_reject`: `replacement_verdict` が `consistent` で、第 2 段が挙げた誤りのどれでも `wrong` が A にあり、`fixed` が B にあって A に無い。消して直したなら `wrong` が B に無い — 1 文に主張が 2 つあり、正しい方を書き換えた置き換えをここで止める）を固定の規則（`_audit_replace`）で置き換える: 文が本文にちょうど 1 回現れる（frontmatter・題・機会メモ・ソースには触れない）、文が 15 字以上、置き換えが空でも元と同じでもない、書き換えが max(24, 元の文の 30%) 字以内（編集距離）、改行の数を変えない、制御文字・ゼロ幅・bidi の文字を入れず、`` ` `` `<` `>` `[[` `![` `%` `$=` `&` をノートのどこにも増やさない（inline code と Dataview の inline JS・HTML・wikilink と埋め込み・comment・エンティティは vault で実行されるか隠れる）、ノート全体を前後で比べて URL（scheme の大文字小文字を問わず、HTML エンティティを戻してから）・link 先の並び・`**` と `` ` `` の数・見出し行（`## 機会メモ` / `## ソース` の行の数を含む）が変わらない — frontmatter・機会メモ・ソースは変わらず、本文に固定節と同じ見出しは増えない。全件を `state/<line>/runs/{date}.audit.json` に記録し、監査の前のノートを `state/<line>/pre-audit/{date}.md` に写す。失敗は fail-open: 第 1 段が失敗すればノートは呼2 の後のままで `AUDIT` は `"ran": false`、第 2 段の 1 回の失敗はその候補だけを確定にしない。認証・課金のエラーは呼1・呼2 と同じく残りのラインを止める。
+`audit-stage1` は、`url` がノートに書かれた URL（本文の link・裸の URL・ソース節）でない候補を飛ばす（`url_not_in_note`）— 第 2 段が読み始めるのはノートの原典だけになる。その後 `dr_pipeline.py audit-apply` が、両段が食い違いとし、第 2 段が置き換え文を訂正と認めた候補（`_audit_fix_reject`: `replacement_verdict` が `consistent` で、第 2 段が挙げた誤りのどれでも `wrong` が A にあり、`fixed` が B にあって A に無い。消して直したなら `wrong` が B に無い — 1 文に主張が 2 つあり、正しい方を書き換えた置き換えをここで止める）を固定の規則（`_audit_replace`）で置き換える: 文が本文にちょうど 1 回現れる（frontmatter・題・機会メモ・ソースには触れない）、文が 15 字以上、置き換えが空でも元と同じでもない、書き換えが max(24, 元の文の 30%) 字以内（編集距離）、改行の数を変えない、制御文字・ゼロ幅・bidi の文字を入れず、`` ` `` `<` `>` `[[` `![` `%` `$=` `&` をノートのどこにも増やさない（inline code と Dataview の inline JS・HTML・wikilink と埋め込み・comment・エンティティは vault で実行されるか隠れる）、ノート全体を前後で比べて URL（scheme の大文字小文字を問わず、HTML エンティティを戻してから）・link 先の並び・`**` と `` ` `` の数・見出し行（`## 機会メモ` / `## ソース` の行の数を含む）が変わらない — frontmatter・機会メモ・ソースは変わらず、本文に固定節と同じ見出しは増えない。全件を `state/<line>/audit/{date}.json` に記録し、監査の前のノートを `state/<line>/pre-audit/{date}.md` に写す。2 つの置き場は `pre-verify/` と同じく script だけが書き、呼1・呼2 の deny に入る（`SCRIPT_STATE_DENY`）。状態の path を消せない（dir が居座る）ときは監査を回さず、`AUDIT` は `"ran": false, "reason": "E_STATE"`。失敗は fail-open: 第 1 段が失敗すればノートは呼2 の後のままで `AUDIT` は `"ran": false`、第 2 段の 1 回の失敗はその候補だけを確定にしない。認証・課金のエラーは呼1・呼2 と同じく残りのラインを止める。
 
 **備考**: 全 `claude -p` 呼び出しは `< /dev/null` stdin リダイレクトを使用する（呼1・呼2・呼3 は `run_claude()` ラッパー経由、認証 probe は `real_auth_probe()` 自身が付ける）。これにより MCP の stdio 通信がターミナルの stdin と競合するのを防止する（過去 MCP ハングの根本原因だった）。
 

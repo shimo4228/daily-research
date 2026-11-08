@@ -426,7 +426,7 @@ precommit_fixture_commit() {
   grep -q 'prompts/verification-protocol.md' "$SCRIPT"
   refute_grep -q 'clarity-review-protocol.md' "$SCRIPT"
   grep -qF -- '--allowedTools "Read,WebFetch,Edit(//${CLARITY_NOTE#/}),Edit(//${VERIFY_PATH#/})"' "$SCRIPT"
-  grep -qF -- '--disallowedTools "$DISALLOWED_TOOLS,WebSearch,Edit(//${PRE_VERIFY_DIR#/}/**)"' "$SCRIPT"
+  grep -qF -- '--disallowedTools "$DISALLOWED_TOOLS,WebSearch,$SCRIPT_STATE_DENY"' "$SCRIPT"
   grep -qF -- '--max-turns 30' "$SCRIPT"
   grep -qF -- '--model "$VERIFY_MODEL"' "$SCRIPT"
   grep -qF 'CLAUDE_TIMEOUT=1200' "$SCRIPT"
@@ -443,8 +443,10 @@ precommit_fixture_commit() {
   grep -qF 'rm -rf "$PRE_VERIFY_PATH"' "$SCRIPT"
   grep -qF 'cp "$CLARITY_NOTE" "$PRE_VERIFY_PATH"' "$SCRIPT"
   grep -qF '[ -f "$PRE_VERIFY_PATH" ] && [ ! -L "$PRE_VERIFY_PATH" ]' "$SCRIPT"
-  # 呼2 の deny が写しの置き場を塞ぐ
-  grep -qF -- '--disallowedTools "$DISALLOWED_TOOLS,WebSearch,Edit(//${PRE_VERIFY_DIR#/}/**)"' "$SCRIPT"
+  # 呼1 (STATE_DENY) と呼2 の deny が写しの置き場を塞ぐ
+  grep -qF 'SCRIPT_STATE_DENY="Edit(//${PRE_VERIFY_DIR#/}/**),Edit(//${AUDIT_DIR#/}/**),Edit(//${PRE_AUDIT_DIR#/}/**)"' "$SCRIPT"
+  grep -qF 'STATE_DENY+=",$SCRIPT_STATE_DENY"' "$SCRIPT"
+  grep -qF -- '--disallowedTools "$DISALLOWED_TOOLS,WebSearch,$SCRIPT_STATE_DENY"' "$SCRIPT"
   grep -q 'python3 "\$DR_PY" verify-diff' "$SCRIPT"
   grep -q '"VDIFF"' "$SCRIPT"
   # 書き込み先の正本と呼2 の allow に写しを足さない

@@ -1,7 +1,7 @@
 """呼3 (照合監査、ADR-0020) の決定論部分の単体テスト。
 
 SH は claude を 2 段で呼び、dr_pipeline.py の audit-* が prompt の組み立て・応答の解析・状態
-(state/<line>/runs/<date>.audit.json)・置き換えの適用を持つ。モデルはノートを書かない — 両段が
+(state/<line>/audit/<date>.json)・置き換えの適用を持つ。モデルはノートを書かない — 両段が
 食い違いとした候補 (confirmed) だけを audit-apply が _audit_replace の規則で置き換える。ここが検査する
 invariant:
 - 置き換えは本文にちょうど 1 回現れる文だけ。frontmatter・題・機会メモ・ソース節は変わらない
