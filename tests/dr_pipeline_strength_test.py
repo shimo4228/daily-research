@@ -610,3 +610,266 @@ def test_metrics_append_counts_only_verify_rows_that_ran(monkeypatch, capsys, tm
     rec, _ = _metrics(monkeypatch, capsys, tmp_path, stdin)
     assert rec["verification"]["lines_verified"] == 2
     assert rec["verification"]["supported"] == 3
+
+
+# === report-lint (ctl-016): 当日レポートの決定論検査 ===
+
+DAY = "2026-08-05"
+
+
+def _report_text(n_sources, *, memo=True, length=1600):
+    head = "# T\n\n冒頭の結論。\n\n"
+    if memo:
+        head += "## 機会メモ\n- **何を**: x\n\n"
+    head += "## ソース\n" + "".join(
+        f"- [s{i}](https://example.com/{i})\n" for i in range(n_sources)
+    )
+    assert len(head) <= length
+    return head + "p" * (length - len(head))
+
+
+def _lint(monkeypatch, capsys, report_dir, config):
+    rc, out, err = run_cmd(monkeypatch, capsys, ["report-lint", str(report_dir), DAY, str(config)])
+    return rc, json.loads(out), err
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "config_text,n_sources,expected_soft",
+    [
+        # [report].min_sources が既定 5 を上書きする
+        ("[report]\nmin_sources = 2\n", 2, []),
+        ("[report]\nmin_sources = 2\n", 1, ["出典 URL 1 件 (< 2)"]),
+        # [report] 節が無い・節はあるが key が無い・config が無い → 既定 5
+        ("[general]\n", 5, []),
+        ("[general]\n", 4, ["出典 URL 4 件 (< 5)"]),
+        ("[report]\n", 4, ["出典 URL 4 件 (< 5)"]),
+        (None, 4, ["出典 URL 4 件 (< 5)"]),
+    ],
+    ids=[
+        "override-met",
+        "override-short",
+        "no-report-table-met",
+        "no-report-table-short",
+        "no-min-sources-key",
+        "no-config-file",
+    ],
+)
+def test_report_lint_min_sources_from_config(
+    monkeypatch, capsys, tmp_path, config_text, n_sources, expected_soft
+):
+    config = tmp_path / "config.toml"
+    if config_text is not None:
+        config.write_text(config_text, encoding="utf-8")
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / f"{DAY}_akc_x.md").write_text(_report_text(n_sources), encoding="utf-8")
+    rc, d, _ = _lint(monkeypatch, capsys, reports, config)
+    assert rc == 0
+    assert d["results"][0]["soft"] == expected_soft
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("length,short", [(1500, False), (1499, True)])
+def test_report_lint_body_length_boundary(monkeypatch, capsys, tmp_path, length, short):
+    # 本文長の soft は「1500 字未満」。ちょうど 1500 字は通す
+    (tmp_path / f"{DAY}_akc_x.md").write_text(_report_text(5, length=length), encoding="utf-8")
+    rc, d, _ = _lint(monkeypatch, capsys, tmp_path, CONFIG)
+    assert rc == 0
+    assert d["results"][0]["soft"] == ([f"本文 {length} 字 (< 1500)"] if short else [])
+
+
+@pytest.mark.unit
+def test_report_lint_result_shape(monkeypatch, capsys, tmp_path):
+    # LINT の JSON は metrics.jsonl に入り、hard fail は log と notify に載る。形を固定する
+    text = "# T\n\n本文だけ"
+    (tmp_path / f"{DAY}_akc_bad.md").write_text(text, encoding="utf-8")
+    thin = _report_text(2, memo=False, length=200)
+    (tmp_path / f"{DAY}_akc_thin.md").write_text(thin, encoding="utf-8")
+    rc, d, _ = _lint(monkeypatch, capsys, tmp_path, CONFIG)
+    assert rc == 2
+    assert d == {
+        "date": DAY,
+        "files": 2,
+        "hard_fail": 1,
+        "soft_fail": 2,
+        "results": [
+            {
+                "file": f"{DAY}_akc_bad.md",
+                "kind": "article",
+                "hard": ["ソース節がない", "出典 URL が 0 件"],
+                "soft": ["必須節欠落: 機会メモ", f"本文 {len(text)} 字 (< 1500)"],
+                "body_chars": len(text),
+            },
+            {
+                "file": f"{DAY}_akc_thin.md",
+                "kind": "article",
+                "hard": [],
+                "soft": ["出典 URL 2 件 (< 5)", "必須節欠落: 機会メモ", "本文 200 字 (< 1500)"],
+                "body_chars": 200,
+            },
+        ],
+    }
+
+
+@pytest.mark.unit
+def test_report_lint_soft_only_counts_one_per_file(monkeypatch, capsys, tmp_path):
+    (tmp_path / f"{DAY}_akc_thin.md").write_text(_report_text(2), encoding="utf-8")
+    rc, d, _ = _lint(monkeypatch, capsys, tmp_path, CONFIG)
+    assert rc == 0
+    assert (d["files"], d["hard_fail"], d["soft_fail"]) == (1, 0, 1)
+
+
+@pytest.mark.unit
+def test_report_lint_missing_dir_is_empty_pass(monkeypatch, capsys, tmp_path):
+    rc, d, _ = _lint(monkeypatch, capsys, tmp_path / "no-such-dir", CONFIG)
+    assert rc == 0
+    assert d == {"date": DAY, "files": 0, "hard_fail": 0, "soft_fail": 0, "results": []}
+
+
+@pytest.mark.unit
+def test_report_lint_unreadable_entry_is_hard_and_rest_still_checked(monkeypatch, capsys, tmp_path):
+    # 読めない entry (ここでは .md 名の dir) は hard。後ろの file の検査は続ける
+    (tmp_path / f"{DAY}_akc_a-dir.md").mkdir()
+    (tmp_path / f"{DAY}_akc_b-good.md").write_text(_report_text(5), encoding="utf-8")
+    rc, d, _ = _lint(monkeypatch, capsys, tmp_path, CONFIG)
+    assert rc == 2
+    assert (d["files"], d["hard_fail"], d["soft_fail"]) == (2, 1, 0)
+    bad, good = d["results"]
+    assert set(bad) == {"file", "hard", "soft"}
+    assert bad["file"] == f"{DAY}_akc_a-dir.md"
+    assert len(bad["hard"]) == 1 and bad["hard"][0].startswith("read error: ")
+    assert bad["soft"] == []
+    assert good["file"] == f"{DAY}_akc_b-good.md" and good["hard"] == []
+
+
+# === repo-activity: 直近の commit 件名 (呼1 の context に入る repo 由来の文字列) ===
+
+
+def _repo(tmp_path, commits, config=()):
+    """commits: [(subject, days_ago)] を古い順に commit した repo を返す。
+    config: repo-local の git config [(key, value)] (repo 側の設定として残る)。"""
+    import subprocess
+    import time
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.invalid",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.invalid",
+        # 運用者の global / system 設定 (hooksPath・署名) を効かせない
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
+    base = ["git", "-C", str(repo), "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
+
+    def git(*a, extra_env=None):
+        subprocess.run(
+            [*base, *a], check=True, env={**env, **(extra_env or {})}, capture_output=True
+        )
+
+    git("init", "-q")
+    for key, value in config:
+        git("config", key, value)
+    now = int(time.time())
+    msg = tmp_path / "msg"
+    for i, (subject, days_ago) in enumerate(commits):
+        (repo / f"f{i}").write_text(str(i))
+        git("add", ".")
+        msg.write_text(subject, encoding="utf-8")
+        stamp = f"{now - days_ago * 86400} +0000"
+        git(
+            "commit",
+            "-q",
+            "--cleanup=verbatim",
+            "-F",
+            str(msg),
+            extra_env={"GIT_AUTHOR_DATE": stamp, "GIT_COMMITTER_DATE": stamp},
+        )
+    return repo
+
+
+def _activity(monkeypatch, capsys, repo, *extra):
+    return run_cmd(monkeypatch, capsys, ["repo-activity", str(repo), *extra])
+
+
+@pytest.mark.unit
+def test_repo_activity_days_window_follows_flag(monkeypatch, capsys, tmp_path):
+    repo = _repo(tmp_path, [("old change", 30), ("new change", 0)])
+    rc, out, _ = _activity(monkeypatch, capsys, repo, "--days", "14")
+    assert rc == 0
+    assert out == "- new change\n"
+    rc, out, _ = _activity(monkeypatch, capsys, repo, "--days", "60")
+    assert rc == 0
+    assert out == "- new change\n- old change\n"
+
+
+@pytest.mark.unit
+def test_repo_activity_invalid_days_is_usage_error(monkeypatch, capsys, tmp_path):
+    rc, out, err = _activity(monkeypatch, capsys, tmp_path, "--days", "abc")
+    assert rc == 64
+    assert out == ""
+    assert err == "repo-activity: invalid --days 'abc'\n"
+
+
+@pytest.mark.unit
+def test_repo_activity_without_git_is_empty(monkeypatch, capsys, tmp_path):
+    # launchd の PATH に git が無くても line を止めない (空出力 + rc 0)
+    repo = _repo(tmp_path, [("a change", 0)])
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
+    rc, out, _ = _activity(monkeypatch, capsys, repo)
+    assert rc == 0
+    assert out == ""
+
+
+@pytest.mark.unit
+def test_repo_activity_non_utf8_output_is_replaced(monkeypatch, capsys, tmp_path):
+    # repo 側の i18n.logOutputEncoding が UTF-8 でないと git log は別の符号化で出す。
+    # 復号できない byte は置換文字にして、line を落とさない
+    repo = _repo(tmp_path, [("café subject", 0)], config=[("i18n.logOutputEncoding", "latin1")])
+    rc, out, _ = _activity(monkeypatch, capsys, repo)
+    assert rc == 0
+    assert out == "- caf\N{REPLACEMENT CHARACTER} subject\n"
+
+
+@pytest.mark.unit
+def test_repo_activity_sanitizes_subject_exactly(monkeypatch, capsys, tmp_path):
+    # 制御文字は空白に、連続空白は 1 つに、行頭の # (見出し) は外す。# 以外の先頭文字は残す
+    repo = _repo(tmp_path, [("##Xcode   build\x07fix", 0)])
+    rc, out, _ = _activity(monkeypatch, capsys, repo)
+    assert rc == 0
+    assert out == "- Xcode build fix\n"
+
+
+@pytest.mark.unit
+def test_repo_activity_skips_empty_subject_and_continues(monkeypatch, capsys, tmp_path):
+    repo = _repo(tmp_path, [("older change", 0), ("###", 0)])
+    rc, out, _ = _activity(monkeypatch, capsys, repo)
+    assert rc == 0
+    assert out == "- older change\n"
+
+
+@pytest.mark.unit
+def test_repo_activity_char_cap_is_inclusive(monkeypatch, capsys, tmp_path):
+    # 1 行 = "- " + 件名 + 改行。20 行 x 100 字 = ちょうど上限 2000 字は全部出す
+    subjects = [(f"c{i:02d} " + "x" * 93, 0) for i in range(20)]
+    repo = _repo(tmp_path, subjects)
+    rc, out, _ = _activity(monkeypatch, capsys, repo)
+    assert rc == 0
+    assert len(out.splitlines()) == 20
+    assert len(out) == dr_pipeline.REPO_ACTIVITY_MAX_CHARS
+
+
+@pytest.mark.unit
+def test_repo_activity_char_cap_drops_line_that_would_exceed(monkeypatch, capsys, tmp_path):
+    # 19 行 x 100 字 = 1900 字の後の 101 字の行は 2001 字になるので出さない
+    subjects = [("o00 " + "x" * 94, 0)] + [(f"c{i:02d} " + "x" * 93, 0) for i in range(19)]
+    repo = _repo(tmp_path, subjects)
+    rc, out, _ = _activity(monkeypatch, capsys, repo)
+    assert rc == 0
+    assert len(out.splitlines()) == 19
+    assert len(out) == 1900
+    assert "- o00 " not in out
