@@ -92,7 +92,7 @@ daily-research.sh (05:00)
 ├── ctl-016 決定論的レポート lint（固定節 = 機会メモ / ソース、report-template.md に同期。
 │   kind: brief は機会メモと文字数の soft を免除）
 ├── Pass 3: Obsidian wiki ingest（vault 側スクリプト、non-fatal。ingest 自身の上限より長い外側の timeout の下）
-└── metrics.jsonl 追記 (clarity_pass / line_states / verification 含む) + /dr-review 経過日数チェック
+└── metrics.jsonl 追記 (clarity_pass / line_states / verification / event_age_days 含む) + /dr-review 経過日数チェック
 ```
 
 (07:00 の morning-brief.sh は ADR-0009 で廃止 — レポートは承認を求めない読み物になった)
@@ -165,6 +165,8 @@ launchctl list | grep daily-research
 | `WARN: Line <track> past_topics.json append failed — history not recorded` | ゲートは通ったが、receipt から問いの履歴を追記できなかった。ラインは成功のままで、run 開始時の `past_topics.json.bak` が残る |
 | `Line <track> pending.md: items A→B, chars C→D` | そのラインの `pending.md` の項目数と字数の、呼1 の前とゲート通過後（見出し・太字で始まる箇条・表の行を項目と数える） |
 | `WARN: Line <track> pending.md の項目が <state> の run で N 件増えた (…)` | hold 以外の run が、ノートの日付付き締切の機会の数より多く `pending.md` に項目を足した。プロトコルが項目を足してよいとするのは hold の問いと日付付き締切の機会だけ。log だけで、ラインは成功のまま |
+| `receipt-event-date: WARN … — counted as unknown` | receipt に `event_date` が無い（古い receipt）か、run の日付以前の暦日でない。ラインは成功のまま、不明として数える |
+| `Line <track> event_date: <YYYY-MM-DD\|unknown>` | article / brief のときだけ: ノートの中心の出来事の日付で、receipt の `event_date` から取る（H17、新しさの計測）。metrics の `event_age_days` に記録する。ゲートにも選定にも効かない |
 | `WARN: report gate failed for line <track> — no <date>_<track>_*.md (ctl-015)` | receipt が article / brief なのにレポートが無い — 失敗として計上 |
 | `WARN: report gate failed for line <track> — ... receipt ... (ctl-015)` | run スコープの receipt が無い・壊れている — 失敗として計上（timeout で receipt を書く前に落ちた run） |
 | `Report existence gate passed: N report(s)` | 当日担当ラインが全て ctl-015 を通過。失敗したラインがある日と、認証・課金のエラーで始めずに残ったラインがある日は、代わりに、ゲートを通ったラインが 1 本以上あれば `=== Failed (E_PARTIAL:<失敗したライン>, exit code 1) ===`、1 本も無ければ `=== Failed (E_NO_REPORT:<失敗したライン>, exit code 1) ===` が出る（始めなかったラインだけの日はコロンの後が空） |

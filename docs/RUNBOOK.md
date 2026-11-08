@@ -92,7 +92,7 @@ daily-research.sh (05:00)
 ├── ctl-016 deterministic report lint (fixed sections 機会メモ / ソース, synced to
 │   report-template.md; kind: brief is exempt from the 機会メモ and length soft checks)
 ├── Pass 3: Obsidian wiki ingest (vault-side script, non-fatal, under an outer timeout longer than the ingest's own)
-└── metrics.jsonl append (incl. clarity_pass / line_states / verification) + /dr-review age check
+└── metrics.jsonl append (incl. clarity_pass / line_states / verification / event_age_days) + /dr-review age check
 ```
 
 (The 07:00 morning-brief.sh was retired in ADR-0009 — notes are now reading
@@ -166,6 +166,8 @@ launchctl list | grep daily-research
 | `WARN: Line <track> past_topics.json append failed — history not recorded` | The gate passed but the question history could not be appended from the receipt; the line still succeeds, and `past_topics.json.bak` from the run's start remains |
 | `Line <track> pending.md: items A→B, chars C→D` | Items and size of the line's `pending.md` before call 1 and after the gate (headings, bold-led bullets and table rows count as items) |
 | `WARN: Line <track> pending.md の項目が <state> の run で N 件増えた (…)` | A run other than hold added more `pending.md` items than its note's dated-deadline opportunities. The protocols add items only for hold questions and dated-deadline opportunities; log only, the line still succeeds |
+| `receipt-event-date: WARN … — counted as unknown` | The receipt has no `event_date` (an older receipt) or it is not a calendar date on or before the run date; the line still succeeds and is counted as unknown |
+| `Line <track> event_date: <YYYY-MM-DD\|unknown>` | Article / brief only: the date of the note's central event, from the receipt's `event_date` (H17, freshness measurement). Recorded as `event_age_days` in metrics; it affects neither the gate nor selection |
 | `WARN: report gate failed for line <track> — no <date>_<track>_*.md (ctl-015)` | The receipt says article / brief but no report exists — counted as failed |
 | `WARN: report gate failed for line <track> — ... receipt ... (ctl-015)` | The run-scoped receipt is missing or invalid — counted as failed (a run that died before writing it) |
 | `Report existence gate passed: N report(s)` | Every picked line passed ctl-015. A day with a failed line, or one where an auth / billing error left picked lines unstarted, logs `=== Failed (E_PARTIAL:<failed lines>, exit code 1) ===` instead when at least one line passed the gate, and `=== Failed (E_NO_REPORT:<failed lines>, exit code 1) ===` when none did (the list after the colon is empty when only the unstarted lines are missing) |

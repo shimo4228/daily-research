@@ -1297,6 +1297,78 @@ def test_receipt_read_ignores_event_date(monkeypatch, capsys, tmp_path, event_da
     assert out == "article\t2026-09-15_akc_x.md\t\tcarry_over\n"
 
 
+# --- receipt-event-date (H17: ノートの新しさの計測) ---
+
+
+def _red(monkeypatch, capsys, path, date="2026-09-15"):
+    return run_cmd(monkeypatch, capsys, ["receipt-event-date", path, date])
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("event_date", ["2026-09-10", "2026-09-15", "2019-01-31"])
+def test_receipt_event_date_passes_a_past_calendar_date(monkeypatch, capsys, tmp_path, event_date):
+    rc, out, err = _red(monkeypatch, capsys, _receipt(tmp_path, {"event_date": event_date}))
+    assert (rc, out, err) == (0, f"{event_date}\n", "")
+
+
+@pytest.mark.unit
+def test_receipt_event_date_declared_unknown_has_no_warn(monkeypatch, capsys, tmp_path):
+    rc, out, err = _red(monkeypatch, capsys, _receipt(tmp_path, {"event_date": "unknown"}))
+    assert (rc, out, err) == (0, "unknown\n", "")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "obj,raw",
+    [
+        ({"status": "article"}, None),
+        ({"event_date": "2026-09-16"}, None),
+        ({"event_date": "2026-02-30"}, None),
+        ({"event_date": "2026-09"}, None),
+        ({"event_date": "20260910"}, None),
+        ({"event_date": "2026-09-10T00:00"}, None),
+        ({"event_date": 20260910}, None),
+        ({"event_date": None}, None),
+        ({"event_date": ""}, None),
+        (None, "{broken"),
+        (None, "[1]"),
+    ],
+    ids=[
+        "old-receipt",
+        "future",
+        "no-such-day",
+        "month-only",
+        "basic-format",
+        "datetime",
+        "number",
+        "null",
+        "empty",
+        "non-json",
+        "non-object",
+    ],
+)
+def test_receipt_event_date_otherwise_unknown_with_warn(monkeypatch, capsys, tmp_path, obj, raw):
+    # 宣言でない unknown は day log に WARN を残す。rc は常に 0 (gate にも line の成否にも効かせない)
+    rc, out, err = _red(monkeypatch, capsys, _receipt(tmp_path, obj, raw))
+    assert (rc, out) == (0, "unknown\n")
+    assert "WARN" in err and "\n" == err[-1] and err.count("\n") == 1
+
+
+@pytest.mark.unit
+def test_receipt_event_date_missing_file_and_bad_run_date(monkeypatch, capsys, tmp_path):
+    rc, out, _ = _red(monkeypatch, capsys, str(tmp_path / "nope.json"))
+    assert (rc, out) == (0, "unknown\n")
+    p = _receipt(tmp_path, {"event_date": "2026-09-10"})
+    rc, out, _ = _red(monkeypatch, capsys, p, date="not-a-date")
+    assert (rc, out) == (0, "unknown\n")
+
+
+@pytest.mark.unit
+def test_receipt_event_date_usage(monkeypatch, capsys):
+    rc, _, err = run_cmd(monkeypatch, capsys, ["receipt-event-date", "only-one"])
+    assert rc == 64 and "usage" in err
+
+
 # --- verify-read ---
 
 
@@ -1760,6 +1832,36 @@ def test_metrics_append_without_state_or_verify(monkeypatch, capsys, tmp_path):
         k: 0 for k in ("article", "brief", "quiet", "hold", "mismatch", "suspect", "unverified")
     }
     assert rec["verification"] is None
+    assert rec["event_age_days"] is None
+
+
+@pytest.mark.unit
+def test_metrics_append_records_event_age_per_line(monkeypatch, capsys, tmp_path):
+    # EVENT 行 (H17): line → run 日付からの日数。unknown・日付でない・未来日は null (不明)
+    metrics = tmp_path / "metrics.jsonl"
+    stdin = (
+        "STATE\twide\tarticle\n"
+        "EVENT\twide\t2026-09-12\n"
+        "EVENT\takc\t2026-09-15\n"
+        "EVENT\tans\tunknown\n"
+        "EVENT\tedge\tgarbage\n"
+        "EVENT\tdesire\t2026-09-16\n"
+        "EVENT\taap\t2025-09-15\n"
+        "EVENT\t\t2026-09-01\n"
+    )
+    rc, _, _ = run_cmd(
+        monkeypatch, capsys, ["metrics-append", str(metrics), "2026-09-15", "OK", "6", "0"], stdin
+    )
+    assert rc == 0
+    rec = json.loads(metrics.read_text())
+    assert rec["event_age_days"] == {
+        "wide": 3,
+        "akc": 0,
+        "ans": None,
+        "edge": None,
+        "desire": None,
+        "aap": 365,
+    }
 
 
 @pytest.mark.unit
@@ -1773,6 +1875,64 @@ def test_metrics_backfill_new_fields_are_none(monkeypatch, capsys, tmp_path):
     rec = json.loads(metrics.read_text())
     assert rec["line_states"] is None
     assert rec["verification"] is None
+    assert rec["event_age_days"] is None
+
+
+# --- event-age-stats (H17: ノートの新しさの line 別集計) ---
+
+
+def _metrics_file(tmp_path, records):
+    p = tmp_path / "metrics.jsonl"
+    p.write_text("".join(json.dumps(r) + "\n" for r in records) + "not json\n")
+    return str(p)
+
+
+@pytest.mark.unit
+def test_event_age_stats_per_line_and_overall(monkeypatch, capsys, tmp_path):
+    path = _metrics_file(
+        tmp_path,
+        [
+            {"date": "2026-11-01", "source": "live", "event_age_days": {"wide": 2, "ans": 120}},
+            {"date": "2026-11-02", "source": "live", "event_age_days": {"wide": 5, "ans": None}},
+            {"date": "2026-11-03", "source": "live", "event_age_days": {"wide": 3}},
+            {"date": "2026-11-03", "source": "test", "event_age_days": {"wide": 900}},
+            {"date": "2026-11-04", "source": "live", "event_age_days": None},
+            {"date": "2026-10-01", "source": "backfill"},
+        ],
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["event-age-stats", path])
+    assert rc == 0
+    assert json.loads(out) == {
+        "lines": {
+            "ans": {"notes": 2, "unknown": 1, "unknown_rate": 0.5, "median_days": 120},
+            "wide": {"notes": 3, "unknown": 0, "unknown_rate": 0.0, "median_days": 3},
+        },
+        "all": {"notes": 5, "unknown": 1, "unknown_rate": 0.2, "median_days": 4.0},
+    }
+
+
+@pytest.mark.unit
+def test_event_age_stats_since_and_empty(monkeypatch, capsys, tmp_path):
+    path = _metrics_file(
+        tmp_path,
+        [
+            {"date": "2026-11-01", "source": "live", "event_age_days": {"wide": 2}},
+            {"date": "2026-11-02", "source": "live", "event_age_days": {"wide": None}},
+        ],
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["event-age-stats", path, "2026-11-02"])
+    assert rc == 0
+    assert json.loads(out)["lines"] == {
+        "wide": {"notes": 1, "unknown": 1, "unknown_rate": 1.0, "median_days": None}
+    }
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["event-age-stats", str(tmp_path / "none.jsonl")])
+    assert rc == 0
+    assert json.loads(out) == {
+        "lines": {},
+        "all": {"notes": 0, "unknown": 0, "unknown_rate": None, "median_days": None},
+    }
+    rc, _, err = run_cmd(monkeypatch, capsys, ["event-age-stats"])
+    assert rc == 64 and "usage" in err
 
 
 # --- expect-check: 新 metric ---

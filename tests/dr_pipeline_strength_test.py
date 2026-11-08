@@ -762,9 +762,11 @@ def test_metrics_append_record_keys_and_empty_report_count(monkeypatch, capsys, 
         "lint",
         "line_states",
         "verification",
+        "event_age_days",
         "total_cost",
     }
     assert rec["source"] == "test"
+    assert rec["event_age_days"] is None  # EVENT 行の無い日 (H17)
     assert rec["report_count"] == 0
     assert len(rec["ts"]) == len("2026-11-02T05:00:00")
 

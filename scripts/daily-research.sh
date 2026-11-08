@@ -294,7 +294,7 @@ fi
 
 FAILED_LINES=""       # ctl-015 (receipt gate) に落ちた line (空 = 全 line 成功)
 OK_LINES=""
-METRICS_STDIN=""      # metrics-append へ渡す RUN / CLARITY / STATE / VERIFY / VDIFF 行の蓄積 (1 日 1 レコード)
+METRICS_STDIN=""      # metrics-append へ渡す RUN / CLARITY / STATE / EVENT / VERIFY / VDIFF 行の蓄積 (1 日 1 レコード)
 AUTH_ABORT=0          # 401 検出 — 残 line は中断するが、完走済み line の集計は捨てない
 BILLING_ABORT=0       # 429 / クレジット切れ — 同上 (再試行で踏み抜かない、harness の rules: boundary.md)
 BUDGET_STOP=0         # API 支出の上限 (月・日) に届いた — 残 line を始めない
@@ -669,6 +669,13 @@ else
   if ! python3 "$DR_PY" past-topics-append "$PROJECT_DIR/past_topics.json" "$RECEIPT_FILE" \
       "$DATE" "$TRACK" ${CLARITY_NOTE:+"${CLARITY_NOTE##*/}"} 2>> "$LOG_FILE"; then
     log "WARN: Line $TRACK past_topics.json append failed — history not recorded"
+  fi
+  # ノートの中心の出来事の日付 (H17、新しさの計測)。ノートのある line だけ。gate にも選定にも効かせない —
+  # 旧 receipt・形式外・未来日は receipt-event-date が unknown にし、WARN を log に残す
+  if [ "$LINE_STATE" = "article" ] || [ "$LINE_STATE" = "brief" ]; then
+    R_EVENT=$(python3 "$DR_PY" receipt-event-date "$RECEIPT_FILE" "$DATE" 2>> "$LOG_FILE") || R_EVENT="unknown"
+    log "Line $TRACK event_date: ${R_EVENT:-unknown}"
+    METRICS_STDIN+="EVENT"$'\t'"$TRACK"$'\t'"${R_EVENT:-unknown}"$'\n'
   fi
   METRICS_STDIN+="STATE"$'\t'"$TRACK"$'\t'"$LINE_STATE${LINE_FLAGS:+$'\t'$LINE_FLAGS}"$'\n'
   case "$LINE_STATE" in

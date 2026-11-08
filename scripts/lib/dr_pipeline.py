@@ -611,6 +611,62 @@ def cmd_receipt_read(argv: list[str]) -> int:
     return 0
 
 
+_ISO_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _iso_day(v: object) -> int | None:
+    """YYYY-MM-DD の実在の暦日なら通日 (date.toordinal)、それ以外は None。"""
+    from datetime import date
+
+    if not isinstance(v, str) or not _ISO_DATE_RE.fullmatch(v):
+        return None
+    try:
+        return date.fromisoformat(v).toordinal()
+    except ValueError:
+        return None
+
+
+def _event_age_days(run_date: object, event_date: object) -> int | None:
+    """run 日付 − 出来事の日付 (日)。どちらかが暦日でない・出来事が run より後なら None (= 不明)。"""
+    run, ev = _iso_day(run_date), _iso_day(event_date)
+    if run is None or ev is None or ev > run:
+        return None
+    return run - ev
+
+
+# --- receipt-event-date <receipt_path> <date>: 記事の中心の出来事の日付 (H17、ノートの新しさの計測) ---
+# stdout: YYYY-MM-DD か unknown の 1 行。receipt の event_date が実在の暦日で run 日付以前ならその値、
+# それ以外 (key の無い旧 receipt / 宣言の "unknown" / 形式外 / 未来日 / 読めない receipt) は unknown。
+# 宣言でない unknown は stderr に WARN 1 行 (day log に残る)。rc は常に 0 — gate にも line の成否にも
+# 効かせない。orchestrator は article / brief の line だけ呼び、結果を metrics の EVENT 行にする。
+def cmd_receipt_event_date(argv: list[str]) -> int:
+    if len(argv) < 2:
+        print("usage: receipt-event-date <receipt_path> <date>", file=sys.stderr)
+        return 64
+    path, date_s = argv[:2]
+
+    def unknown(why: str) -> int:
+        print(f"receipt-event-date: WARN {why} — counted as unknown", file=sys.stderr)
+        print("unknown")
+        return 0
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
+        return unknown(f"unreadable receipt: {_CTRL_RE.sub(' ', str(e))[:120]}")
+    if not isinstance(d, dict) or "event_date" not in d:
+        return unknown("receipt has no event_date")
+    v = d["event_date"]
+    if v == "unknown":
+        print("unknown")
+        return 0
+    if _event_age_days(date_s, v) is None:
+        return unknown(f"event_date {str(v)[:40]!r} is not a date on or before {date_s[:10]!r}")
+    print(v)
+    return 0
+
+
 # --- past-topics-append <past_path> <receipt_path> <date> <track> [report_basename] ---
 # past_topics.json への追記 (ADR-0019 Decision 4)。orchestrator が receipt gate の成功後に呼ぶ。
 # entry は読み手 cmd_past_themes が使うキーだけ。report_basename は gate が解決した run の
@@ -1176,6 +1232,18 @@ LINE_STATE_KEYS = (
 )
 
 
+def _event_ages(date_s: str, lines: list[str]) -> dict[str, int | None] | None:
+    """metrics-append の stdin の EVENT\t<track>\t<date> 行 → {track: run 日付からの日数 | None}。
+    EVENT 行が無ければ None (ノートが 0 本の日、H17)。本体のループは EVENT を未知ラベルとして読み飛ばす。"""
+    ages: dict[str, int | None] = {}
+    for line in lines:
+        label, _, payload = line.strip().partition("\t")
+        track, _, event_date = payload.partition("\t")
+        if label == "EVENT" and track:
+            ages[track] = _event_age_days(date_s, event_date)
+    return ages or None
+
+
 def _sum_verification(verifies: list[dict[str, object]]) -> dict[str, int] | None:
     """VERIFY 行群を合算する。行が無ければ None (呼2 が走らなかった日)。"""
     if not verifies:
@@ -1196,6 +1264,8 @@ def _sum_verification(verifies: list[dict[str, object]]) -> dict[str, int] | Non
 #   VERIFY\t{json}       — verify-read の出力。5 key を合算、lines_verified = ran の数
 #   VDIFF\t{json}        — verify-diff の 1 行目。diff_* を verification に合算、diff_lines = 行数
 #                        (VDIFF 行が無い日は verification に diff_* を足さない — 旧 record と同じ形)
+#   EVENT\t<track>\t<YYYY-MM-DD|unknown> — ノートのある line の出来事の日付 (receipt-event-date、H17)。
+#                        event_age_days に line → run 日付からの日数 (不明は null)。EVENT 行が無い日は None
 # ラベル不明・payload 破損の行は skip (収集は non-fatal)。
 # pass1 は per-repo 化で廃止 (None 固定)。第 5 引数はリトライ発生の有無で、
 # レコード互換のため旧フィールド名 fallback_used に記録する。
@@ -1218,7 +1288,8 @@ def cmd_metrics_append(argv: list[str]) -> int:
     runs, lint, clarities = [], None, []
     line_states = {k: 0 for k in LINE_STATE_KEYS}
     verifies, vdiffs = [], []
-    for line in sys.stdin.read().split("\n"):
+    stdin_lines = sys.stdin.read().split("\n")
+    for line in stdin_lines:
         line = line.strip()
         if not line:
             continue
@@ -1292,6 +1363,7 @@ def cmd_metrics_append(argv: list[str]) -> int:
         "lint": lint,
         "line_states": line_states,
         "verification": _sum_verification(verifies),
+        "event_age_days": _event_ages(date_s, stdin_lines),
     }
     if record["verification"] is not None and vdiffs:
         record["verification"].update(_sum_vdiff(vdiffs))
@@ -1349,9 +1421,10 @@ def cmd_metrics_backfill(argv: list[str]) -> int:
                             "pass2": None,
                             "clarity_pass": None,
                             "lint": None,
-                            # ADR-0017 の field はログから復元しない
+                            # ADR-0017 / H17 の field はログから復元しない
                             "line_states": None,
                             "verification": None,
+                            "event_age_days": None,
                         }
                         runs.append(run)
                         continue
@@ -1645,6 +1718,46 @@ def cmd_review_age(argv: list[str]) -> int:
         print((date.today() - d).days)
     except (FileNotFoundError, json.JSONDecodeError, ValueError):
         print("never")
+    return 0
+
+
+# --- event-age-stats <metrics_path> [since]: ノートの新しさの line 別集計 (H17) ---
+# 本番 record (source=test を除く) の event_age_days を、date が since (YYYY-MM-DD、既定は全期間) 以後の
+# 分について line 別に集め、JSON 1 行で出す: {"lines": {track: S}, "all": S}。
+# S = {"notes": ノート数, "unknown": 不明 (null) の数, "unknown_rate": unknown / notes,
+#      "median_days": 既知の日数の中央値}。notes が 0 なら rate は null、既知が 0 なら median は null。
+# event_age_days の無い record (導入前・backfill) と None の日 (ノート 0 本) は数えない。
+def cmd_event_age_stats(argv: list[str]) -> int:
+    import statistics
+
+    if not argv:
+        print("usage: event-age-stats <metrics_path> [since]", file=sys.stderr)
+        return 64
+    since = argv[1] if len(argv) > 1 else ""
+    per_line: dict[str, list[int | None]] = {}
+    for rec in _load_metrics(argv[0]):
+        ages = rec.get("event_age_days")
+        if not isinstance(ages, dict) or str(rec.get("date", "")) < since:
+            continue
+        for track, age in ages.items():
+            known = isinstance(age, int) and not isinstance(age, bool)
+            per_line.setdefault(str(track), []).append(age if known else None)
+
+    def stats(vals: list[int | None]) -> dict[str, object]:
+        known = [v for v in vals if v is not None]
+        n_unknown = len(vals) - len(known)
+        return {
+            "notes": len(vals),
+            "unknown": n_unknown,
+            "unknown_rate": round(n_unknown / len(vals), 4) if vals else None,
+            "median_days": statistics.median(known) if known else None,
+        }
+
+    out = {
+        "lines": {t: stats(v) for t, v in sorted(per_line.items())},
+        "all": stats([v for vals in per_line.values() for v in vals]),
+    }
+    print(json.dumps(out, ensure_ascii=False))
     return 0
 
 
@@ -2009,6 +2122,7 @@ COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "repo-activity": cmd_repo_activity,
     "line-brief": cmd_line_brief,
     "receipt-read": cmd_receipt_read,
+    "receipt-event-date": cmd_receipt_event_date,
     "verify-read": cmd_verify_read,
     "verify-diff": cmd_verify_diff,
     "pending-stats": cmd_pending_stats,
@@ -2020,6 +2134,7 @@ COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "wiki-quality-scan": cmd_wiki_quality_scan,
     "review-age": cmd_review_age,
     "expect-check": cmd_expect_check,
+    "event-age-stats": cmd_event_age_stats,
     "billing-config": cmd_billing_config,
     "env-key": cmd_env_key,
     "spend-add": cmd_spend_add,

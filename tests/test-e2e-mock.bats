@@ -1060,6 +1060,36 @@ assert rec["verification"]["diff_lines"] == 1 and rec["verification"]["diff_span
 PY
 }
 
+@test "E2E event: the receipt's event_date becomes event_age_days for the line (H17)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  echo "2026-08-01" > "$MOCK_HOME/.event_date_$PICKED"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  get_log | grep -q "Line $PICKED event_date: 2026-08-01"
+  refute_grep -q "receipt-event-date: WARN" <<< "$(get_log)"
+  assert_metrics << 'PY'
+assert list(rec["event_age_days"].values()) == [12], rec  # DR_DATE 2026-08-13 − 2026-08-01
+PY
+}
+
+@test "E2E event: a receipt without event_date (old contract) passes the gate and counts as unknown (H17)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  echo "absent" > "$MOCK_HOME/.event_date_$PICKED"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  local log_content
+  log_content=$(get_log)
+  echo "$log_content" | grep -q "Line $PICKED report gate passed"
+  echo "$log_content" | grep -q "receipt-event-date: WARN receipt has no event_date"
+  echo "$log_content" | grep -q "Line $PICKED event_date: unknown"
+  assert_metrics << 'PY'
+assert rec["final_class"] == "OK", rec
+assert list(rec["event_age_days"].values()) == [None], rec
+PY
+}
+
 @test "E2E clarity: a pre-verify copy and verify-diff record call 2's real edits and flag self-report errors (H07)" {
   echo "normal" > "$MOCK_HOME/.mock_scenario"
   printf -- '---\nkind: article\n---\n\n# mock report for %s\n\n書き換えた文。\n\n## ソース\n- [n](https://new.example/x)\n' "$PICKED" > "$MOCK_HOME/.clarity_post"
@@ -1196,6 +1226,7 @@ assert rec["final_class"] == "OK", rec
 assert rec["line_states"]["quiet"] == 1 and rec["line_states"]["suspect"] == 0, rec
 assert rec["verification"] is None, rec
 assert rec["clarity_pass"] is None, rec
+assert rec["event_age_days"] is None, rec  # ノートの無い line は新しさを数えない (H17)
 PY
 }
 
