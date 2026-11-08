@@ -796,6 +796,24 @@ def test_report_lint_body_without_h1_starts_after_frontmatter(monkeypatch, capsy
     assert r["body_chars"] == len("短報")
 
 
+@pytest.mark.unit
+def test_report_lint_body_heading_starting_with_sources_is_not_the_tail(
+    monkeypatch, capsys, tmp_path
+):
+    # 「## ソースコードの読み方」は本文の見出し。末尾の固定節は「## ソース」の完全一致 (機会メモ無しの brief で
+    # 前方一致だと本文がそこで切れていた)
+    text = (
+        "# 題\n\n" + "あ" * 800 + "\n\n## ソースコードの読み方\n\n" + "い" * 800 + "\n\n"
+        "## ソース\n- [a](https://a.com)\n"
+    )
+    (tmp_path / "2026-08-05_akc_t.md").write_text(text)
+    _, out, _ = run_cmd(monkeypatch, capsys, _lint_args(tmp_path))
+    r = json.loads(out)["results"][0]
+    assert r["body_chars"] == 1600 + len("##ソースコードの読み方")
+    assert r["body_headings"] == 1
+    assert not any(x.startswith("本文 ") for x in r["soft"])
+
+
 # === wiki-quality-scan ===
 
 
@@ -1449,6 +1467,48 @@ def test_verify_diff_unparsable_report_is_not_a_mismatch(monkeypatch, capsys, tm
     rc, d, warns, _ = _vdiff(monkeypatch, capsys, tmp_path, PRE_NOTE, verify, stdin)
     assert rc == 0
     assert d["reported"] is None and d["diff_report_mismatch"] is False and warns == []
+
+
+def _vdiff_pair(monkeypatch, capsys, tmp_path, pre, post):
+    pre_p, post_p = tmp_path / "pre.md", tmp_path / "post.md"
+    pre_p.write_text(pre)
+    post_p.write_text(post)
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["verify-diff", str(pre_p), str(post_p)])
+    lines = out.splitlines()
+    return rc, json.loads(lines[0]), lines[1:]
+
+
+@pytest.mark.unit
+def test_verify_diff_body_heading_starting_with_sources_is_not_the_tail(
+    monkeypatch, capsys, tmp_path
+):
+    # 本文の「## ソースコードの読み方」の下を改稿しても、末尾の固定節 (完全一致の「## ソース」) は変わっていない
+    pre = (
+        "# 題\n\n## ソースコードの読み方\n\n元の文。\n\n## 機会メモ\n\nなし\n\n"
+        "## ソース\n\n- [a](https://a.example/x)\n"
+    )
+    post = pre.replace("元の文。", "書き換えた文。")
+    rc, d, warns = _vdiff_pair(monkeypatch, capsys, tmp_path, pre, post)
+    assert rc == 0
+    assert d["diff_spans"] == 1
+    assert d["diff_sources_changed"] is False and d["diff_memo_changed"] is False
+    assert warns == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("mark", ["（未解決 2026-11-01）", "(未解決)", " (未解決 404)"])
+def test_verify_diff_unresolved_mark_after_bare_url_is_not_a_new_url(
+    monkeypatch, capsys, tmp_path, mark
+):
+    # 裸 URL の直後の付記を URL の一部として拾わない — URL は付記を除いた本文から取る
+    pre = "# 題\n\n本文。\n\n## 機会メモ\n\nなし\n\n## ソース\n\n- https://c.example/z\n"
+    post = pre.replace("https://c.example/z\n", f"https://c.example/z{mark}\n")
+    rc, d, warns = _vdiff_pair(monkeypatch, capsys, tmp_path, pre, post)
+    assert rc == 0
+    assert d["diff_new_urls"] == 0 and d["new_urls"] == []
+    assert d["diff_sources_changed"] is False
+    assert d["diff_unresolved_marks_added"] == 1
+    assert warns == []
 
 
 @pytest.mark.unit

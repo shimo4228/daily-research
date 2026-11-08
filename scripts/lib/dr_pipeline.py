@@ -845,17 +845,35 @@ _REPORTED_RE = re.compile(
 _REPORTED_EDITS_RE = re.compile(r"修正 span 合計[:：]\s*(\d+|無変更)")
 
 
+# 末尾の固定 2 節の見出し行 (完全一致)。「## ソースコード…」のような本文の見出しを固定節と取り違えない。
+# 同じ見出しが本文にもあれば最後の 1 つを固定節とみなす (固定節は 機会メモ → ソース の順で末尾 — templates)
+_TAIL_MEMO_RE = re.compile(r"^## 機会メモ[ \t]*$", re.MULTILINE)
+_TAIL_SOURCES_RE = re.compile(r"^## ソース[ \t]*$", re.MULTILINE)
+
+
+def _last_line_match(pattern: re.Pattern[str], text: str) -> int:
+    """text の中で pattern に一致する最後の行の開始位置。無ければ -1。"""
+    pos = -1
+    for m in pattern.finditer(text):
+        pos = m.start()
+    return pos
+
+
+def _tail_split(text: str) -> tuple[int, int]:
+    """(機会メモ節の開始, ソース節の開始)。無い節は -1。機会メモはソース節より前だけを探す。"""
+    src_at = _last_line_match(_TAIL_SOURCES_RE, text)
+    memo_at = _last_line_match(_TAIL_MEMO_RE, text[:src_at] if src_at >= 0 else text)
+    return memo_at, src_at
+
+
 def _note_parts(text: str) -> tuple[str, str, str]:
     """(frontmatter, 機会メモ節, ソース節) を返す。無い節は空文字。"""
     m = _FRONTMATTER_RE.match(text)
     fm = m.group(0) if m else ""
     rest = text[len(fm) :]
-    src_at = rest.find("\n## ソース")
-    memo_at = rest.find("\n## 機会メモ")
+    memo_at, src_at = _tail_split(rest)
     sources = rest[src_at:] if src_at >= 0 else ""
-    memo = ""
-    if memo_at >= 0:
-        memo = rest[memo_at : src_at if src_at > memo_at else len(rest)]
+    memo = rest[memo_at : src_at if src_at >= 0 else len(rest)] if memo_at >= 0 else ""
     return fm, memo, sources
 
 
@@ -965,8 +983,9 @@ def cmd_verify_diff(argv: list[str]) -> int:
     def numbers(t: str, fm: str) -> Counter[str]:
         return Counter(_NUMBER_TOKEN_RE.findall(unmarked(t[len(fm) :])))
 
-    pre_urls = set(_URL_RE.findall(pre))
-    new_urls = sorted({u for u in _URL_RE.findall(post) if u not in pre_urls})
+    # URL は「(未解決 …)」の付記を除いた本文から取る — 裸 URL の直後に付いた付記を URL の一部と読まない
+    pre_urls = set(_URL_RE.findall(unmarked(pre)))
+    new_urls = sorted({u for u in _URL_RE.findall(unmarked(post)) if u not in pre_urls})
     n_pre, n_post = numbers(pre, pre_fm), numbers(post, post_fm)
     nums_added = sorted((n_post - n_pre).elements())
     nums_removed = sorted((n_pre - n_post).elements())
@@ -1434,11 +1453,9 @@ def _report_body(text: str) -> str:
     rest = text[m.end() :] if m else text
     h1 = _H1_RE.search(rest)
     after = rest[h1.end() :] if h1 else rest
-    for tail in ("\n## 機会メモ", "\n## ソース"):
-        end = after.find(tail)
-        if end >= 0:
-            return after[:end]
-    return after
+    memo_at, src_at = _tail_split(after)
+    end = memo_at if memo_at >= 0 else src_at
+    return after[:end] if end >= 0 else after
 
 
 # --- report-lint <report_dir> <date> [config_path] ---
