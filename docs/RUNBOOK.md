@@ -60,7 +60,7 @@ launchctl start com.yourname.daily-research   # the Label in your plist
 daily-research.sh (05:00)
 ├── Lock acquisition (atomic mkdir)
 ├── Billing setup ([billing]: api = ANTHROPIC_API_KEY from env_file, subscription = OAuth)
-├── Auth probe (one real Haiku call on that billing path)
+├── Auth probe (one real Haiku call on that billing path, with --safe-mode like both calls)
 ├── Config schema check (legacy pre-ADR-0008 schema fails fast)
 ├── rotation-pick — deterministic selection of today's lines: a rotation window
 │   (start = date.toordinal() × K mod N, then K consecutive lines, K = [general]
@@ -86,7 +86,7 @@ daily-research.sh (05:00)
 │   survives, ADR-0017)
 ├── ctl-016 deterministic report lint (fixed sections 機会メモ / ソース, synced to
 │   report-template.md; kind: brief is exempt from the 機会メモ and length soft checks)
-├── Pass 3: Obsidian wiki ingest (vault-side script, non-fatal)
+├── Pass 3: Obsidian wiki ingest (vault-side script, non-fatal, under an outer timeout longer than the ingest's own)
 └── metrics.jsonl append (incl. clarity_pass / line_states / verification) + /dr-review age check
 ```
 
@@ -142,7 +142,7 @@ launchctl list | grep daily-research
 | `ERROR: Line <track> hit a billing/rate-limit error — aborting remaining lines, no retry` | api mode: 429 or credit balance too low (`E_BILLING`) |
 | `WARN: Line <track> reached --max-budget-usd $… — no retry, going to gate` | The per-call cap stopped call 1; whatever it wrote goes to the gate |
 | `API spend: today $… / $…, month $… / $…` | api mode: totals from `state/api-spend.jsonl` after the run |
-| `ERROR: Another instance is running. Skipping.` | Lock directory `.daily-research.lock/` is held by a live PID |
+| `ERROR: Another instance is running. Skipping.` | Lock directory `.daily-research.lock/` is held by a live `daily-research.sh` process |
 | `Config schema check passed` | `config.toml` matches the current (ADR-0008) schema |
 | `Rotation pick: a, b, c (ADR-0010/0017)` | The rotation window picked for today |
 | `Today's lines: N` | How many lines run today (`lines_per_day` + any daily lines) |
@@ -168,7 +168,7 @@ launchctl list | grep daily-research
 |---------|------|
 | `今朝のリサーチレポートが完成しました (今朝: … / 更新なし: … / 未検証: …)` | All lines succeeded and at least one report was published |
 | `今朝は更新なし (更新なし: …)` | Every line ended quiet / hold (a success) |
-| `リサーチが一部失敗しました (今朝: … / 更新なし: … / failed: …)。ログを確認してください。` | E_PARTIAL — the failed lines are named |
+| `リサーチが一部失敗しました (今朝: … / 更新なし: … / failed: …)。ログを確認してください。` | E_PARTIAL — the failed lines are named. A day an auth / billing error stopped (401 / 403 / 429 / credit) is also E_PARTIAL; the lines it never started are listed under 未実行 |
 
 未検証 (unverified) lists lines whose call 2 failed or left no verify.json; their notes are published anyway. A quiet / hold flagged as a suspected fetch failure (zero web searches, or `reason_code = fetch_failed`) points at a network-side problem rather than a quiet day.
 
@@ -219,7 +219,8 @@ cat .daily-research.lock/pid
 ps aux | grep daily-research
 
 # If no process is running, remove the stale lock directory
-# (the script also steals a lock whose PID is dead on its next start)
+# (the script also steals, on its next start, a lock whose PID is dead or now belongs
+#  to a process other than daily-research.sh — e.g. a PID reused after a reboot)
 rm -rf .daily-research.lock
 ```
 

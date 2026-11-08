@@ -60,7 +60,7 @@ launchctl start com.yourname.daily-research   # plist の Label
 daily-research.sh (05:00)
 ├── ロック取得（アトミック mkdir）
 ├── 課金経路の設定（[billing]: api = env_file の ANTHROPIC_API_KEY、subscription = OAuth）
-├── 認証 probe（その経路で Haiku を実際に 1 回呼ぶ）
+├── 認証 probe（その経路で Haiku を実際に 1 回呼ぶ。呼1・呼2 と同じく --safe-mode）
 ├── config schema チェック（ADR-0008 以前の旧 schema は fail-fast）
 ├── rotation-pick — 当日担当ラインを決定論選択: 輪番 window（開始 = date.toordinal() × K
 │   mod N、そこから連続 K 本。K = [general] lines_per_day、ADR-0010 / ADR-0017）
@@ -85,7 +85,7 @@ daily-research.sh (05:00)
 │   WebSearch は disallow, 失敗は fail-open — 未検証版が残り run は成功のまま, ADR-0017)
 ├── ctl-016 決定論的レポート lint（固定節 = 機会メモ / ソース、report-template.md に同期。
 │   kind: brief は機会メモと文字数の soft を免除）
-├── Pass 3: Obsidian wiki ingest（vault 側スクリプト、non-fatal）
+├── Pass 3: Obsidian wiki ingest（vault 側スクリプト、non-fatal。ingest 自身の上限より長い外側の timeout の下）
 └── metrics.jsonl 追記 (clarity_pass / line_states / verification 含む) + /dr-review 経過日数チェック
 ```
 
@@ -140,7 +140,7 @@ launchctl list | grep daily-research
 | `ERROR: Line <track> hit a billing/rate-limit error — aborting remaining lines, no retry` | api モード: 429 またはクレジット残高不足（`E_BILLING`） |
 | `WARN: Line <track> reached --max-budget-usd $… — no retry, going to gate` | 呼び出しごとの上限で呼1 が止まった。書けた分でゲートへ進む |
 | `API spend: today $… / $…, month $… / $…` | api モード: run 後の `state/api-spend.jsonl` の合計 |
-| `ERROR: Another instance is running. Skipping.` | ロックディレクトリ `.daily-research.lock/` を生存中の PID が保持している |
+| `ERROR: Another instance is running. Skipping.` | ロックディレクトリ `.daily-research.lock/` を生存中の `daily-research.sh` の process が保持している |
 | `Config schema check passed` | `config.toml` が現行 (ADR-0008) schema に適合 |
 | `Rotation pick: a, b, c (ADR-0010/0017)` | 当日担当ラインの輪番 window 選択結果 |
 | `Today's lines: N` | 当日実行するライン数（`lines_per_day` + daily ライン） |
@@ -166,7 +166,7 @@ launchctl list | grep daily-research
 |---------|------|
 | `今朝のリサーチレポートが完成しました (今朝: … / 更新なし: … / 未検証: …)` | 全ライン成功し、公開されたレポートがある |
 | `今朝は更新なし (更新なし: …)` | 全ラインが quiet / hold で終わった（成功） |
-| `リサーチが一部失敗しました (今朝: … / 更新なし: … / failed: …)。ログを確認してください。` | E_PARTIAL — 失敗したラインを名指しする |
+| `リサーチが一部失敗しました (今朝: … / 更新なし: … / failed: …)。ログを確認してください。` | E_PARTIAL — 失敗したラインを名指しする。認証・課金のエラー（401 / 403 / 429 / クレジット）で止めた日も E_PARTIAL で、始めなかったラインは「未実行」に並ぶ |
 
 「未検証」は呼2 が失敗した（または verify.json が無い）ラインで、レポート自体は公開されている。「取得失敗の疑い」が付く quiet / hold は、web 検索 0 回または `reason_code = fetch_failed` のラインで、ネットワーク側の問題を疑う材料になる。
 
@@ -217,7 +217,8 @@ cat .daily-research.lock/pid
 ps aux | grep daily-research
 
 # プロセスが存在しない場合、古いロックディレクトリを削除
-# （PID が死んでいるロックは次回起動時にスクリプト自身が奪取する）
+# （PID が死んでいるロックと、PID が daily-research.sh 以外の process のもの（再起動後の PID の再利用など）
+#  になったロックは、次回起動時にスクリプト自身が奪取する）
 rm -rf .daily-research.lock
 ```
 
