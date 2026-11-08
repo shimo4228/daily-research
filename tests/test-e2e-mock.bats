@@ -370,6 +370,15 @@ get_log() {
   cat "$MOCK_PROJECT/logs/$DR_DATE.log"
 }
 
+# PATH 先頭 ($HOME/.claude/local) に timeout の spy を置く: 呼び出しごとに引数を 1 行
+# ($*) で $MOCK_HOME/.timeout_calls に追記し、本物の timeout へ渡す (実時間で待たずに配線を見る)
+install_timeout_spy() {
+  local real_timeout; real_timeout=$(command -v timeout)
+  printf '#!/bin/bash\necho "$*" >> "%s/.timeout_calls"\nexec "%s" "$@"\n' "$MOCK_HOME" "$real_timeout" \
+    > "$MOCK_HOME/.claude/local/timeout"
+  chmod +x "$MOCK_HOME/.claude/local/timeout"
+}
+
 # === Test: Normal path (rotation: 当日担当 1 line のみ、ADR-0010) ===
 
 @test "E2E normal: only the rotation-picked line runs and its report passes the gate" {
@@ -803,6 +812,16 @@ EOF
   log_content=$(get_log)
 
   echo "$log_content" | grep -q "DEBUG: CLAUDE_CMD=$MOCK_HOME/.claude/local/claude"
+}
+
+@test "E2E: claude --version runs under timeout -k (a hung binary cannot hold the lock)" {
+  # --version は lock 取得後に走る。timeout が無いと、更新途中で壊れた binary や起動時に固まる
+  # claude で run が戻らず、翌朝以降の run が全部 "Another instance is running" になる
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  install_timeout_spy
+
+  run_script
+  grep -qE "^-k [0-9]+ [0-9]+ $MOCK_HOME/.claude/local/claude --version\$" "$MOCK_HOME/.timeout_calls"
 }
 
 # === Test: No legacy gtimeout dependency ===

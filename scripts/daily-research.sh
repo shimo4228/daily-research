@@ -110,8 +110,9 @@ fi
 CLAUDE_CMD=$(command -v claude)
 [ "${DEBUG:-}" = "1" ] && log "DEBUG: CLAUDE_CMD=$CLAUDE_CMD"
 
-# --version は binary が壊れていないかの liveness 確認のみ (OAuth は検証しない)
-if ! "$CLAUDE_CMD" --version >> "$LOG_FILE" 2>&1; then
+# --version は binary が壊れていないかの liveness 確認のみ (OAuth は検証しない)。lock 取得後に
+# 走るので timeout -k で上限を置く (固まった binary が lock を握り続けると翌朝以降が全部 skip になる)
+if ! timeout -k 10 60 "$CLAUDE_CMD" --version >> "$LOG_FILE" 2>&1; then
   log "ERROR: claude --version failed (binary broken?)"
   notify "claude バイナリが実行できません" "Daily Research Error"
   exit 1
