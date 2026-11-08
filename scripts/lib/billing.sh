@@ -69,29 +69,31 @@ billing_record() {
   return 0
 }
 
-# billing_gate: api mode で次の line を始めてよいなら 0、止めるなら 1。
-# SPEND_MONTH / SPEND_DAY に今月・今日の累計を入れる。上限に届いた以外の理由で止めるとき
-# (台帳が書けなかった・読めない行がある・gate 自体の失敗) は、その理由を log してから 1 を返す
-# — 呼ぶ側の「上限に達した」ログと取り違えないため。
+# billing_gate: api mode で次の line を始めてよいなら 0、支出の上限 (月・日の残額が 1 line 分の予約に
+# 満たない) で止めるなら 1、上限を確かめられずに止めるなら 2。SPEND_MONTH / SPEND_DAY に今月・今日の累計を
+# 入れる (2 のときは "?")。2 の理由 (台帳が書けなかった・読めない行がある・mktemp や gate 自体の失敗) は
+# ここで ERROR として log してから返す — 呼ぶ側は 1 と 2 で log と通知の文言を分け、上限に達していない日に
+# 「上限に達した」と言わない。spend-gate の rc 1 は出力が stop で始まるときだけ上限 (python の未捕捉例外も rc 1)。
 billing_gate() {
   local out err rc=0
   SPEND_MONTH="?"; SPEND_DAY="?"
   [ "${BILLING_MODE:-subscription}" = "api" ] || return 0
   if [ "$BILLING_LEDGER_BROKEN" = "1" ]; then
     _billing_log "ERROR: API spend ledger could not be written earlier in this run — cannot check the caps"
-    return 1
+    return 2
   fi
   if ! err=$(mktemp); then
     _billing_log "ERROR: API spend gate could not create a temp file (mktemp failed) — cannot check the caps"
-    return 1
+    return 2
   fi
   out=$(python3 "$DR_PY" spend-gate "$SPEND_LEDGER" "$DATE" "$BILLING_MONTHLY_CAP" \
     "$BILLING_DAILY_CAP" "$BILLING_RESERVE" 2>"$err") || rc=$?
-  if [ "$rc" = "0" ] || [ "$rc" = "1" ]; then
+  if [ "$rc" = "0" ] || { [ "$rc" = "1" ] && [ "${out%%$'\t'*}" = "stop" ]; }; then
     IFS=$'\t' read -r _ SPEND_MONTH SPEND_DAY <<< "$out"
   else
     _billing_log "ERROR: API spend gate failed (rc $rc): $(cat "$err") — cannot check the caps"
+    rc=2
   fi
   rm -f "$err"
-  [ "$rc" = "0" ]
+  return "$rc"
 }

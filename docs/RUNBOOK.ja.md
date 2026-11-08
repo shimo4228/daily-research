@@ -142,7 +142,8 @@ launchctl list | grep daily-research
 | `ERROR: billing setup failed — …` | `[billing]` が不正、または（api モードで）`env_file` に `ANTHROPIC_API_KEY` が無い。どの呼び出しより前に停止（exit 1） |
 | `Auth probe passed` | 実際に呼び出す認証 probe が成功 |
 | `ERROR: Auth probe failed (<mode>) — status=… result=…` | probe が失敗（OAuth 期限切れ、または api モードで key の拒否・クレジット不足・429）。ライン実行前に停止（exit 1） |
-| `WARN: API spend gate stopped the run (month $… / $…, day $… / $…, need $… per line) — stopping remaining lines` | api モード: 残額があと 1 ライン分に満たない、または（直前の `ERROR: … spend …` 行のとおり）台帳が書けない・読めない。残りは止め、`Lines not started: …` に名前が出る |
+| `WARN: API spend gate stopped the run (month $… / $…, day $… / $…, need $… per line) — stopping remaining lines` | api モード: 残額があと 1 ライン分に満たない。残りは止め、`Lines not started: …` に名前が出る（通知: `API 支出の上限に達したため、…`） |
+| `WARN: API spend gate could not check the caps (the reason is the ERROR line above) — stopping remaining lines` | api モード: 台帳が書けない・読めない（または gate 自体が失敗した）ので、上限を確かめられなかった。理由は直前の `ERROR: … spend …` 行。残りは止め、`Lines not started: …` に名前が出る（通知: `API 支出を確かめられなかったため、…`。上限の文言は使わない） |
 | `ERROR: API spend gate failed (rc 2): spend-gate: N unreadable line(s) in …: line K (理由), … — cannot check the caps` | api モード: 台帳を合計できなかったので、推測せずに止めた。`state/api-spend.jsonl` の読めない行のうち先頭 5 件を行番号と理由で名指し、残りは `and N more` と数だけ出す（その行を直すか消す）。`cannot read …` はファイル自体を開けなかった |
 | `Lines not started: a, b` | run が始める前に止めたライン（支出の上限、または認証・課金のエラー） |
 | `ERROR: Line <track> hit a billing/rate-limit error — aborting remaining lines, no retry` | api モード: 429 またはクレジット残高不足（`E_BILLING`） |
@@ -256,14 +257,14 @@ rm -rf .daily-research.lock
 
 ### 5. api モード: key の拒否・クレジット・レート制限・支出上限
 
-**症状**: ログに `ERROR: Auth probe failed (api) — …`、`hit a billing/rate-limit error`、`API spend gate stopped the run` のどれかが出て、macOS 通知が表示される。
+**症状**: ログに `ERROR: Auth probe failed (api) — …`、`hit a billing/rate-limit error`、`API spend gate stopped the run`、`API spend gate could not check the caps` のどれかが出て、macOS 通知が表示される。
 
 **原因と対処**:
 - `status=401` / `403`: `env_file` の key が違うか失効している。そこで差し替え（repo には置かない）、`./scripts/check-auth.sh` で確かめる。
 - `Your credit balance is too low`: platform.claude.com でクレジットを足す。
 - `status=429`: レート制限。backoff で踏み抜かず、意図して止めている（連発する rate limit は policy signal）。時間をおいて手で再実行する。
 - `API spend gate stopped the run`: 1 日または 1 か月の残額が 1 ライン分の予約額（`call1_max_usd + call2_max_usd`）を下回った。`state/api-spend.jsonl` を確認し、上限はクレジットが足りるときだけ `[billing]` で上げる。
-- `ERROR: API spend gate failed (rc 2): …` か `ERROR: API spend ledger could not be written …` の直後の `API spend gate stopped the run`: 上限を判定できなかったので、gate が次のラインの前で止めた。残りのラインは始まらず（最初のラインの前なら全部）、完走済みのラインの成果は残る。rc 2 のメッセージは台帳の読めない行のうち先頭 5 件を行番号と理由で名指し、残りを `and N more` で数える。`state/api-spend.jsonl` のその行を直すか消して（または書き込めるように戻して）から再実行する。
+- `ERROR: API spend gate failed (rc …): …` か `ERROR: API spend ledger could not be written …` の直後の `API spend gate could not check the caps`: 上限を判定できなかったので、gate が次のラインの前で止めた。残りのラインは始まらず（最初のラインの前なら全部）、完走済みのラインの成果は残る。rc 2 のメッセージは台帳の読めない行のうち先頭 5 件を行番号と理由で名指し、残りを `and N more` で数える。`state/api-spend.jsonl` のその行を直すか消して（または書き込めるように戻して）から再実行する。
 
 課金経路は設定なしに変わらない。subscription モードではシェルで export した `ANTHROPIC_API_KEY` を捨て、api モードでは `env_file` の key だけを使う。
 

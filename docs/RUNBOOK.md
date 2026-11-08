@@ -143,7 +143,8 @@ launchctl list | grep daily-research
 | `ERROR: billing setup failed — …` | `[billing]` is invalid or (api mode) `env_file` has no `ANTHROPIC_API_KEY`; the run stops before any call (exit 1) |
 | `Auth probe passed` | The real auth probe succeeded |
 | `ERROR: Auth probe failed (<mode>) — status=… result=…` | The probe failed (expired OAuth, or in api mode a rejected key / low credit / 429); the run stops before any line (exit 1) |
-| `WARN: API spend gate stopped the run (month $… / $…, day $… / $…, need $… per line) — stopping remaining lines` | api mode: the remaining budget can't cover one more line, or (after an `ERROR: … spend …` line) the ledger could not be written or read; the rest are skipped and named in `Lines not started: …` |
+| `WARN: API spend gate stopped the run (month $… / $…, day $… / $…, need $… per line) — stopping remaining lines` | api mode: the remaining budget can't cover one more line; the rest are skipped and named in `Lines not started: …` (notification: `API 支出の上限に達したため、…`) |
+| `WARN: API spend gate could not check the caps (the reason is the ERROR line above) — stopping remaining lines` | api mode: the ledger could not be written or read (or the gate itself failed), so the caps could not be checked; the reason is the `ERROR: … spend …` line just before. The rest are skipped and named in `Lines not started: …` (notification: `API 支出を確かめられなかったため、…`, never the cap wording) |
 | `ERROR: API spend gate failed (rc 2): spend-gate: N unreadable line(s) in …: line K (reason), … — cannot check the caps` | api mode: the gate could not total the ledger, so it stops instead of guessing. The message names the first five unreadable lines of `state/api-spend.jsonl` with their reasons and counts the rest as `and N more` (fix or remove those lines); `cannot read …` means the file itself could not be opened |
 | `Lines not started: a, b` | Lines the run stopped before starting (spend cap, or an auth / billing error) |
 | `ERROR: Line <track> hit a billing/rate-limit error — aborting remaining lines, no retry` | api mode: 429 or credit balance too low (`E_BILLING`) |
@@ -257,14 +258,14 @@ rm -rf .daily-research.lock
 
 ### 5. API Mode: Rejected Key, Credit, Rate Limit or Spend Cap
 
-**Symptoms**: `ERROR: Auth probe failed (api) — …`, `hit a billing/rate-limit error`, or `API spend gate stopped the run` in the log, with a macOS notification.
+**Symptoms**: `ERROR: Auth probe failed (api) — …`, `hit a billing/rate-limit error`, `API spend gate stopped the run`, or `API spend gate could not check the caps` in the log, with a macOS notification.
 
 **Causes and fixes**:
 - `status=401` / `403`: the key in `env_file` is wrong or revoked. Replace it there (never in the repo), then run `./scripts/check-auth.sh`.
 - `Your credit balance is too low`: add credit on platform.claude.com.
 - `status=429`: rate limit. The run stops on purpose instead of backing off (a burst of rate limits is a policy signal). Re-run later by hand.
 - `API spend gate stopped the run`: the day's or month's remaining budget is below one line's reserve (`call1_max_usd + call2_max_usd`). Check `state/api-spend.jsonl`; raise the caps in `[billing]` only if the credit covers it.
-- `API spend gate stopped the run` right after `ERROR: API spend gate failed (rc 2): …` or `ERROR: API spend ledger could not be written …`: the caps could not be checked, so the gate stopped before the next line: every remaining line stays unstarted (all of them when this happens before the first line), and lines that already finished keep their results. The rc 2 message names the first five unreadable ledger lines with their reasons, plus `and N more`; fix or remove those lines in `state/api-spend.jsonl` (or make the file writable again), then re-run.
+- `API spend gate could not check the caps` right after `ERROR: API spend gate failed (rc …): …` or `ERROR: API spend ledger could not be written …`: the caps could not be checked, so the gate stopped before the next line: every remaining line stays unstarted (all of them when this happens before the first line), and lines that already finished keep their results. The rc 2 message names the first five unreadable ledger lines with their reasons, plus `and N more`; fix or remove those lines in `state/api-spend.jsonl` (or make the file writable again), then re-run.
 
 The billing path never changes on its own: in subscription mode an `ANTHROPIC_API_KEY` exported in your shell is dropped, and in api mode only the key in `env_file` is used.
 

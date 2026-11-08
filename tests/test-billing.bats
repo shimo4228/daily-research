@@ -130,6 +130,9 @@ case "$SC" in
   budget)
     echo '{"type":"result","subtype":"error_max_budget_usd","is_error":true,"total_cost_usd":4.1,"errors":["Reached maximum budget ($4)"]}'
     exit 1 ;;
+  ledger-breaks)
+    # 台帳をディレクトリに替えてから quiet で成功する (この呼び出しの費用の追記から失敗する)
+    rm -f "$H/daily-research/state/api-spend.jsonl"; mkdir -p "$H/daily-research/state/api-spend.jsonl" ;;
 esac
 printf '{"date":"%s","line":"%s","status":"quiet","report":null,"question":"q","reason":"r","reason_code":"no_new_evidence"}' "$D" "$L" > "$R"
 echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"total_cost_usd\":$COST,\"num_turns\":3,\"usage\":{\"server_tool_use\":{\"web_search_requests\":2}}}"
@@ -182,16 +185,36 @@ calls_of() { grep -c "kind=$1" "$MOCK_HOME/.calls" || true; }
 
 # === billing_gate (lib/billing.sh) の単体 ===
 
-@test "billing_gate: a mktemp failure is logged as a gate failure before returning 1" {
+@test "billing_gate: a mktemp failure is logged as a gate failure and returns 2, not the cap's 1" {
   # mktemp が失敗する (disk full・不正な TMPDIR) と billing_gate は無言で 1 を返し、呼ぶ側の
-  # 「上限で止めた」ログだけが残っていた — docstring の「上限以外の理由は log してから 1」に反する
+  # 「上限で止めた」ログだけが残っていた。上限を確かめられない停止は 2 で返し、呼ぶ側が文言を分ける
   PROJECT_DIR="$P"; DATE="$DR_DATE"
   source "$LIB_DIR/billing.sh"
   BILLING_MODE=api; BILLING_MONTHLY_CAP=190; BILLING_DAILY_CAP=15; BILLING_RESERVE=5.5
   mktemp() { return 1; }
   run billing_gate
-  [ "$status" -eq 1 ]
+  [ "$status" -eq 2 ]
   [[ "$output" == *"ERROR: "*"cannot check the caps"* ]]
+}
+
+@test "billing_gate: spend-gate's rc 1 without a stop line (an uncaught exception) is a gate failure (2)" {
+  # rc 1 は spend-gate の「上限で止める」(出力 stop<TAB>month<TAB>day) だが、python の未捕捉例外も rc 1 になる。
+  # 出力が stop で始まらない rc 1 を上限と読むと、上限に達していない日に「上限に達した」と通知する
+  PROJECT_DIR="$P"; DATE="$DR_DATE"
+  source "$LIB_DIR/billing.sh"
+  BILLING_MODE=api; BILLING_MONTHLY_CAP=190; BILLING_DAILY_CAP=15; BILLING_RESERVE=5.5
+  DR_PY="$MOCK_HOME/raises.py"
+  printf 'raise RuntimeError("boom")\n' > "$DR_PY"
+  run billing_gate
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"ERROR: API spend gate failed (rc 1): "*"RuntimeError: boom"*"cannot check the caps"* ]]
+  # 上限で止める rc 1 はそのまま 1
+  DR_PY="$LIB_DIR/dr_pipeline.py"
+  mkdir -p "$P/state"
+  echo '{"date":"2026-11-01","line":"akc","call":"call1","cost_usd":186}' > "$(ledger)"
+  run billing_gate
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
 }
 
 # === orchestrator E2E ===
@@ -228,7 +251,22 @@ calls_of() { grep -c "kind=$1" "$MOCK_HOME/.calls" || true; }
   [ "$status" -eq 1 ]
   [ "$(calls_of repo-research-protocol)" -eq 0 ]
   grep -q 'Lines not started: ' "$(log_file)"
-  grep -q '上限' "$MOCK_HOME/.notify_log"
+  grep -q 'API spend gate stopped the run' "$(log_file)"
+  grep -qF 'API 支出の上限に達したため、' "$MOCK_HOME/.notify_log"
+  grep -qF 'API 支出の上限のため、今朝のリサーチは実行していません' "$MOCK_HOME/.notify_log"
+  refute_grep -qF '確かめられ' "$MOCK_HOME/.notify_log"
+  grep -q '"final_class": "E_BUDGET"' "$P/metrics.jsonl"
+}
+
+# 上限を確かめられずに止めた日の通知 (billing_gate rc 2)。上限と言わず、理由の在りかを log と名指す。
+# 分類は上限の日と同じ E_BUDGET (1 line も始めなかった日)
+assert_unchecked_stop_notified() {
+  grep -qF 'WARN: API spend gate could not check the caps' "$(log_file)"
+  refute_grep -qF 'API spend gate stopped the run' "$(log_file)"
+  grep -qF 'API 支出を確かめられなかったため、' "$MOCK_HOME/.notify_log"
+  grep -qF '今朝のリサーチは実行していません' "$MOCK_HOME/.notify_log"
+  refute_grep -qF '上限に達した' "$MOCK_HOME/.notify_log"
+  refute_grep -qF '上限のため' "$MOCK_HOME/.notify_log"
   grep -q '"final_class": "E_BUDGET"' "$P/metrics.jsonl"
 }
 
@@ -242,6 +280,7 @@ calls_of() { grep -c "kind=$1" "$MOCK_HOME/.calls" || true; }
   [ "$(calls_of repo-research-protocol)" -eq 1 ]
   grep -q 'API spend gate stopped the run' "$(log_file)"
   grep -q '未実行' "$MOCK_HOME/.notify_log"
+  grep -q 'API 支出の上限に達したため、[a-z]* を止めました' "$MOCK_HOME/.notify_log"
 }
 
 @test "429 on the first line: no retry, remaining line not started, billing notify" {
@@ -339,6 +378,7 @@ calls_of() { grep -c "kind=$1" "$MOCK_HOME/.calls" || true; }
   run run_script
   [ "$(calls_of repo-research-protocol)" -eq 0 ]
   grep -q 'API spend gate failed' "$(log_file)"
+  assert_unchecked_stop_notified
 }
 
 @test "non-UTF-8 byte in the ledger: the gate logs the line number as a gate failure, not a cap stop" {
@@ -379,6 +419,19 @@ calls_of() { grep -c "kind=$1" "$MOCK_HOME/.calls" || true; }
   run run_script
   [ "$(calls_of repo-research-protocol)" -eq 0 ]
   grep -q 'could not record API spend' "$(log_file)"
+  assert_unchecked_stop_notified
+}
+
+@test "the ledger becomes unwritable after the first line: the second line's stop is not called a cap stop" {
+  # 1 本目の呼1 が台帳をディレクトリに替える (その呼び出しの費用の追記が失敗する)。上限には遠い
+  echo "ledger-breaks" > "$MOCK_HOME/.scenario"
+  run run_script
+  [ "$(calls_of repo-research-protocol)" -eq 1 ]
+  grep -q 'could not record API spend' "$(log_file)"
+  grep -qF 'WARN: API spend gate could not check the caps' "$(log_file)"
+  grep -qF 'API 支出を確かめられなかったため、' "$MOCK_HOME/.notify_log"
+  refute_grep -qF '上限に達した' "$MOCK_HOME/.notify_log"
+  grep -q '未実行: [a-z]*' "$MOCK_HOME/.notify_log"
 }
 
 # === check-auth.sh ===

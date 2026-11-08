@@ -304,7 +304,7 @@ OK_LINES=""
 METRICS_STDIN=""      # metrics-append へ渡す RUN / CLARITY / STATE / EVENT / VERIFY / VDIFF 行の蓄積 (1 日 1 レコード)
 AUTH_ABORT=0          # 401 検出 — 残 line は中断するが、完走済み line の集計は捨てない
 BILLING_ABORT=0       # 429 / クレジット切れ — 同上 (再試行で踏み抜かない、harness の rules: boundary.md)
-BUDGET_STOP=0         # API 支出の上限 (月・日) に届いた — 残 line を始めない
+BUDGET_STOP=0         # 支出 gate が残 line を止めた: 1 = 上限 (月・日) に届いた、2 = 上限を確かめられない (billing_gate の rc)
 STOPPED_LIST=""       # 上の 3 つの理由で実行しなかった line
 LINE_INDEX=0          # 実行を始めた line の数 (止めたときの残 line の算出用)
 # 日次まとめ・通知用の内容状態 (ADR-0017)。件数と "a, b(brief)" 形式の line リスト
@@ -321,10 +321,16 @@ IFS=$'\t' read -r TRACK _ TARGET_REPO <<< "$ROW"
 # API 支出の上限 (lib/billing.sh): 月・日の残額が 呼1 + 呼2 の 1 回上限に満たなければ、
 # この line から先を始めない。各呼び出しは --max-budget-usd で抑えるので、超過は最後の
 # 1 turn 分に収まる。subscription mode では常に通る。
-if ! billing_gate; then
-  # 上限以外の理由 (台帳の書き込み・読み取りの失敗) は billing_gate が先に ERROR で log 済み
+GATE_RC=0
+billing_gate || GATE_RC=$?
+if [ "$GATE_RC" -eq 1 ]; then
   log "WARN: API spend gate stopped the run (month \$$SPEND_MONTH / \$$BILLING_MONTHLY_CAP, day \$$SPEND_DAY / \$$BILLING_DAILY_CAP, need \$$BILLING_RESERVE per line) — stopping remaining lines"
   BUDGET_STOP=1
+  break
+elif [ "$GATE_RC" -ne 0 ]; then
+  # 上限以外の理由 (台帳の書き込み・読み取りの失敗、mktemp・gate 自体の失敗) は billing_gate が直前に ERROR で log 済み
+  log "WARN: API spend gate could not check the caps (the reason is the ERROR line above) — stopping remaining lines"
+  BUDGET_STOP=2
   break
 fi
 LINE_INDEX=$((LINE_INDEX + 1))
@@ -502,9 +508,16 @@ $LINE_TEMPLATE"
       log "WARN: Line $TRACK attempt 1 left a report or receipt — skipping retry, going to gate"
       break
     fi
-    if [ "$ATTEMPT" = "2" ] && ! billing_gate; then
-      log "WARN: Line $TRACK retry skipped — API spend cap (month \$$SPEND_MONTH, day \$$SPEND_DAY)"
-      break
+    if [ "$ATTEMPT" = "2" ]; then
+      GATE_RC=0
+      billing_gate || GATE_RC=$?
+      if [ "$GATE_RC" -eq 1 ]; then
+        log "WARN: Line $TRACK retry skipped — API spend cap (month \$$SPEND_MONTH, day \$$SPEND_DAY)"
+        break
+      elif [ "$GATE_RC" -ne 0 ]; then
+        log "WARN: Line $TRACK retry skipped — API spend gate could not check the caps (the reason is the ERROR line above)"
+        break
+      fi
     fi
     LINE_EXIT=0
     # ${arr[@]+...}: bash 3.2 + set -u は空配列の展開を unbound variable で落とす
@@ -862,8 +875,11 @@ if [ "$BILLING_MODE" = "api" ]; then
   billing_gate || true
   log "API spend: today \$$SPEND_DAY / \$$BILLING_DAILY_CAP, month \$$SPEND_MONTH / \$$BILLING_MONTHLY_CAP (ledger: state/api-spend.jsonl)"
 fi
+# 通知は止めた理由 (BUDGET_STOP = billing_gate の rc) に合わせる。確かめられない日の細かい理由は log の ERROR 行
 if [ "$BUDGET_STOP" = "1" ]; then
   notify "API 支出の上限に達したため、${STOPPED_LIST} を止めました (今日 \$$SPEND_DAY / 今月 \$$SPEND_MONTH)" "Daily Research Budget"
+elif [ "$BUDGET_STOP" = "2" ]; then
+  notify "API 支出を確かめられなかったため、${STOPPED_LIST} を止めました。理由は log を見てください" "Daily Research Error"
 fi
 
 # === 日次集約 (ctl-015 の最終判定 + metrics 用の当日レポート総数) ===
@@ -878,7 +894,7 @@ if [ -d "$REPORT_DIR" ]; then
   # Pass 3・metrics が全部欠ける
   REPORT_COUNT=$(find "$REPORT_DIR" -maxdepth 1 -name "${DATE}_*.md" 2>/dev/null | wc -l | tr -d ' ') || true
 fi
-# E_BUDGET = 支出の上限で 1 line も始めなかった日 (失敗した line は無いが成果も無い)。
+# E_BUDGET = 支出 gate (上限、または上限を確かめられない) で 1 line も始めなかった日 (失敗した line は無いが成果も無い)。
 # 認証・課金の失敗で残 line を始めなかった日は、ゲートに落ちた line が無くても「全 line 成功」では
 # ない (ADR-0011)。呼2 か receipt を書いた後の呼1 で止まると FAILED_LINES は空のまま残る。
 ABORT_STOPPED=""
@@ -887,7 +903,7 @@ if [ -n "$STOPPED_LIST" ] && { [ "$AUTH_ABORT" = "1" ] || [ "$BILLING_ABORT" = "
 fi
 if [ -n "$FAILED_LINES" ] || [ -n "$ABORT_STOPPED" ]; then
   if [ -n "$OK_LINES" ]; then PASS2_CLASS="E_PARTIAL"; else PASS2_CLASS="E_NO_REPORT"; fi
-elif [ -z "$OK_LINES" ] && [ "$BUDGET_STOP" = "1" ]; then
+elif [ -z "$OK_LINES" ] && [ "$BUDGET_STOP" != "0" ]; then
   PASS2_CLASS="E_BUDGET"
 else
   PASS2_CLASS="OK"
@@ -929,7 +945,9 @@ if [ "$PASS2_CLASS" = "OK" ]; then
 else
   FINAL_EXIT=1
   log "=== Failed ($PASS2_CLASS:$FAILED_LINES, exit code $FINAL_EXIT) ==="
-  if [ "$PASS2_CLASS" = "E_BUDGET" ]; then
+  if [ "$PASS2_CLASS" = "E_BUDGET" ] && [ "$BUDGET_STOP" = "2" ]; then
+    notify "API 支出を確かめられなかったため、今朝のリサーチは実行していません (未実行: $STOPPED_LIST)。理由は log を見てください" "Daily Research Error"
+  elif [ "$PASS2_CLASS" = "E_BUDGET" ]; then
     notify "API 支出の上限のため、今朝のリサーチは実行していません (未実行: $STOPPED_LIST)" "Daily Research Budget"
   elif [ -n "$OK_LINES" ]; then
     # 部分成功 — 成果が存在することを通知から消さない (alarm fatigue 回避)
