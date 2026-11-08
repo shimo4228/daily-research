@@ -328,6 +328,22 @@ precommit_fixture_commit() {
   echo "$output" | grep -qF "Secret pattern in b.md: sk-""ant-"
 }
 
+@test "pre-commit: a tracked symlink replaced by a regular file with a secret is scanned and blocked" {
+  precommit_repo
+  echo "target" > target.md
+  ln -s target.md link.md
+  git add target.md link.md
+  precommit_fixture_commit init
+  rm link.md
+  printf 'token %s%s\n' "sk-" "ant-api03-EXAMPLEONLY" > link.md
+  git add link.md
+  # 前提: git がこの変更を typechange (T) として stage している
+  [ "$(git diff --cached --name-status | cut -c1)" = "T" ]
+  run /bin/bash "$PROJECT_DIR/scripts/pre-commit.sh"
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -qF "Secret pattern in link.md: sk-""ant-"
+}
+
 # === Defensive programming ===
 
 @test "set -Eeuo pipefail is configured (-E: ERR trap reaches function bodies)" {
