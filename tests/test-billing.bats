@@ -111,7 +111,7 @@ case "$SC" in
         python3 -c 'import json; d = {"claims_checked": 1, "supported": 0, "unverifiable": [], "discrepancies": [{"note_sentence": "報告書は 3 か国で公開された。", "url": "https://example.com/r", "replacement": "報告書は 4 か国で公開された。", "confidence": "high"}]}; print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "total_cost_usd": 0.3, "num_turns": 9, "result": json.dumps(d)}))'
         exit 0 ;;
       audit-confirm-protocol)
-        echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.05,"num_turns":3,"result":"{\"verdict\": \"contradicts\"}"}'
+        echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.05,"num_turns":3,"result":"{\"verdict\": \"contradicts\", \"replacement_verdict\": \"consistent\", \"parts\": [{\"wrong\": \"3 か国\", \"fixed\": \"4 か国\"}]}"}'
         exit 0 ;;
     esac
     V=$(printf '%s' "$PROMPT" | grep -oE '1\. レポート: [^ ]+' | head -1 | sed 's/^1\. レポート: //')

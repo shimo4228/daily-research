@@ -58,8 +58,9 @@ DR_DATE=YYYY-MM-DD ./scripts/daily-research.sh      # 輪番とレポート名�
   資格情報の置き場は `DISALLOWED_TOOLS` の Read deny で塞ぐ。safe mode でも permissions は効く
 - **repo は read-only。** 呼1 の書き込みは vault のレポート dir と line の state の一部だけ。note は読み物で、
   repo への取り込みは運用者が repo セッションで行う
-- 呼3（照合監査、ADR-0020）のモデルは書き込みの道具も Read も持たない。ノートの置き換えは両段が確定した候補だけを
-  `dr_pipeline.py audit-apply` が規則で行う
+- 呼3（照合監査、ADR-0020）のモデルは書き込みの道具も Read も WebSearch も持たない。候補の URL はノートに書かれた
+  URL に限り、prompt に埋めるノート由来の文字列は呼び出しごとの乱数の区切りで挟む。ノートの置き換えは両段が確定し、
+  第 2 段が置き換え文を訂正と認めた候補だけを `dr_pipeline.py audit-apply` が規則で行う
 - `past_topics.json` はモデルに書かせない — gate 成功後に `dr_pipeline.py past-topics-append` が receipt から追記する
 - 全 `claude -p` 呼び出しは `< /dev/null`。`--append-system-prompt-file` を使う（既定の能力を残すため）。
   呼2 の allow に埋めるノート名は basename 検証済みのものだけ

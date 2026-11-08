@@ -212,17 +212,17 @@ run は `cd "$TARGET_REPO"` で起動される。`mode = "ecosystem"` のライ�
 
 | フラグ | 値 | 目的 |
 |------|-------|---------|
-| `-p` | 第 1 段: ノートと根拠ファイルの全文（`dr_pipeline.py audit-prompt`）。第 2 段: 候補の文 1 つ・その URL・ノートの公開日（`audit-confirm-prompt`）— 第 1 段の理由と正しい値は渡さない | 監査は Read を持たない: allow は deny に例外を作れず「この 2 ファイルだけ Read を許す」を書けないので、2 ファイルは prompt で渡す。第 2 段は第 1 段の結論を見ずに判定する |
+| `-p` | 第 1 段: ノートと根拠ファイルの全文（`dr_pipeline.py audit-prompt`）。第 2 段: 候補の文 A・第 1 段の置き換え文 B・その原典としてノートに書かれた URL・第 1 段の locator・ノートの公開日（`audit-confirm-prompt`）— 第 1 段の理由と正しい値は渡さない。ノート由来の文字列はすべて、呼び出しごとの乱数の印を付けた区切りの行で挟む | 監査は Read を持たない: allow は deny に例外を作れず「この 2 ファイルだけ Read を許す」を書けないので、2 ファイルは prompt で渡す。第 2 段は A の誤りを自分で見つけてから、B がそれを直しているかを判定する。区切りや `原典:` の欄を真似た文は印を当てられない |
 | `--max-budget-usd` | `[billing] audit_max_usd` / `audit_confirm_max_usd`（api mode のみ） | 呼び出しごとの支出上限 |
-| `--safe-mode` / `--tools` | `AUDIT_TOOLS`（`WebFetch,WebSearch`） | ファイルの道具を持たない |
+| `--safe-mode` / `--tools` | `AUDIT_TOOLS`（`WebFetch`） | ファイルの道具も検索も持たない: 呼2 と同じく、照合はノートの原典 URL とそこから組み立てた同じ文書の URL に限る |
 | `--permission-mode` | `default` | デフォルトの権限処理を使用 |
 | `--append-system-prompt-file` | `prompts/audit-protocol.md` / `prompts/audit-confirm-protocol.md` | 両立しないものだけを数える。「取得したページに無い」は根拠でなく unverifiable（WebFetch は長いページを切る） |
 | `--allowedTools` | `AUDIT_TOOLS` | ウェブの読み取りだけ |
-| `--disallowedTools` | `DISALLOWED_TOOLS` + `Read,Glob,Grep,Edit,Write` | モデルは何も書かない。ノートの置き換えはコードが行う |
+| `--disallowedTools` | `DISALLOWED_TOOLS` + `WebSearch,Read,Glob,Grep,Edit,Write` | モデルは何も書かない。ノートの置き換えはコードが行う |
 | `--max-turns` / timeout | `AUDIT_STAGE1_MAX_TURNS`（40）と 600 秒 / `AUDIT_STAGE2_MAX_TURNS`（20）と 240 秒 | 第 1 段はノートの全原典を取得する。第 2 段は 1 つ |
 | `--model` / `--effort` | `[audit] model`（既定 `opus`）/ `high` | 呼2 の後に残る誤りは帰属・時点・範囲・条件のずれで、同じ層の再照合では拾えなかった |
 
-その後 `dr_pipeline.py audit-apply` が、両段が食い違いとした候補を固定の規則（`_audit_replace`）で置き換える: 文が本文にちょうど 1 回現れる（frontmatter・題・機会メモ・ソースには触れない）、文が 15 字以上、置き換えが空でも元と同じでもない、書き換えが max(24, 元の文の 30%) 字以内（編集距離）、改行の数を変えない、制御文字・ゼロ幅・bidi の文字を入れず、`` ` `` `<` `>` `[[` `![` `%` `$=` `&` をノートのどこにも増やさない（inline code と Dataview の inline JS・HTML・wikilink と埋め込み・comment・エンティティは vault で実行されるか隠れる）、ノート全体を前後で比べて URL（scheme の大文字小文字を問わず、HTML エンティティを戻してから）・link 先の並び・`**` と `` ` `` の数・見出し行（`## 機会メモ` / `## ソース` の行の数を含む）が変わらない — frontmatter・機会メモ・ソースは変わらず、本文に固定節と同じ見出しは増えない。全件を `state/<line>/runs/{date}.audit.json` に記録し、監査の前のノートを `state/<line>/pre-audit/{date}.md` に写す。失敗は fail-open: 第 1 段が失敗すればノートは呼2 の後のままで `AUDIT` は `"ran": false`、第 2 段の 1 回の失敗はその候補だけを確定にしない。認証・課金のエラーは呼1・呼2 と同じく残りのラインを止める。
+`audit-stage1` は、`url` がノートに書かれた URL（本文の link・裸の URL・ソース節）でない候補を飛ばす（`url_not_in_note`）— 第 2 段が読み始めるのはノートの原典だけになる。その後 `dr_pipeline.py audit-apply` が、両段が食い違いとし、第 2 段が置き換え文を訂正と認めた候補（`_audit_fix_reject`: `replacement_verdict` が `consistent` で、第 2 段が挙げた誤りのどれでも `wrong` が A にあり、`fixed` が B にあって A に無い。消して直したなら `wrong` が B に無い — 1 文に主張が 2 つあり、正しい方を書き換えた置き換えをここで止める）を固定の規則（`_audit_replace`）で置き換える: 文が本文にちょうど 1 回現れる（frontmatter・題・機会メモ・ソースには触れない）、文が 15 字以上、置き換えが空でも元と同じでもない、書き換えが max(24, 元の文の 30%) 字以内（編集距離）、改行の数を変えない、制御文字・ゼロ幅・bidi の文字を入れず、`` ` `` `<` `>` `[[` `![` `%` `$=` `&` をノートのどこにも増やさない（inline code と Dataview の inline JS・HTML・wikilink と埋め込み・comment・エンティティは vault で実行されるか隠れる）、ノート全体を前後で比べて URL（scheme の大文字小文字を問わず、HTML エンティティを戻してから）・link 先の並び・`**` と `` ` `` の数・見出し行（`## 機会メモ` / `## ソース` の行の数を含む）が変わらない — frontmatter・機会メモ・ソースは変わらず、本文に固定節と同じ見出しは増えない。全件を `state/<line>/runs/{date}.audit.json` に記録し、監査の前のノートを `state/<line>/pre-audit/{date}.md` に写す。失敗は fail-open: 第 1 段が失敗すればノートは呼2 の後のままで `AUDIT` は `"ran": false`、第 2 段の 1 回の失敗はその候補だけを確定にしない。認証・課金のエラーは呼1・呼2 と同じく残りのラインを止める。
 
 **備考**: 全 `claude -p` 呼び出しは `< /dev/null` stdin リダイレクトを使用する（呼1・呼2・呼3 は `run_claude()` ラッパー経由、認証 probe は `real_auth_probe()` 自身が付ける）。これにより MCP の stdio 通信がターミナルの stdin と競合するのを防止する（過去 MCP ハングの根本原因だった）。
 

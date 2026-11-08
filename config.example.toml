@@ -33,11 +33,14 @@ model = "sonnet"
 
 # Third call (ADR-0020): a fact audit of each article after call 2 (briefs are not audited).
 # Stage 1 checks the note's claims against their sources and lists only the sentences that
-# contradict a source; stage 2 re-checks each candidate on its own (sentence + URL + note date).
-# Only candidates both stages call a contradiction are replaced, by code, under fixed rules
-# (the sentence appears exactly once in the body, links kept, small length change). The model
-# never writes the note. Results go to state/<line>/runs/{date}.audit.json, the pre-audit note
-# to state/<line>/pre-audit/{date}.md, and the counts to metrics (verification.audit_*).
+# contradict a source; stage 2 re-checks each candidate whose URL is written in the note on its
+# own (sentence + stage 1's replacement + URL + note date) and judges whether the replacement
+# fixes the error. Both stages use WebFetch only. Only candidates both stages call a
+# contradiction, with a fix stage 2 accepts, are replaced, by code, under fixed rules (the
+# sentence appears exactly once in the body; a small edit that keeps the note's URLs, links,
+# emphasis and headings and adds no markup). The model never writes the note. Results go to
+# state/<line>/runs/{date}.audit.json, the pre-audit note to state/<line>/pre-audit/{date}.md,
+# and the counts to metrics (verification.audit_*).
 # Any failure leaves the note as call 2 left it. Off by default.
 [audit]
 enabled = false

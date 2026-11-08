@@ -91,8 +91,9 @@ teardown() {
   [ -n "$c1" ] && [ -n "$c2" ] && [ -n "$c3" ]
   refute_grep -qE '(^|,)(Bash|Task|NotebookEdit)(,|$)' <<< "$c1"
   refute_grep -qE '(^|,)(Bash|Task|NotebookEdit)(,|$)' <<< "$c2"
-  # 呼3 は読み書きの道具を持たない (ノートは prompt で受け取り、置き換えは audit-apply が行う)
-  refute_grep -qE '(^|,)(Bash|Task|NotebookEdit|Read|Glob|Grep|Edit|Write)(,|$)' <<< "$c3"
+  # 呼3 は読み書きの道具も検索も持たない (ノートは prompt で受け取り、置き換えは audit-apply が行う。
+  # 照合は呼2 と同じくノートの原典 URL の取得に限る)
+  refute_grep -qE '(^|,)(Bash|Task|NotebookEdit|Read|Glob|Grep|Edit|Write|WebSearch)(,|$)' <<< "$c3"
   grep -q -- '--tools "$CALL1_TOOLS"' "$SCRIPT"
   grep -q -- '--tools "$CALL2_TOOLS"' "$SCRIPT"
   grep -q -- '--tools "$AUDIT_TOOLS"' "$SCRIPT"

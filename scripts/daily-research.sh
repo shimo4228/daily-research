@@ -76,8 +76,9 @@ CALL2_TOOLS="Read,WebFetch,Edit,Write"
 # 呼3 (照合監査、ADR-0020) の 2 段の組み込みツール。ノートと根拠ファイルはタスクプロンプトに全文で入れるので
 # Read を持たない — allow は deny に例外を作れない (permission 規則は deny → ask → allow の順に評価) ので、
 # 「この 2 ファイルだけ Read を許す」を allow では書けない。書き込みの道具も持たない (置き換えは dr_pipeline
-# audit-apply が行う)。deny は DISALLOWED_TOOLS に Read・Glob・Grep・Edit・Write を足したもの (audit_call)
-AUDIT_TOOLS="WebFetch,WebSearch"
+# audit-apply が行う)。WebSearch も持たない (呼2 と同じく、照合はノートの原典 URL とそこから組み立てた同じ文書の
+# URL の取得に限る)。deny は DISALLOWED_TOOLS に WebSearch・Read・Glob・Grep・Edit・Write を足したもの (audit_call)
+AUDIT_TOOLS="WebFetch"
 AUDIT_STAGE1_MAX_TURNS=40
 AUDIT_STAGE2_MAX_TURNS=20
 # 無人 run で model に絶対に渡さないツールと読ませない場所 (呼1 / 呼2・全 line 共通)。
@@ -282,7 +283,7 @@ audit_call() {
     --permission-mode default \
     --append-system-prompt-file "$protocol" \
     --allowedTools "$AUDIT_TOOLS" \
-    --disallowedTools "$DISALLOWED_TOOLS,Read,Glob,Grep,Edit,Write" \
+    --disallowedTools "$DISALLOWED_TOOLS,WebSearch,Read,Glob,Grep,Edit,Write" \
     --max-turns "$max_turns" \
     --model "$AUDIT_MODEL" \
     --effort high \
@@ -310,8 +311,9 @@ audit_call() {
 
 # === 呼3: 照合監査 (ADR-0020) — 呼2 の後の article 1 本 ===
 # 第 1 段 (prompts/audit-protocol.md) がノート本文の主張を原典で確かめ、原典と両立しない文を候補にする。第 2 段
-# (prompts/audit-confirm-protocol.md) が候補ごとに文・URL・公開日だけを見て独立に判定する (第 1 段の理由は渡さない)。
-# 両段が食い違いとした候補だけを dr_pipeline audit-apply が決定論で置き換える — モデルはノートを書かない
+# (prompts/audit-confirm-protocol.md) が候補ごとに文・置き換え文・ノートの URL・公開日を見て独立に判定する (第 1 段の
+# 理由は渡さない)。候補の URL はノートの URL に限る (audit-stage1 がノートと突き合わせる)。両段が食い違いとし、
+# 第 2 段が置き換え文を訂正と認めた候補だけを dr_pipeline audit-apply が決定論で置き換える — モデルはノートを書かない
 # (規則・状態ファイルの形は dr_pipeline.py の「呼3」節)。どの段の失敗も fail-open: ノートは呼2 の後のまま、
 # AUDIT 行は ran=false で、run の成否は変えない。呼ぶ側は CLARITY_NOTE / TRACK / DATE / STATE_DIR を設定済みであること。
 audit_pass() {
@@ -335,7 +337,7 @@ audit_pass() {
     audit_call audit "$PROJECT_DIR/prompts/audit-protocol.md" "$prompt" "$AUDIT_STAGE1_MAX_TURNS" 600
     cls=$AUDIT_CLASS
   fi
-  ids=$(printf '%s' "$AUDIT_JSON" | python3 "$DR_PY" audit-stage1 "$audit_path" "$DATE" "$cls" 2>> "$LOG_FILE") || ids=""
+  ids=$(printf '%s' "$AUDIT_JSON" | python3 "$DR_PY" audit-stage1 "$audit_path" "$DATE" "$cls" "$CLARITY_NOTE" 2>> "$LOG_FILE") || ids=""
   [ "$cls" = "OK" ] || log "WARN: Line $TRACK audit stage 1 did not run or failed ($cls) — note stays as after call 2 (fail-open)"
   while IFS= read -r cid; do
     [ -n "$cid" ] && cids+=("$cid")

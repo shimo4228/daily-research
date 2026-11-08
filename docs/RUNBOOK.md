@@ -90,16 +90,18 @@ daily-research.sh (05:00)
 │   [before: the script copies the note to state/<line>/pre-verify/{date}.md;
 │    after: verify-diff compares the two and logs VERIFY_DIFF]
 ├── Call 3 (only when [audit] enabled; kind: article only): fact audit, ADR-0020 (Opus by default,
-│   --effort high, WebFetch + WebSearch only — no Read, no write tool; the note and the evidence file
-│   are inlined in the prompt)
+│   --effort high, WebFetch only — no search, no Read, no write tool; the note and the evidence file
+│   are inlined in the prompt between fence lines marked with a per-call random token)
 │   ├── Stage 1 (--max-turns 40, 10-min timeout): lists only the sentences that contradict a source
-│   ├── Stage 2 per candidate, at most 5 (--max-turns 20, 4-min timeout): sees only the sentence,
-│   │   the URL and the note's date, and judges it again on its own
-│   └── audit-apply (code, not the model): replaces the candidates both stages call a contradiction,
-│       when the sentence appears exactly once in the body and the replacement is a small edit that
-│       keeps the note's URLs, links, emphasis and headings and adds no markup;
-│       state in runs/{date}.audit.json, the note before the audit in state/<line>/pre-audit/{date}.md,
-│       logs AUDIT. Any failure is fail-open — the note stays as call 2 left it
+│   ├── Stage 2 per candidate whose URL is written in the note, at most 5 (--max-turns 20, 4-min
+│   │   timeout): sees the sentence, stage 1's replacement, the URL and the note's date, finds the
+│   │   sentence's error on its own and judges whether the replacement fixes it
+│   └── audit-apply (code, not the model): replaces the candidates both stages call a contradiction
+│       and whose fix stage 2 accepts, when the sentence appears exactly once in the body and the
+│       replacement is a small edit that keeps the note's URLs, links, emphasis and headings and adds
+│       no markup; state in runs/{date}.audit.json, the note before the audit in
+│       state/<line>/pre-audit/{date}.md, logs AUDIT. Any failure is fail-open — the note stays as
+│       call 2 left it
 ├── ctl-016 deterministic report lint (fixed sections 機会メモ / ソース, synced to
 │   report-template.md; kind: brief is exempt from the 機会メモ and length soft checks)
 ├── Pass 3: Obsidian wiki ingest (vault-side script, non-fatal, under an outer timeout = the ingest's own claude
@@ -196,7 +198,7 @@ launchctl list | grep daily-research
 | `Audit pass: on (model <m>, effort high, ADR-0020)` | `[audit] enabled = true`; call 3 runs after call 2 for each article |
 | `AUDIT <track>: {...}` | Call 3's tally for the line: `ran` (stage 1 returned a readable result), `reason` (why not: a call class such as `E_TRANSIENT`, `parse`, `E_BUDGET_GATE`, `note_unreadable`), claims checked / supported / unverifiable, `invalid` (malformed candidates dropped), `candidates`, `confirmed` (both stages call it a contradiction), `applied`, `rejected`, stage 2 calls, turns and cost. Summed into the metrics record's `verification` as `audit_*` |
 | `WARN: Line <track> audit stage 1 did not run or failed (<class>) — …` | Stage 1 was not started (spend gate, unreadable or too long note) or failed. The note stays as call 2 left it; the run's result does not change |
-| `WARN: Line <track> audit pass: 監査で確定した候補 D<n> を適用しなかった (<rule>) — …` | Both stages confirmed an error but the replacement broke a rule (`not_found` / `ambiguous` / `outside_body`: the sentence is not exactly once in the body; `empty`; `unchanged`; `short`: the sentence is under 15 characters; `newline`; `control`; `invisible`: adds a zero-width or bidi character; `edit_distance`: rewrites more than max(24, 30% of the sentence) characters; `markup`: adds `` ` `` `<` `>` `[[` `![` `%` `$=` or `&` to the note; `url_changed` / `link_changed` / `emphasis_changed` / `heading_changed`: the note's URLs, link targets, `**` / `` ` `` counts or heading lines change). The error is still in the note — fix it by hand from `runs/{date}.audit.json` |
+| `WARN: Line <track> audit pass: 監査で確定した候補 D<n> を適用しなかった (<rule>) — …` | Both stages confirmed an error but the replacement broke a rule (`not_found` / `ambiguous` / `outside_body`: the sentence is not exactly once in the body; `empty`; `unchanged`; `short`: the sentence is under 15 characters; `newline`; `control`; `invisible`: adds a zero-width or bidi character; `edit_distance`: rewrites more than max(24, 30% of the sentence) characters; `markup`: adds `` ` `` `<` `>` `[[` `![` `%` `$=` or `&` to the note; `url_changed` / `link_changed` / `emphasis_changed` / `heading_changed`: the note's URLs, link targets, `**` / `` ` `` counts or heading lines change; `fix_unconfirmed`: stage 2 did not find the replacement consistent with the source; `span_mismatch`: the replacement does not carry the fix of the error stage 2 found). The error is still in the note — fix it by hand from `runs/{date}.audit.json` |
 | `WARN: Line <track> audit pass: 監査の置き換えをノートに書けなかった (<error>) — ノートは元のまま` | The replaced note could not be written; every applied candidate is recorded as `rejected` (`write_failed`) and the note is unchanged |
 | `WARN: Line <track> audit stage 2 stopped — API spend cap …` / `WARN: Line <track> audit pass skipped …` | api mode: the day's remainder no longer covers the next audit call; or the audit did not start (after an auth / billing error) |
 | `Line <track> audit pass skipped (kind: brief, only article is audited)` | Briefs are not audited |
@@ -351,7 +353,7 @@ cp past_topics.json.bak past_topics.json
 
 **Symptoms**: a note reads differently from what call 2 left, or `audit pass: 監査で確定した候補 … を適用しなかった` / `audit stage 1 did not run or failed` in the log.
 
-**Where to look**: `state/<line>/runs/{date}.audit.json` holds every candidate with its status (`applied`, `rejected` + rule, `not_confirmed` + stage 2's verdict, `confirm_failed`, `skipped` + `drift` / `duplicate` / `over_cap`), the source quote and the URL each stage read. `state/<line>/pre-audit/{date}.md` is the note before the audit.
+**Where to look**: `state/<line>/runs/{date}.audit.json` holds every candidate with its status (`applied`, `rejected` + rule, `not_confirmed` + stage 2's verdict, `confirm_failed`, `skipped` + `drift` / `url_not_in_note` / `duplicate` / `over_cap`), the source quote and the URL each stage read, and stage 2's verdict on the replacement with the error and fix spans it found. `state/<line>/pre-audit/{date}.md` is the note before the audit.
 
 **Fixes**:
 ```bash

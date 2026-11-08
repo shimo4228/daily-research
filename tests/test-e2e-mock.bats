@@ -323,17 +323,21 @@ print(json.dumps([{"type": "assistant", "message": {"content": []}}, {"type": "r
 fi
 
 # --- 呼3 第 2 段: 候補 1 件の独立確認 (audit-confirm-protocol.md、ADR-0020) ---
-# 判定 seam: .confirm_verdict (既定 contradicts)。呼び出しごとに prompt を .prompt_confirm に追記する
+# 判定 seam: .confirm_verdict (A の判定、既定 contradicts) と .confirm_rv (置き換え文の判定、既定 consistent)。
+# parts は AUDIT_SENTENCE の「3 か国」を誤り、AUDIT_FIXED の「4 か国」を訂正とする。呼び出しごとに prompt を
+# .prompt_confirm に追記する
 if [[ "$PROTOCOL" == *audit-confirm-protocol.md ]]; then
   printf '%s\n----\n' "$PROMPT" >> "$MOCK_HOME_DIR/.prompt_confirm"
   printf '%s\n' "$@" > "$MOCK_HOME_DIR/.args_confirm"
   printf '%s' "$DISALLOWED" > "$MOCK_HOME_DIR/.disallowed_confirm"
   VERDICT=$(cat "$MOCK_HOME_DIR/.confirm_verdict" 2>/dev/null || echo contradicts)
+  RV=$(cat "$MOCK_HOME_DIR/.confirm_rv" 2>/dev/null || echo consistent)
   python3 -c '
 import json, sys
-final = json.dumps({"verdict": sys.argv[1], "parts": [{"claim": "c", "source_quote": "q", "correct_value": "v"}], "url_read": "u"})
+parts = [{"wrong": "3 か国", "fixed": "4 か国", "source_quote": "q", "correct_value": "v"}]
+final = json.dumps({"verdict": sys.argv[1], "replacement_verdict": sys.argv[2], "parts": parts, "url_read": "u"})
 print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "total_cost_usd": 0.05, "num_turns": 4, "duration_ms": 9000, "usage": {"input_tokens": 900, "output_tokens": 100}, "result": final}))
-' "$VERDICT"
+' "$VERDICT" "$RV"
   exit 0
 fi
 
@@ -1969,7 +1973,7 @@ AUDIT_SENTENCE="報告書は 2026-10-01 に欧州の 3 か国で公開された�
 AUDIT_FIXED="報告書は 2026-10-01 に欧州の 4 か国で公開された。"
 
 # 監査を有効にし、呼1 が書くノート (.report_<line>) と第 1 段の最終メッセージ (.audit_result) を置く。
-# $1 = 候補の置き換え文 (省略時 AUDIT_FIXED)
+# $1 = 候補の置き換え文 (省略時 AUDIT_FIXED)、$2 = 候補の URL (省略時 ノートのソース節の URL)
 setup_audit() {
   printf '\n[audit]\nenabled = true\n' >> "$MOCK_PROJECT/config.toml"
   printf -- '---\nkind: article\n---\n\n# mock report for %s\n\n%s\n調査の参加者は 120 人だった。\n\n## ソース\n- [報告書](https://example.com/report)\n' \
@@ -1978,10 +1982,10 @@ setup_audit() {
 import json, sys
 d = {"claims_checked": 2, "supported": 1, "unverifiable": [], "discrepancies": [{
     "note_sentence": sys.argv[1], "claim": "3 か国", "source_quote": "four countries",
-    "url": "https://example.com/report", "correct_value": "第1段だけが知る値", "replacement": sys.argv[2],
+    "url": sys.argv[3], "correct_value": "第1段だけが知る値", "replacement": sys.argv[2],
     "type": "scope", "confidence": "high", "drift": False}]}
 print("監査の結果:\n```json\n" + json.dumps(d, ensure_ascii=False) + "\n```")
-' "$AUDIT_SENTENCE" "${1-$AUDIT_FIXED}" > "$MOCK_HOME/.audit_result"
+' "$AUDIT_SENTENCE" "${1-$AUDIT_FIXED}" "${2-https://example.com/report}" > "$MOCK_HOME/.audit_result"
 }
 
 audit_note() { echo "$MOCK_HOME/mock-vault/daily-research/${DR_DATE}_${PICKED}_mock-report.md"; }
@@ -2030,7 +2034,7 @@ assert rec["total_cost"] >= 0.35, rec
 PY
 }
 
-@test "E2E audit: both stages run read-only with opus, high effort, web tools only, and their turn caps" {
+@test "E2E audit: both stages run read-only with opus, high effort, WebFetch only, and their turn caps" {
   echo "normal" > "$MOCK_HOME/.mock_scenario"
   setup_audit
   run run_script
@@ -2039,24 +2043,51 @@ PY
   for f in "$a" "$c"; do
     grep -qx -- "--safe-mode" "$f"
     grep -qx -- "--no-session-persistence" "$f"
-    [ "$(arg_after "$f" --tools)" = "WebFetch,WebSearch" ]
-    [ "$(arg_after "$f" --allowedTools)" = "WebFetch,WebSearch" ]
+    [ "$(arg_after "$f" --tools)" = "WebFetch" ]
+    [ "$(arg_after "$f" --allowedTools)" = "WebFetch" ]
     [ "$(arg_after "$f" --permission-mode)" = "default" ]
     [ "$(arg_after "$f" --model)" = "opus" ]
     [ "$(arg_after "$f" --effort)" = "high" ]
-    arg_after "$f" --disallowedTools | grep -q ",Read,Glob,Grep,Edit,Write$"
+    arg_after "$f" --disallowedTools | grep -q ",WebSearch,Read,Glob,Grep,Edit,Write$"
   done
   [ "$(arg_after "$a" --max-turns)" = "40" ]
   [ "$(arg_after "$c" --max-turns)" = "20" ]
   # 第 1 段はノートと根拠ファイルを prompt で受け取る (Read を持たない)
   grep -qF "$AUDIT_SENTENCE" "$MOCK_HOME/.prompt_audit"
   grep -qF "# evidence for $PICKED" "$MOCK_HOME/.prompt_audit"
-  # 第 2 段に渡るのは文・URL・公開日だけ — 第 1 段の正しい値と置き換え文は渡さない
+  # 第 2 段に渡るのは文・置き換え文・ノートの URL・公開日 — 第 1 段の理由と正しい値は渡さない
   grep -qF "$AUDIT_SENTENCE" "$MOCK_HOME/.prompt_confirm"
+  grep -qF "$AUDIT_FIXED" "$MOCK_HOME/.prompt_confirm"
   grep -qF "https://example.com/report" "$MOCK_HOME/.prompt_confirm"
   grep -qF "$DR_DATE" "$MOCK_HOME/.prompt_confirm"
   refute_grep -qF "第1段だけが知る値" "$MOCK_HOME/.prompt_confirm"
-  refute_grep -qF "$AUDIT_FIXED" "$MOCK_HOME/.prompt_confirm"
+  # ノート由来の文字列は乱数の印の区切りで挟む (両段)
+  grep -qE '^<<<文A [0-9a-f]{16}>>>$' "$MOCK_HOME/.prompt_confirm"
+  grep -qE '^<<<ノート [0-9a-f]{16}>>>$' "$MOCK_HOME/.prompt_audit"
+}
+
+@test "E2E audit: a candidate whose URL is not in the note is skipped without a stage 2 call" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  setup_audit "$AUDIT_FIXED" "https://evil.example/report"
+  run run_script
+  [ "$status" -eq 0 ]
+  cmp -s "$(audit_note)" "$MOCK_HOME/.report_$PICKED"
+  [ ! -e "$MOCK_HOME/.prompt_confirm" ]
+  python3 -c '
+import json, sys
+c = json.load(open(sys.argv[1]))["candidates"][0]
+assert (c["status"], c["reason"]) == ("skipped", "url_not_in_note"), c
+' "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.audit.json"
+}
+
+@test "E2E audit: a fix stage 2 does not accept is rejected with a WARN" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  setup_audit
+  echo "contradicts" > "$MOCK_HOME/.confirm_rv"
+  run run_script
+  [ "$status" -eq 0 ]
+  cmp -s "$(audit_note)" "$MOCK_HOME/.report_$PICKED"
+  get_log | grep -q "WARN: Line $PICKED audit pass: 監査で確定した候補 D1 を適用しなかった (fix_unconfirmed)"
 }
 
 @test "E2E audit: stage 1 failure is fail-open — the note stays as after call 2 and the run succeeds" {
