@@ -7,11 +7,12 @@ subcommand に置き換える parser-of-record。test も本モジュールだ�
 
 呼び出し:  python3 scripts/lib/dr_pipeline.py <subcommand> [args]
 依存:      stdlib のみ (json / tomllib / re / collections)。pip 依存なし。
-           config.toml 解析に python>=3.11 の tomllib を使う (lib/env.sh が homebrew の
-           python3 を PATH の先頭に置く)。
-型:        関数の境界は全件注釈する (ruff ANN、tests 除く)。JSON / TOML 由来の値は検証する
-           まで object / dict[str, object] で受け、Any は使わない — 中身の検査は本文の
-           isinstance と try/except が持つ。
+           config.toml 解析に python>=3.11 の tomllib を使う (ランタイムは homebrew の
+           python3。lib/env.sh が /opt/homebrew/bin を PATH に足す)。
+型:        引数・*args・**kwargs・public 関数の戻り値は注釈する (ruff ANN001-003・ANN201・
+           ANN401 が tests の外で検査する。private の戻り値も現状は全件注釈済み)。JSON / TOML
+           由来の値は検証するまで object / dict[str, object] で受け、Any は使わない — 中身の
+           検査は本文の isinstance と try/except が持つ。
 """
 
 import json
