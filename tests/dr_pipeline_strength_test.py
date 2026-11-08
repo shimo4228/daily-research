@@ -711,14 +711,12 @@ DAY = "2026-08-05"
 
 
 def _report_text(n_sources, *, memo=True, length=1600):
-    head = "# T\n\n冒頭の結論。\n\n"
-    if memo:
-        head += "## 機会メモ\n- **何を**: x\n\n"
-    head += "## ソース\n" + "".join(
+    # length = 本文の字数 (body_chars: H1 の後〜末尾固定節の前、空白を除く)
+    tail = "## 機会メモ\n- **何を**: x\n\n" if memo else ""
+    tail += "## ソース\n" + "".join(
         f"- [s{i}](https://example.com/{i})\n" for i in range(n_sources)
     )
-    assert len(head) <= length
-    return head + "p" * (length - len(head))
+    return f"# T\n\n{'p' * length}\n\n{tail}"
 
 
 def _lint(monkeypatch, capsys, report_dir, config):
@@ -791,8 +789,11 @@ def test_report_lint_result_shape(monkeypatch, capsys, tmp_path):
                 "file": f"{DAY}_akc_bad.md",
                 "kind": "article",
                 "hard": ["ソース節がない", "出典 URL が 0 件"],
-                "soft": ["必須節欠落: 機会メモ", f"本文 {len(text)} 字 (< 1500)"],
-                "body_chars": len(text),
+                # 本文 = H1 の後の「本文だけ」(4 字)。file_chars はファイル全長
+                "soft": ["必須節欠落: 機会メモ", "本文 4 字 (< 1500)"],
+                "body_chars": 4,
+                "file_chars": len(text),
+                "body_headings": 0,
             },
             {
                 "file": f"{DAY}_akc_thin.md",
@@ -800,6 +801,8 @@ def test_report_lint_result_shape(monkeypatch, capsys, tmp_path):
                 "hard": [],
                 "soft": ["出典 URL 2 件 (< 5)", "必須節欠落: 機会メモ", "本文 200 字 (< 1500)"],
                 "body_chars": 200,
+                "file_chars": len(thin),
+                "body_headings": 0,
             },
         ],
     }

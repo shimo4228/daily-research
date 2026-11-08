@@ -1125,11 +1125,35 @@ def _frontmatter_kind(text: str) -> str:
     return "article"
 
 
+_FRONTMATTER_RE = re.compile(r"---\n.*?\n---\n?", re.DOTALL)
+_H1_RE = re.compile(r"^# .*$", re.MULTILINE)
+_BODY_HEADING_RE = re.compile(r"^#{2,3} ", re.MULTILINE)
+
+
+def _report_body(text: str) -> str:
+    """ノートの本文を返す: frontmatter と H1 行の後から、末尾固定節の「## 機会メモ」(無ければ「## ソース」)
+    の前まで。H1 が無ければ frontmatter の直後から、固定節が無ければ末尾まで。"""
+    m = _FRONTMATTER_RE.match(text)
+    rest = text[m.end() :] if m else text
+    h1 = _H1_RE.search(rest)
+    after = rest[h1.end() :] if h1 else rest
+    for tail in ("\n## 機会メモ", "\n## ソース"):
+        end = after.find(tail)
+        if end >= 0:
+            return after[:end]
+    return after
+
+
 # --- report-lint <report_dir> <date> [config_path] ---
 # 当日レポートの決定論的品質検査 (ctl-016)。stdout に JSON 1 行。
 # exit 0 = 全 PASS または soft violation のみ / 2 = hard fail あり。
 # hard: ソース節不在・出典 URL 0 件 (レポートの体を成していない)
-# soft: 出典 < min_sources / 必須節欠落 / 本文長不足
+# soft: 出典 < min_sources / 必須節欠落 / 本文長不足 (本文 = _report_body の空白を除いた字数)
+# results[] の長さの記録 (閾値は持たない、ADR-0014 D6):
+#   body_chars    本文の空白を除いた字数 (見出し行を含む)。dr-review が kind 別に 3,000 / 600 字と比べる
+#   file_chars    ファイル全体の長さ。2026-11-08 以前の record の body_chars はこの値 — file_chars の有無で
+#                 定義を見分ける (無い record の body_chars はファイル長)
+#   body_headings 本文の ##・### 見出しの数 (両プロトコルの目安は 2 個まで)
 # kind (ADR-0017): frontmatter の kind: を読む (無ければ article)。brief (短報) は
 # 必須節 (機会メモ) と本文長の soft を免除し、hard と出典数 soft は article と同じ。
 # 必須節は自由形式レポート (ADR-0009) の機械検査対象 — 機会メモのみ
@@ -1189,8 +1213,10 @@ def cmd_report_lint(argv: list[str]) -> int:
             if missing:
                 soft.append(f"必須節欠落: {', '.join(missing)}")
 
-            if len(text) < MIN_BODY_CHARS:
-                soft.append(f"本文 {len(text)} 字 (< {MIN_BODY_CHARS})")
+        body = _report_body(text)
+        body_chars = len(re.sub(r"\s", "", body))
+        if kind != "brief" and body_chars < MIN_BODY_CHARS:
+            soft.append(f"本文 {body_chars} 字 (< {MIN_BODY_CHARS})")
 
         results.append(
             {
@@ -1198,7 +1224,9 @@ def cmd_report_lint(argv: list[str]) -> int:
                 "kind": kind,
                 "hard": hard,
                 "soft": soft,
-                "body_chars": len(text),
+                "body_chars": body_chars,
+                "file_chars": len(text),
+                "body_headings": len(_BODY_HEADING_RE.findall(body)),
             }
         )
 

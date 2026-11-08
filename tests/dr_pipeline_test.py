@@ -698,12 +698,9 @@ def test_metrics_backfill_clarity_warn_without_summary(monkeypatch, capsys, tmp_
 
 GOOD_REPORT = (
     "---\ndate: 2026-08-05\nactionable: 1\n---\n\n# T\n\n"
-    "冒頭の結論と背景解説を含む自由形式の本文。\n\n"
+    "冒頭の結論と背景解説を含む自由形式の本文。\n\n" + "p" * 1600 + "\n\n"
     "## 機会メモ\n- **何を**: x\n- **どこで**: y\n- **失効日**: 2026-08-29\n\n"
-    "## ソース\n"
-    + "\n".join(f"- [s{i}](https://example.com/{i})" for i in range(5))
-    + "\n"
-    + "p" * 1600
+    "## ソース\n" + "\n".join(f"- [s{i}](https://example.com/{i})" for i in range(5)) + "\n"
 )
 
 
@@ -745,6 +742,58 @@ def test_report_lint_soft_violations(monkeypatch, capsys, tmp_path):
     assert any("必須節欠落" in s for s in soft)
     assert any("機会メモ" in s for s in soft)
     assert any("本文" in s for s in soft)
+
+
+@pytest.mark.unit
+def test_report_lint_body_chars_measures_body_only(monkeypatch, capsys, tmp_path):
+    # body_chars = H1 の後から「## 機会メモ」(無ければ「## ソース」) の前、空白を除いた字数 (hillclimb H09)。
+    # 旧値 (ファイル全体の長さ) は file_chars に残す
+    text = (
+        '---\ndate: 2026-08-05\ntopic: "長い frontmatter の値"\n---\n\n# 題\n\n'
+        "あいう えお\n\n## 見出し1\n\nかき\n\n### 見出し2\n\nくけこ\n\n"
+        "## 機会メモ\n\nなし\n\n## ソース\n- [a](https://a.com)\n"
+    )
+    (tmp_path / "2026-08-05_akc_t.md").write_text(text)
+    rc, out, _ = run_cmd(monkeypatch, capsys, _lint_args(tmp_path))
+    assert rc == 0
+    r = json.loads(out)["results"][0]
+    assert r["file_chars"] == len(text)
+    # 本文 = 「あいうえお」「##見出し1」「かき」「###見出し2」「くけこ」の空白除去
+    assert r["body_chars"] == len("あいうえお##見出し1かき###見出し2くけこ")
+    assert r["body_headings"] == 2
+
+
+@pytest.mark.unit
+def test_report_lint_body_ends_at_sources_without_memo(monkeypatch, capsys, tmp_path):
+    text = "# 題\n\n本文です\n\n## ソース\n- [a](https://a.com)\n"
+    (tmp_path / "2026-08-05_akc_t.md").write_text(text)
+    _, out, _ = run_cmd(monkeypatch, capsys, _lint_args(tmp_path))
+    r = json.loads(out)["results"][0]
+    assert r["body_chars"] == len("本文です")
+    assert r["body_headings"] == 0
+
+
+@pytest.mark.unit
+def test_report_lint_short_body_is_soft_even_if_file_is_long(monkeypatch, capsys, tmp_path):
+    # 本文 900 字 + 長いソース節: 旧定義 (ファイル長) では通っていた本文長の soft を本文で判定する
+    text = (
+        "---\ndate: 2026-08-05\n---\n\n# 題\n\n" + "あ" * 900 + "\n\n## 機会メモ\n\nなし\n\n"
+        "## ソース\n" + "\n".join(f"- [{'x' * 200}](https://e.com/{i})" for i in range(5)) + "\n"
+    )
+    (tmp_path / "2026-08-05_akc_t.md").write_text(text)
+    _, out, _ = run_cmd(monkeypatch, capsys, _lint_args(tmp_path))
+    r = json.loads(out)["results"][0]
+    assert r["file_chars"] > 1500
+    assert r["body_chars"] == 900
+    assert "本文 900 字 (< 1500)" in r["soft"]
+
+
+@pytest.mark.unit
+def test_report_lint_body_without_h1_starts_after_frontmatter(monkeypatch, capsys, tmp_path):
+    (tmp_path / "2026-08-05_akc_t.md").write_text("---\nkind: brief\n---\n\n短報\n\n## ソース\n")
+    _, out, _ = run_cmd(monkeypatch, capsys, _lint_args(tmp_path))
+    r = json.loads(out)["results"][0]
+    assert r["body_chars"] == len("短報")
 
 
 # === wiki-quality-scan ===
