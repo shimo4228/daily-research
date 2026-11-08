@@ -217,6 +217,31 @@ def test_spend_gate_row_without_cost_is_unreadable(monkeypatch, capsys, tmp_path
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    "row,reason",
+    [
+        ('{"cost_usd": 50}', "no date"),
+        ('{"date": null, "cost_usd": 50}', "no date"),
+        ('{"date": "", "cost_usd": 50}', "date is not YYYY-MM-DD"),
+        ('{"date": 20261102, "cost_usd": 50}', "date is not YYYY-MM-DD"),
+        ('{"date": "2026/11/02", "cost_usd": 50}', "date is not YYYY-MM-DD"),
+    ],
+    ids=["missing", "null", "empty", "int", "slashes"],
+)
+def test_spend_gate_row_without_usable_date_is_unreadable(
+    monkeypatch, capsys, tmp_path, row, reason
+):
+    # date で月・日に振り分けられない行は、どの累計にも入らず 0 ドルと同じになっていた ($50 が通った)
+    ledger = _write(tmp_path, "l.jsonl", '{"date": "2026-11-02", "cost_usd": 1}\n' + row + "\n")
+    rc, out, err = run_cmd(
+        monkeypatch, capsys, ["spend-gate", ledger, "2026-11-02", "100", "10", "1"]
+    )
+    assert rc == 2
+    assert out == ""
+    assert err == f"spend-gate: 1 unreadable line(s) in {ledger}: line 2 ({reason})\n"
+
+
+@pytest.mark.unit
 def test_spend_gate_zero_cost_is_a_readable_row(monkeypatch, capsys, tmp_path):
     # 0 は報告された費用 (spend-add が total_cost_usd: 0 を記録する)。読めない行にしない
     ledger = _write(tmp_path, "l.jsonl", '{"date": "2026-11-02", "cost_usd": 0}\n')

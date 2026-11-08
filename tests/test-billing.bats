@@ -364,6 +364,16 @@ calls_of() { grep -c "kind=$1" "$MOCK_HOME/.calls" || true; }
   grep -qF 'line 1 (no cost_usd)' "$(log_file)"
 }
 
+@test "ledger row without date: the gate stops instead of leaving its cost out of the month" {
+  # 月の上限 190 に対し、date の無い 186 ドルの行は以前どの累計にも入らず、line が始まっていた
+  mkdir -p "$P/state"
+  echo '{"line":"akc","call":"call1","cost_usd":186}' > "$(ledger)"
+  run run_script
+  [ "$(calls_of repo-research-protocol)" -eq 0 ]
+  grep -qF 'API spend gate failed (rc 2): spend-gate: 1 unreadable line(s) in' "$(log_file)"
+  grep -qF 'line 1 (no date)' "$(log_file)"
+}
+
 @test "ledger cannot be written: the run stops before the next line" {
   mkdir -p "$P/state/api-spend.jsonl"   # ディレクトリにして追記を失敗させる
   run run_script

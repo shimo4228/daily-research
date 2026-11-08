@@ -1852,6 +1852,9 @@ def cmd_env_key(argv: list[str]) -> int:
     return 0
 
 
+_LEDGER_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")  # 台帳の date (spend-add が書く形)
+
+
 def _spend_totals(ledger: str, date_s: str) -> tuple[float, float, list[str]]:
     """(month_total, day_total, unreadable)。unreadable は読めない行の "line N (理由)" で、
     呼ぶ側が名指して止める — 黙って捨てるとその費用が累計から消え、上限の判定が甘くなる。
@@ -1886,10 +1889,17 @@ def _spend_totals(ledger: str, date_s: str) -> tuple[float, float, list[str]]:
             unreadable.append(f"line {n} (no cost_usd)")
             continue
         try:
-            d = str(r.get("date", ""))
             c = float(r["cost_usd"])
         except (ValueError, TypeError, OverflowError):  # OverflowError: float に収まらない整数
             unreadable.append(f"line {n} (cost_usd is not a number)")
+            continue
+        # date で月・日に振り分ける。YYYY-MM-DD でない行はどの累計にも入らず 0 ドルと同じになる
+        d = r.get("date")
+        if d is None:
+            unreadable.append(f"line {n} (no date)")
+            continue
+        if not isinstance(d, str) or not _LEDGER_DATE_RE.fullmatch(d):
+            unreadable.append(f"line {n} (date is not YYYY-MM-DD)")
             continue
         if d[:7] == date_s[:7]:
             month += c
