@@ -715,6 +715,15 @@ if [ -n "$CLARITY_NOTE" ]; then
   # lint (ctl-016) より前に置く — 検査対象は改稿後の最終版。
   # ラベル Clarity / CLARITY / clarity_pass は metrics・backfill 互換のため据え置き。
   log "=== Clarity pass: $(basename "$CLARITY_NOTE") ==="
+  # 機械が拾った clarity の候補 (H05)。clarity-scan が本文の初出に説明の無い略語と 120 字超の文を
+  # 列挙し、--hints の節 (語・行番号・字数だけ。原稿の自由文は写さない) を CLARITY_PROMPT の末尾に足す。
+  # 直すかは呼2 が判断する。呼2 の前後の --counts は CSCAN 行で metrics の verification 節へ。
+  # scan の失敗は候補を足さずに呼2 を従来どおり走らせる (fail-open)
+  CSCAN_BEFORE=$(python3 "$DR_PY" clarity-scan --counts "$CLARITY_NOTE" 2>> "$LOG_FILE") || CSCAN_BEFORE=""
+  if ! CLARITY_HINTS=$(python3 "$DR_PY" clarity-scan --hints "$CLARITY_NOTE" 2>> "$LOG_FILE"); then
+    log "WARN: Line $TRACK clarity-scan failed — call 2 runs without machine candidates"
+    CLARITY_HINTS=""
+  fi
   # 前回 run の verify.json を今回の結果と取り違えない (読み取りも run スコープに限る)
   rm -f "$VERIFY_PATH"
   # 写しの path に dir が先にあると cp は中へ写して成功を返す (verify-diff は rc 1 で外れる)。rm -rf してから
@@ -744,7 +753,9 @@ clarity 改稿し、最後に主要な主張を原典で照合してください
 根拠ファイル (読み取りのみ。無ければ本文の出典リンクで照合する): $STATE_DIR/runs/${DATE}.md
 検証結果の書き込み先: $VERIFY_PATH
 
-書き込みはこの 2 ファイル (原稿と検証結果) だけ。これ以外への書き込みは許可されていない。"
+書き込みはこの 2 ファイル (原稿と検証結果) だけ。これ以外への書き込みは許可されていない。${CLARITY_HINTS:+
+
+$CLARITY_HINTS}"
   CLARITY_EXIT=0
   budget_flags 2
   CLARITY_JSON=$(CLAUDE_TIMEOUT=1200 run_claude -p "$CLARITY_PROMPT" \
@@ -786,6 +797,15 @@ clarity 改稿し、最後に主要な主張を原典で照合してください
     log "WARN: clarity pass failed ($CLARITY_CLASS, exit $CLARITY_EXIT) — keeping unrevised report (fail-open)"
     [ -z "$CLARITY_JSON" ] && CLARITY_JSON='{}'
     METRICS_STDIN+="CLARITY"$'\t'"0"$'\t'"$CLARITY_JSON"$'\n'
+  fi
+  # 呼2 後の clarity-scan (H05): 残った候補の数を呼2 前と並べる (呼2 の失敗時も部分改稿を測る)。
+  # 失敗は計測が欠けるだけ (non-fatal)
+  CSCAN_AFTER=$(python3 "$DR_PY" clarity-scan --counts "$CLARITY_NOTE" 2>> "$LOG_FILE") || CSCAN_AFTER=""
+  if [ -n "$CSCAN_BEFORE" ] && [ -n "$CSCAN_AFTER" ]; then
+    log "CLARITY_SCAN $TRACK: before $CSCAN_BEFORE after $CSCAN_AFTER"
+    METRICS_STDIN+="CSCAN"$'\t'"$CSCAN_BEFORE"$'\t'"$CSCAN_AFTER"$'\n'
+  else
+    log "WARN: Line $TRACK clarity-scan counts missing (non-fatal)"
   fi
 
   # 検証結果 (verify-read は欠損・破損でも全零 + ran:false の 1 行 JSON を返す)

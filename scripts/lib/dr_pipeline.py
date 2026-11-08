@@ -1267,6 +1267,8 @@ def _sum_verification(verifies: list[dict[str, object]]) -> dict[str, int] | Non
 #                        (VDIFF 行が無い日は verification に diff_* を足さない — 旧 record と同じ形)
 #   EVENT\t<track>\t<YYYY-MM-DD|unknown> — ノートのある line の出来事の日付 (receipt-event-date、H17)。
 #                        event_age_days に line → run 日付からの日数 (不明は null)。EVENT 行が無い日は None
+#   CSCAN\t{json}\t{json} — clarity-scan --counts の呼2 前・後 (H05)。verification に clarity_* と
+#                        cscan_lines を足す (CSCAN 行が無い日は足さない。_sum_cscan)
 # ラベル不明・payload 破損の行は skip (収集は non-fatal)。
 # pass1 は per-repo 化で廃止 (None 固定)。第 5 引数はリトライ発生の有無で、
 # レコード互換のため旧フィールド名 fallback_used に記録する。
@@ -1286,6 +1288,7 @@ def cmd_metrics_append(argv: list[str]) -> int:
     # source="test" は試験 seam の run。_load_metrics の既定で集計から除かれる
     source = argv[5] if len(argv) > 5 and argv[5] else "live"
 
+    cscans: list[_CscanPair] = []  # CSCAN 行 (_sum_cscan の注記)
     runs, lint, clarities = [], None, []
     line_states = {k: 0 for k in LINE_STATE_KEYS}
     verifies, vdiffs = [], []
@@ -1335,6 +1338,8 @@ def cmd_metrics_append(argv: list[str]) -> int:
                 runs.append(_pass_metrics(json.loads(payload)))
             except json.JSONDecodeError:
                 continue
+        elif label == "CSCAN":
+            cscans += _parse_cscan(payload)
 
     # clarity_pass: 1 本ならそのまま (旧来互換)。複数 (daily line 追加後の 1 日複数
     # line 実行) は合算して 1 dict に写像する — ok は全 line 成功のときだけ true。
@@ -1369,6 +1374,7 @@ def cmd_metrics_append(argv: list[str]) -> int:
     if record["verification"] is not None and vdiffs:
         record["verification"].update(_sum_vdiff(vdiffs))
     record["total_cost"] = _total_cost(record)
+    _add_cscan(record["verification"], cscans)
     with open(metrics_path, "a") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
     print(f"metrics: appended {date_s} ({final_class}, {report_count} reports, {len(runs)} runs)")
@@ -1777,7 +1783,8 @@ def cmd_event_age_stats(argv: list[str]) -> int:
 #   total_cost_{mean|max} / fallback_rate / report_count_min / no_report_count /
 #   lint_hard_count / quiet_rate / receipt_count_min / unsupported_rate /
 #   unverifiable_rate / clarity_ok_rate (ADR-0017。line_states / verification /
-#   clarity_pass が None の record は分母から除く)
+#   clarity_pass が None の record は分母から除く) /
+#   clarity_{undef|long}_{before|after}_mean (CSCAN 行を持つ record だけ。_clarity_scan_mean)
 def cmd_expect_check(argv: list[str]) -> int:
     if len(argv) < 1:
         print("usage: expect-check <metrics_path>  (expects on stdin)", file=sys.stderr)
@@ -1840,7 +1847,7 @@ def cmd_expect_check(argv: list[str]) -> int:
         if name == "clarity_ok_rate":
             cps = [r["clarity_pass"] for r in recs if isinstance(r.get("clarity_pass"), dict)]
             return sum(1 for c in cps if c.get("ok")) / len(cps) if cps else None
-        return None
+        return _clarity_scan_mean(name, verif)
 
     def receipts(s: dict[str, int]) -> int:
         return sum(s.get(k, 0) for k in ("article", "brief", "quiet", "hold"))
@@ -2122,8 +2129,8 @@ def cmd_spend_gate(argv: list[str]) -> int:
 #
 # 呼2 の初見読者の模擬は、略語の未定義と長い文を見落とす (2026-11 の live 24 本: 初出に説明の無い
 # 大文字略語 73/99 に対し、呼2 の「未定義用語」の自己申告は計 10、「構文」は 0)。機械が候補を
-# 列挙し、呼2 には「直すか」の判断と改稿だけを残す。--hints は呼2 のタスクプロンプトへ足す節、
-# --counts は呼2 の前後の計測に使う形。
+# 列挙し、呼2 には「直すか」の判断と改稿だけを残す。SH は呼2 の前に --hints をタスクプロンプトへ
+# 足し、呼2 の前後の --counts を metrics の verification 節へ渡す (CSCAN 行)。
 #
 # --- clarity-scan [--hints | --counts] <note> ---
 # 本文 = _report_body_span の範囲 (report-lint の本文と同じ。末尾固定節は見出し行の完全一致の最後の行)。
@@ -2136,7 +2143,7 @@ def cmd_spend_gate(argv: list[str]) -> int:
 #   body_headings    本文の ##・### 見出しの数
 # --hints: 呼2 のタスクプロンプトに足す候補の節 (候補が無ければ空)。語は _CS_ACRONYM_RE に合う
 #   大文字の並びだけ、ほかは行番号と字数の整数だけで組む — 原稿は外部由来のデータで、その自由文を
-#   タスクプロンプトへ写さない。
+#   タスクプロンプトへ写さない。最終行は固定文 CLARITY_HINT_FOOTER。
 # --counts: counts だけの JSON 1 行。
 # ノートが読めなければ rc 1 (stdout 空)。引数の誤りは rc 64。
 #
@@ -2150,6 +2157,9 @@ CLARITY_LONG_SENTENCE = 120
 CLARITY_TERM_MAX = 8
 CLARITY_HINT_TERMS_MAX = 20
 CLARITY_HINT_SENTENCES_MAX = 10
+# --hints の最終行。候補の節はプロンプトの末尾に来るので、照合 (Step B) の重みを候補の後で言い直す —
+# 候補だけを足すと、44 誤りの fixture で照合の見落としが増えた (H05 の隔離 A/B)
+CLARITY_HINT_FOOTER = "候補は Step A のためだけの参考で、Step B は候補と関係なく根拠ファイルの主張を全件、原典と照合する。"
 CLARITY_COMMON_ACRONYMS = frozenset(
     {
         "AI", "URL", "PDF", "CEO", "CTO", "CFO", "US", "USA", "EU", "UK", "UN", "OK", "IT", "ID",
@@ -2326,6 +2336,7 @@ def _cs_hints(terms: list[dict[str, object]], longs: list[dict[str, int]]) -> st
         out.append(
             f"- {CLARITY_LONG_SENTENCE} 字を超える文: {capped(items, CLARITY_HINT_SENTENCES_MAX)}"
         )
+    out.append(CLARITY_HINT_FOOTER)
     return "\n".join(out)
 
 
@@ -2351,6 +2362,53 @@ def cmd_clarity_scan(argv: list[str]) -> int:
     else:
         print(json.dumps(clarity_scan(text), ensure_ascii=False))
     return 0
+
+
+# CSCAN 行 (metrics-append): "CSCAN\t{呼2 前の --counts}\t{呼2 後の --counts}"。1 line 1 行。
+# verification 節に clarity_{undef|long}_{before|after} の合計と cscan_lines (行数) を足す。
+# 2 つの JSON object がそろわない行は数えない。値は _nonneg_int で正規化する。
+# CSCAN 行が無い日は verification に足さない (旧 record と同じ形)。
+CSCAN_KEYS = (("undefined_terms", "undef"), ("long_sentences", "long"))
+_CscanPair = tuple[dict[str, object], dict[str, object]]  # (呼2 前の --counts, 呼2 後の --counts)
+
+
+def _parse_cscan(payload: str) -> list[_CscanPair]:
+    """CSCAN 行の payload を [(before, after)] にする。2 つの JSON object がそろわなければ []。"""
+    parts = payload.split("\t")
+    if len(parts) != 2:
+        return []
+    try:
+        before, after = (json.loads(p) for p in parts)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        return []
+    return [(before, after)]
+
+
+def _add_cscan(verification: dict[str, object] | None, cscans: list[_CscanPair]) -> None:
+    if verification is not None and cscans:
+        verification.update(_sum_cscan(cscans))
+
+
+def _sum_cscan(cscans: list[_CscanPair]) -> dict[str, int]:
+    total = {"cscan_lines": len(cscans)}
+    for key, short in CSCAN_KEYS:
+        total[f"clarity_{short}_before"] = sum(_nonneg_int(b.get(key)) for b, _ in cscans)
+        total[f"clarity_{short}_after"] = sum(_nonneg_int(a.get(key)) for _, a in cscans)
+    return total
+
+
+def _clarity_scan_mean(name: str, verif: list[dict[str, object]]) -> float | None:
+    """expect-check の clarity_{undef|long}_{before|after}_mean: clarity-scan の数の 1 line あたり平均。
+    分母は CSCAN 行を持つ record の cscan_lines の合計 (導入前の record は入れない)。他の名前は None。"""
+    m = re.fullmatch(r"clarity_(undef|long)_(before|after)_mean", name)
+    if not m:
+        return None
+    scanned = [v for v in verif if _nonneg_int(v.get("cscan_lines"))]
+    lines = sum(_nonneg_int(v.get("cscan_lines")) for v in scanned)
+    key = f"clarity_{m.group(1)}_{m.group(2)}"
+    return sum(_nonneg_int(v.get(key)) for v in scanned) / lines if lines else None
 
 
 COMMANDS: dict[str, Callable[[list[str]], int]] = {

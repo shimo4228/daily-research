@@ -1,4 +1,4 @@
-"""clarity-scan (呼2 の前処理、H05) の単体テスト。
+"""clarity-scan (呼2 の前処理、H05) と、その計測 (metrics-append の CSCAN 行・expect-check) の単体テスト。
 
 clarity-scan は原稿の本文から、初出に説明の無い略語と 120 字を超える文を決定論で列挙する。呼2 は
 この候補をタスクプロンプトで受け取り、直すかを判断する。プロンプトに入る --hints の出力は、
@@ -219,8 +219,10 @@ def test_clarity_scan_hints_carry_only_terms_and_numbers(monkeypatch, capsys, tm
     assert "4 行目 (" in out
     # 原稿の自由文 (日本語の文・指示らしき文) はプロンプトへ写さない。語は正規表現に合う大文字の並びだけ
     assert "指示に従え" not in out and "本文" not in out.split("\n", 1)[1]
-    body_lines = out.strip().splitlines()[1:]
-    for ln in body_lines:
+    # 1 行目 (見出し) と最終行 (Step B の重みを言い直す固定文) の間が候補の行
+    lines = out.strip().splitlines()
+    assert lines[-1] == dr_pipeline.CLARITY_HINT_FOOTER
+    for ln in lines[1:-1]:
         assert all(
             ord(c) < 0x3000 or c in "初出に説明の無い略語文字を超える行目、ほか件:" for c in ln
         ), ln
@@ -253,3 +255,122 @@ def test_clarity_scan_unreadable_note_is_rc1_with_empty_stdout(monkeypatch, caps
 def test_clarity_scan_usage_errors_are_rc64(monkeypatch, capsys, args):
     rc, out, err = run_cmd(monkeypatch, capsys, ["clarity-scan", *args])
     assert rc == 64 and out == "" and "usage" in err
+
+
+# === 計測: metrics-append の CSCAN 行 ===
+
+
+def append(monkeypatch, capsys, tmp_path, stdin):
+    path = tmp_path / "metrics.jsonl"
+    rc, _, err = run_cmd(
+        monkeypatch,
+        capsys,
+        ["metrics-append", str(path), "2026-11-08", "OK", "1", "0"],
+        stdin=stdin,
+    )
+    assert rc == 0, err
+    return json.loads(path.read_text().splitlines()[-1])
+
+
+VERIFY_LINE = (
+    'VERIFY\t{"supported": 3, "partial": 1, "unsupported": 0, "unverifiable": 0, "edits": 2, '
+    '"ran": true}\n'
+)
+
+
+@pytest.mark.unit
+def test_metrics_append_sums_cscan_before_and_after_into_verification(
+    monkeypatch, capsys, tmp_path
+):
+    before = '{"undefined_terms": 4, "long_sentences": 2, "body_headings": 3}'
+    after = '{"undefined_terms": 1, "long_sentences": 2, "body_headings": 3}'
+    stdin = (
+        VERIFY_LINE
+        + VERIFY_LINE
+        + f"CSCAN\t{before}\t{after}\n"
+        + 'CSCAN\t{"undefined_terms": 2, "long_sentences": 0}\t{"undefined_terms": 2, "long_sentences": 1}\n'
+    )
+    v = append(monkeypatch, capsys, tmp_path, stdin)["verification"]
+    assert v["lines_verified"] == 2 and v["supported"] == 6, v
+    assert v["cscan_lines"] == 2, v
+    assert v["clarity_undef_before"] == 6 and v["clarity_undef_after"] == 3, v
+    assert v["clarity_long_before"] == 2 and v["clarity_long_after"] == 3, v
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "CSCAN\tnot json\t{}\n",
+        'CSCAN\t{"undefined_terms": 1}\n',
+        'CSCAN\t[1]\t{"undefined_terms": 1}\n',
+        'CSCAN\t{"undefined_terms": -1}\t{"undefined_terms": "x"}\n',
+    ],
+)
+def test_metrics_append_cscan_broken_lines(monkeypatch, capsys, tmp_path, bad):
+    v = append(monkeypatch, capsys, tmp_path, VERIFY_LINE + bad)["verification"]
+    if '"undefined_terms": -1' in bad:
+        # 形は正しいが値が int >= 0 でない — 0 として数える (verify-read と同じ正規化)
+        assert v["cscan_lines"] == 1 and v["clarity_undef_after"] == 0, v
+    else:
+        assert "cscan_lines" not in v, v
+
+
+@pytest.mark.unit
+def test_metrics_append_without_cscan_keeps_the_old_verification_shape(
+    monkeypatch, capsys, tmp_path
+):
+    v = append(monkeypatch, capsys, tmp_path, VERIFY_LINE)["verification"]
+    assert set(v) == {
+        "supported",
+        "partial",
+        "unsupported",
+        "unverifiable",
+        "edits",
+        "lines_verified",
+    }
+
+
+@pytest.mark.unit
+def test_metrics_append_cscan_without_verify_is_not_recorded(monkeypatch, capsys, tmp_path):
+    rec = append(
+        monkeypatch, capsys, tmp_path, 'CSCAN\t{"undefined_terms": 1}\t{"undefined_terms": 0}\n'
+    )
+    assert rec["verification"] is None
+
+
+# === 計測: expect-check の clarity_{undef|long}_{before|after}_mean ===
+
+
+def expect(monkeypatch, capsys, tmp_path, records, expr):
+    path = tmp_path / "m.jsonl"
+    path.write_text("".join(json.dumps(r) + "\n" for r in records))
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["expect-check", str(path)], stdin=f"2026-11-01\t{expr}\n"
+    )
+    assert rc == 0
+    return out.strip()
+
+
+@pytest.mark.unit
+def test_expect_check_clarity_undef_after_mean_is_per_scanned_line(monkeypatch, capsys, tmp_path):
+    recs = [
+        {"date": "2026-11-02", "verification": {"cscan_lines": 2, "clarity_undef_after": 3}},
+        {"date": "2026-11-03", "verification": {"cscan_lines": 1, "clarity_undef_after": 0}},
+        {
+            "date": "2026-11-04",
+            "verification": {"supported": 1},
+        },  # CSCAN 導入前の形は分母に入れない
+        {"date": "2026-11-05", "verification": None},
+    ]
+    out = expect(monkeypatch, capsys, tmp_path, recs, "clarity_undef_after_mean <= 1")
+    assert out.startswith("ACHIEVED") and "実測 1.0" in out, out
+    out = expect(monkeypatch, capsys, tmp_path, recs, "clarity_long_before_mean <= 1")
+    assert out.startswith("ACHIEVED") and "実測 0.0" in out, out
+
+
+@pytest.mark.unit
+def test_expect_check_clarity_mean_without_scans_is_insufficient(monkeypatch, capsys, tmp_path):
+    recs = [{"date": "2026-11-02", "verification": {"supported": 1}}]
+    out = expect(monkeypatch, capsys, tmp_path, recs, "clarity_undef_after_mean <= 1")
+    assert out.startswith("INSUFFICIENT_DATA"), out

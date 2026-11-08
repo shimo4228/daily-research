@@ -271,6 +271,10 @@ if [[ "$PROTOCOL" == *repo-research-protocol.md || "$PROTOCOL" == *ecosystem-res
       esac
       ;;
   esac
+  # 本文の追記 seam (H05): .report_body_<track> があれば、書いたレポートの末尾に足す (clarity-scan 用)
+  if [ -f "$MOCK_HOME_DIR/.report_body_$TRACK" ] && [ -f "$REPORT_DIR/$REPORT_NAME" ]; then
+    cat "$MOCK_HOME_DIR/.report_body_$TRACK" >> "$REPORT_DIR/$REPORT_NAME"
+  fi
 
   # 検索回数: 実出力と同じく modelUsage.<model>.webSearchRequests に載せる。
   # .nosearch_<track> があれば検索 0 回の run を返す (quiet-suspect テスト用)
@@ -1087,6 +1091,56 @@ PY
   assert_metrics << 'PY'
 assert rec["final_class"] == "OK", rec
 assert list(rec["event_age_days"].values()) == [None], rec
+PY
+}
+
+@test "E2E clarity: clarity-scan candidates go to the end of the call-2 prompt and are counted before and after (H05)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  # 3 行目 = 初出に説明の無い HN と、138 字の文
+  printf '\nHN の話と、%s。\n\n## ソース\n\n- [x](https://x.example)\n' "$(printf 'あ%.0s' {1..130})" \
+    > "$MOCK_HOME/.report_body_$PICKED"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  local prompt
+  prompt=$(cat "$MOCK_HOME/.prompt_clarity")
+  echo "$prompt" | grep -qF -- "- 初出に説明の無い略語: HN (3 行目)"
+  echo "$prompt" | grep -qF -- "- 120 字を超える文: 3 行目 (138 字)"
+  # 候補の節は書き込み先の注記の後 (プロンプトの末尾) に置く
+  [ "$(grep -n '書き込みはこの 2 ファイル' <<< "$prompt" | cut -d: -f1)" -lt "$(grep -n '機械が拾った候補' <<< "$prompt" | cut -d: -f1)" ]
+  get_log | grep -qF "CLARITY_SCAN $PICKED: before {\"undefined_terms\": 1, \"long_sentences\": 1, \"body_headings\": 0} after {\"undefined_terms\": 1, \"long_sentences\": 1, \"body_headings\": 0}"
+  assert_metrics << 'PY'
+v = rec["verification"]
+assert v["cscan_lines"] == 1 and v["clarity_undef_before"] == 1 and v["clarity_undef_after"] == 1, v
+assert v["clarity_long_before"] == 1 and v["clarity_long_after"] == 1, v
+PY
+}
+
+@test "E2E clarity: a note without candidates leaves the call-2 prompt unchanged and still records zero counts (H05)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -eq 0 ]
+  refute_grep -q "機械が拾った候補" "$MOCK_HOME/.prompt_clarity"
+  [ "$(tail -c 60 "$MOCK_HOME/.prompt_clarity")" = "$(printf '%s' '書き込みはこの 2 ファイル (原稿と検証結果) だけ。これ以外への書き込みは許可されていない。' | tail -c 60)" ]
+  get_log | grep -qF "CLARITY_SCAN $PICKED: before {\"undefined_terms\": 0, \"long_sentences\": 0, \"body_headings\": 0} after "
+  refute_grep -q "clarity-scan failed" <<< "$(get_log)"
+}
+
+@test "E2E clarity: a clarity-scan failure is fail-open (call 2 runs without candidates, no CSCAN) (H05)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  printf '\nHN \xff\xfe\n' > "$MOCK_HOME/.report_body_$PICKED"   # UTF-8 でない byte で scan が読めない
+
+  run run_script
+  [ "$status" -eq 0 ]
+  local log_content
+  log_content=$(get_log)
+  echo "$log_content" | grep -q "WARN: Line $PICKED clarity-scan failed — call 2 runs without machine candidates"
+  echo "$log_content" | grep -q "WARN: Line $PICKED clarity-scan counts missing (non-fatal)"
+  echo "$log_content" | grep -q "Clarity pass ok"
+  refute_grep -q "機械が拾った候補" "$MOCK_HOME/.prompt_clarity"
+  assert_metrics << 'PY'
+assert "cscan_lines" not in rec["verification"], rec
 PY
 }
 
