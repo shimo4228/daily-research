@@ -1312,8 +1312,9 @@ def test_receipt_event_date_passes_a_past_calendar_date(monkeypatch, capsys, tmp
 
 
 @pytest.mark.unit
-def test_receipt_event_date_declared_unknown_has_no_warn(monkeypatch, capsys, tmp_path):
-    rc, out, err = _red(monkeypatch, capsys, _receipt(tmp_path, {"event_date": "unknown"}))
+@pytest.mark.parametrize("declared", ["unknown", "不明"])  # 不明 = 根拠ファイルの表の印
+def test_receipt_event_date_declared_unknown_has_no_warn(monkeypatch, capsys, tmp_path, declared):
+    rc, out, err = _red(monkeypatch, capsys, _receipt(tmp_path, {"event_date": declared}))
     assert (rc, out, err) == (0, "unknown\n", "")
 
 
@@ -1330,8 +1331,11 @@ def test_receipt_event_date_declared_unknown_has_no_warn(monkeypatch, capsys, tm
         ({"event_date": 20260910}, None),
         ({"event_date": None}, None),
         ({"event_date": ""}, None),
+        ({"event_date": "２０２６-０９-１０"}, None),
+        ({"event_date": {"y": 2026}}, None),
         (None, "{broken"),
         (None, "[1]"),
+        (None, '{"event_date": 1' + "0" * 5000 + "}"),
     ],
     ids=[
         "old-receipt",
@@ -1343,8 +1347,11 @@ def test_receipt_event_date_declared_unknown_has_no_warn(monkeypatch, capsys, tm
         "number",
         "null",
         "empty",
+        "fullwidth-digits",
+        "object",
         "non-json",
         "non-object",
+        "huge-int",
     ],
 )
 def test_receipt_event_date_otherwise_unknown_with_warn(monkeypatch, capsys, tmp_path, obj, raw):

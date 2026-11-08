@@ -941,7 +941,7 @@ fi
 # === 自己改善ループの計測 (ADR-0006): run 記録の永続化 + review リマインダー ===
 # logs/ は 30 日ローテーションで消えるため、metrics.jsonl (gitignore) に恒久保存する。
 # 収集は non-fatal — 計測の失敗で生成ジョブの成否を変えない。
-# stdin framing は "LABEL\t[meta\t]payload" で統一 (RUN / LINT / CLARITY / STATE / VERIFY / VDIFF)。
+# stdin framing は "LABEL\t[meta\t]payload" で統一 (RUN / LINT / CLARITY / STATE / EVENT / VERIFY / VDIFF)。
 # dr_pipeline 側がラベルで判別し pass2 等に写像する (レコード形は旧来互換 —
 # expect-check / /dr-review が消費)。1 日複数 line の RUN / CLARITY / STATE / VERIFY は
 # METRICS_STDIN に蓄積済みで、dr_pipeline が 1 レコードへ合算する。

@@ -611,7 +611,7 @@ def cmd_receipt_read(argv: list[str]) -> int:
     return 0
 
 
-_ISO_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_ISO_DATE_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")  # ASCII の数字だけ (\d は全角数字も通す)
 
 
 def _iso_day(v: object) -> int | None:
@@ -637,8 +637,9 @@ def _event_age_days(run_date: object, event_date: object) -> int | None:
 # --- receipt-event-date <receipt_path> <date>: 記事の中心の出来事の日付 (H17、ノートの新しさの計測) ---
 # stdout: YYYY-MM-DD か unknown の 1 行。receipt の event_date が実在の暦日で run 日付以前ならその値、
 # それ以外 (key の無い旧 receipt / 宣言の "unknown" / 形式外 / 未来日 / 読めない receipt) は unknown。
-# 宣言でない unknown は stderr に WARN 1 行 (day log に残る)。rc は常に 0 — gate にも line の成否にも
-# 効かせない。orchestrator は article / brief の line だけ呼び、結果を metrics の EVENT 行にする。
+# 根拠ファイルの表の不明の印「不明」も宣言として扱う。宣言でない unknown は stderr に WARN 1 行
+# (day log に残る)。rc は常に 0 — gate にも line の成否にも効かせない。orchestrator は article / brief の
+# line だけ呼び、結果を metrics の EVENT 行にする。
 def cmd_receipt_event_date(argv: list[str]) -> int:
     if len(argv) < 2:
         print("usage: receipt-event-date <receipt_path> <date>", file=sys.stderr)
@@ -653,12 +654,12 @@ def cmd_receipt_event_date(argv: list[str]) -> int:
     try:
         with open(path, encoding="utf-8") as f:
             d = json.load(f)
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
+    except (OSError, ValueError, RecursionError) as e:  # ValueError は JSON・UTF-8・巨大整数の失敗
         return unknown(f"unreadable receipt: {_CTRL_RE.sub(' ', str(e))[:120]}")
     if not isinstance(d, dict) or "event_date" not in d:
         return unknown("receipt has no event_date")
     v = d["event_date"]
-    if v == "unknown":
+    if v in ("unknown", "不明"):
         print("unknown")
         return 0
     if _event_age_days(date_s, v) is None:

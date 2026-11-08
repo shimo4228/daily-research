@@ -1198,6 +1198,7 @@ PY
   get_log | grep -q "Line states: article=0 brief=1 quiet=0 hold=0 (今朝: $PICKED(brief))"
   assert_metrics << 'PY'
 assert rec["line_states"]["brief"] == 1, rec
+assert list(rec["event_age_days"].values()) == [0], rec  # 短報も新しさを数える (H17、既定 = DR_DATE)
 # lint は kind: brief を読み、機会メモ / 本文長の soft を免除する
 assert rec["lint"]["results"][0]["kind"] == "brief", rec
 assert not any("機会メモ" in s for s in rec["lint"]["results"][0]["soft"]), rec
@@ -1350,6 +1351,7 @@ PY
   assert_metrics << 'PY'
 assert rec["line_states"]["article"] == 1 and rec["line_states"]["mismatch"] == 1, rec
 assert rec["line_states"]["quiet"] == 0, rec
+assert list(rec["event_age_days"].values()) == [0], rec  # ノートがあるので数える (H17)
 PY
 }
 
