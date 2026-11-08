@@ -899,6 +899,55 @@ EOF
   [ "$(echo "$call" | cut -d' ' -f3)" -gt 2700 ]
 }
 
+# Pass 3 の ingest stub: vault の daily_wiki_ingest.sh と同じ式 (${WIKI_INGEST_TIMEOUT:-2700}) で内側の上限を
+# 決めて .inner_limit に記録する。pass3_outer_limit は timeout spy が見た外側の上限 (秒)
+install_ingest_stub() {
+  mkdir -p "$MOCK_HOME/mock-vault/scripts"
+  printf '#!/bin/bash\necho "${WIKI_INGEST_TIMEOUT:-2700}" > "%s/.inner_limit"\n' "$MOCK_HOME" \
+    > "$MOCK_HOME/mock-vault/scripts/daily_wiki_ingest.sh"
+  chmod +x "$MOCK_HOME/mock-vault/scripts/daily_wiki_ingest.sh"
+}
+pass3_outer_limit() {
+  grep -E "^-k [0-9]+ [0-9]+ bash $MOCK_HOME/mock-vault/scripts/daily_wiki_ingest.sh $DR_DATE\$" \
+    "$MOCK_HOME/.timeout_calls" | cut -d' ' -f3
+}
+
+@test "E2E pass3: a larger WIKI_INGEST_TIMEOUT raises the outer limit above it (the outer timeout does not cut first)" {
+  # 外側を 3600 に固定していた頃は、WIKI_INGEST_TIMEOUT >= 3570 で正常に進んでいる ingest を外側が先に切った
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  install_timeout_spy
+  install_ingest_stub
+  export WIKI_INGEST_TIMEOUT=5000
+
+  run_script
+  [ "$(cat "$MOCK_HOME/.inner_limit")" = "5000" ]   # 環境はそのまま ingest に渡る
+  [ "$(pass3_outer_limit)" -gt 5000 ]
+  get_log | grep -qF "Pass 3 outer timeout: $(pass3_outer_limit)s (ingest's claude 5000s + "
+}
+
+@test "E2E pass3: WIKI_INGEST_TIMEOUT with a unit suffix is read as a duration" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  install_timeout_spy
+  install_ingest_stub
+  export WIKI_INGEST_TIMEOUT=90m   # coreutils timeout の DURATION = 5400 秒
+
+  run_script
+  [ "$(pass3_outer_limit)" -gt 5400 ]
+  get_log | grep -qF "(ingest's claude 5400s + "
+}
+
+@test "E2E pass3: an unreadable WIKI_INGEST_TIMEOUT warns and falls back to the vault default" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  install_timeout_spy
+  install_ingest_stub
+  export WIKI_INGEST_TIMEOUT=soon
+
+  run_script
+  [ "$(pass3_outer_limit)" -gt 2700 ]
+  get_log | grep -qF "WARN: WIKI_INGEST_TIMEOUT=soon"
+  get_log | grep -qF "(ingest's claude 2700s + "
+}
+
 # === Test: No legacy gtimeout dependency ===
 
 @test "E2E: script does not use gtimeout or legacy timeout patterns" {

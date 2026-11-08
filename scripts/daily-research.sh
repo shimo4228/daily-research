@@ -103,6 +103,22 @@ list_add() {
   if [ -z "$1" ]; then printf '%s' "$2"; else printf '%s, %s' "$1" "$2"; fi
 }
 
+# coreutils timeout の DURATION (整数 + 任意の接尾辞 s / m / h / d) を秒にして出力する。小数・0 (timeout では
+# 上限なし)・その他の形は読めないとして 1 を返す (呼ぶ側が既定に戻す)
+duration_seconds() {
+  local v="$1" n mult=1
+  case "$v" in
+    *s) n=${v%s} ;;
+    *m) n=${v%m}; mult=60 ;;
+    *h) n=${v%h}; mult=3600 ;;
+    *d) n=${v%d}; mult=86400 ;;
+    *) n=$v ;;
+  esac
+  case "$n" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$((10#$n))" -gt 0 ] || return 1
+  echo "$((10#$n * mult))"
+}
+
 # === 依存コマンドチェック ===
 if ! command -v timeout &> /dev/null; then
   log "ERROR: 'timeout' command not found. Install coreutils: brew install coreutils"
@@ -972,10 +988,25 @@ else
     PASS3_EXIT=0
     # run の DATE を渡す — 引数なしだと ingest 側が「今日」を探し、日付をまたいだ run (試走 2026-09-14 23:51→00:01) の
     # レポートを skip する (producer = この script の DATE、sink = vault の daily_wiki_ingest.sh の DATE="${1:-…}")
-    # 外側の上限: ingest の中身は Obsidian の終了待ち (最大 30s) + claude (vault 側の INGEST_TIMEOUT 既定
-    # 2700s、-k なし) + index / lint + Slack 通知 (curl -m 15)。SIGTERM を無視する claude で ingest が
-    # 戻らないと lock を握ったまま run が終わらないので、2700s に 15 分の余裕を足した 3600s と -k 60 で切る
-    timeout -k 60 3600 bash "$VAULT_INGEST" "$DATE" >> "$LOG_FILE" 2>&1 || PASS3_EXIT=$?
+    # 外側の上限は ingest 自身の上限から導く。ingest は内側の claude を `timeout "$INGEST_TIMEOUT"` (-k なし) で
+    # 回し (vault の scripts/daily_wiki_ingest.sh:193)、INGEST_TIMEOUT は環境の WIKI_INGEST_TIMEOUT、無ければ 2700 秒
+    # (同 :42 `INGEST_TIMEOUT="${WIKI_INGEST_TIMEOUT:-2700}"`)。この script の環境はそのまま ingest に渡るので同じ式で
+    # 内側の上限を求め、claude の外の段 (Obsidian の終了待ち 最大 30 秒 = 同 :120、wiki_index / wiki_lint = 同 :256-258、
+    # Slack 通知の curl -m 15 = vault の scripts/notify.sh:27 を数回) の分の 15 分を足す。固定の 3600 では
+    # WIKI_INGEST_TIMEOUT >= 3570 の日に進行中の ingest を外側が先に切った。SIGTERM を無視する claude で ingest が
+    # 戻らないと lock を握ったまま run が終わらないので -k 60 で切る。vault 側の既定が変わったら PASS3_INNER_DEFAULT も直す
+    PASS3_INNER_DEFAULT=2700
+    PASS3_MARGIN=900
+    PASS3_INNER=$PASS3_INNER_DEFAULT
+    if [ -n "${WIKI_INGEST_TIMEOUT:-}" ]; then
+      if ! PASS3_INNER=$(duration_seconds "$WIKI_INGEST_TIMEOUT"); then
+        log "WARN: WIKI_INGEST_TIMEOUT=$WIKI_INGEST_TIMEOUT is not whole seconds with an optional s/m/h/d suffix — Pass 3's outer limit uses the vault default ${PASS3_INNER_DEFAULT}s"
+        PASS3_INNER=$PASS3_INNER_DEFAULT
+      fi
+    fi
+    PASS3_LIMIT=$((PASS3_INNER + PASS3_MARGIN))
+    log "Pass 3 outer timeout: ${PASS3_LIMIT}s (ingest's claude ${PASS3_INNER}s + ${PASS3_MARGIN}s)"
+    timeout -k 60 "$PASS3_LIMIT" bash "$VAULT_INGEST" "$DATE" >> "$LOG_FILE" 2>&1 || PASS3_EXIT=$?
     if [ "$PASS3_EXIT" != "0" ]; then
       log "WARN: wiki ingest failed (non-fatal, exit $PASS3_EXIT)"
     fi

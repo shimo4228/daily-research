@@ -91,7 +91,8 @@ daily-research.sh (05:00)
 │    後: verify-diff が両者を比べて VERIFY_DIFF をログに出す]
 ├── ctl-016 決定論的レポート lint（固定節 = 機会メモ / ソース、report-template.md に同期。
 │   kind: brief は機会メモと文字数の soft を免除）
-├── Pass 3: Obsidian wiki ingest（vault 側スクリプト、non-fatal。ingest 自身の上限より長い外側の timeout の下）
+├── Pass 3: Obsidian wiki ingest（vault 側スクリプト、non-fatal。外側の timeout = ingest 自身の claude の上限
+│   （`WIKI_INGEST_TIMEOUT`、無ければ vault 側の既定）+ 余裕の下。`Pass 3 outer timeout: …` として log に出る）
 └── metrics.jsonl 追記 (clarity_pass / line_states / verification / event_age_days 含む) + /dr-review 経過日数チェック
 ```
 

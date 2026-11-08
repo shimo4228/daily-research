@@ -83,6 +83,7 @@ daily-research/
 | `HOME` | plist | Required for Claude CLI to find auth tokens |
 | `ANTHROPIC_API_KEY` | `[billing].env_file` only | `lib/env.sh` drops any inherited value; in `api` mode `lib/billing.sh` reads it from `env_file` and exports it, in `subscription` mode it stays unset (OAuth) |
 | `CLAUDE_TIMEOUT` | Script (internal) | Timeout in seconds for `claude -p` calls via `run_claude()`. 0 = no timeout (default); the research run (call 1) sets 1500s (25 min), the verification + clarity run (call 2) sets 1200s (20 min) |
+| `WIKI_INGEST_TIMEOUT` | User-set (plist / environment) | Read by the vault's `scripts/daily_wiki_ingest.sh` as the limit of its own `claude` call (the vault default when unset). `daily-research.sh` passes it through and sets Pass 3's outer `timeout` to that limit plus a margin, so the outer one never cuts first; a value other than whole seconds with an optional `s` / `m` / `h` / `d` suffix logs a WARN and the outer limit falls back to the vault default |
 | `DEBUG` | User-set | Set to `1` to enable debug logging (PATH, CLAUDE_CMD) |
 | `DR_DATE` | User-set (test seam) | `YYYY-MM-DD` — fixes the date used for rotation-pick and report names (e2e tests pin the rotation with it). Default: today |
 | `DR_ONLY_TRACK` | User-set (test seam) | Run only this line among today's picked lines; errors if the line is not on today's rotation |

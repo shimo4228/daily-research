@@ -91,7 +91,8 @@ daily-research.sh (05:00)
 │    after: verify-diff compares the two and logs VERIFY_DIFF]
 ├── ctl-016 deterministic report lint (fixed sections 機会メモ / ソース, synced to
 │   report-template.md; kind: brief is exempt from the 機会メモ and length soft checks)
-├── Pass 3: Obsidian wiki ingest (vault-side script, non-fatal, under an outer timeout longer than the ingest's own)
+├── Pass 3: Obsidian wiki ingest (vault-side script, non-fatal, under an outer timeout = the ingest's own claude
+│   limit (`WIKI_INGEST_TIMEOUT`, else the vault default) plus a margin; logged as `Pass 3 outer timeout: …`)
 └── metrics.jsonl append (incl. clarity_pass / line_states / verification / event_age_days) + /dr-review age check
 ```
 
