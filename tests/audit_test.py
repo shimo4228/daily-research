@@ -910,6 +910,109 @@ def test_apply_requires_stage2_to_accept_the_fix(
         assert note.read_text() == NOTE and reason in warns[0]
 
 
+def fix_cand(a, b, parts):
+    return {
+        "note_sentence": a,
+        "replacement": b,
+        "confirm": {"replacement_verdict": "consistent", "parts": parts},
+    }
+
+
+def part(wrong, fixed):
+    return {"wrong": wrong, "fixed": fixed, "source_quote": "sq", "correct_value": "v"}
+
+
+AB = "Alice が述べ、Bob が補足した。"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("a", "b", "parts", "reason"),
+    [
+        # 入れ替えの訂正: fixed が A にもある (第 2 段が両方の誤りを挙げた)
+        (AB, "Bob が述べ、Alice が補足した。", [part("Alice", "Bob"), part("Bob", "Alice")], None),
+        # 入れ替えで、第 2 段は片方だけを誤りとした: 2 つ目の書き換えは wrong の外
+        (AB, "Bob が述べ、Alice が補足した。", [part("Alice", "Bob")], "span_mismatch"),
+        (AB, "Bob が述べ、Bob が補足した。", [part("Alice", "Bob")], None),
+        # 同じ値が A の別の箇所にある
+        (
+            "2023 年に始まり 2024 年に終わった。",
+            "2024 年に始まり 2024 年に終わった。",
+            [part("2023", "2024")],
+            None,
+        ),
+        # wrong の外の書き換え (誤りの訂正と一緒に主語も変えた)
+        (
+            "Alice が 2023 年に発表した。",
+            "Bob が 2024 年に発表した。",
+            [part("2023", "2024")],
+            "span_mismatch",
+        ),
+        ("参加者は 120 人だった。", "参加者は 210 人だった。", [part("120 人", "210 人")], None),
+        # 書き足して直す (限定)
+        ("売上は 3 億円だった。", "売上は 約 3 億円だった。", [part("3 億円", "約 3 億円")], None),
+        # span の前後の半角空白 1 つの増減は差し替えに含める (は 3 → は約 3、は一度も → は 2 件)
+        ("売上は 3 億円だった。", "売上は約 3 億円だった。", [part("3 億円", "約 3 億円")], None),
+        (
+            "「ideas」という語は一度も出てこない。",
+            "「ideas」という語は 2 件のコメントにしか出てこない。",
+            [part("一度も出てこない", "2 件のコメントにしか出てこない")],
+            None,
+        ),
+        ("売上は 3 億円だった。", "売上は 約 3 億円 だった。", [part("3 億円", "約 3 億円")], None),
+        # 空白 2 つの増加・span から離れた空白の増減は外
+        (
+            "売上は 3 億円だった。",
+            "売上は   約 3 億円だった。",
+            [part("3 億円", "約 3 億円")],
+            "span_mismatch",
+        ),
+        (
+            "売上は 3 億円だった。",
+            "売上 は 約 3 億円だった。",
+            [part("3 億円", "約 3 億円")],
+            "span_mismatch",
+        ),
+        # 消して直す: wrong が A に 2 回あり、1 回だけ消す
+        ("推定の値と推定の幅を示した。", "推定の値と幅を示した。", [part("推定の", "")], None),
+        (
+            "推定の値と推定の幅を示した。",
+            "推定の値と予測の幅を示した。",
+            [part("推定の", "")],
+            "span_mismatch",
+        ),
+        # wrong と fixed が同じ part は直していない
+        (
+            AB,
+            "Bob が述べ、Bob が補足した。",
+            [part("Alice", "Bob"), part("Bob", "Bob")],
+            "span_mismatch",
+        ),
+        # 同じ part が 2 回並んでも 1 つに数える
+        (AB, "Bob が述べ、Bob が補足した。", [part("Alice", "Bob"), part("Alice", "Bob")], None),
+        # タブを含む A: 第 2 段は制御文字を空白に替えた文を見て wrong を写す
+        (
+            "報告書は\t2026-10-01 に 3 か国で公開された。",
+            "報告書は\t2026-10-01 に 4 か国で公開された。",
+            [part("報告書は 2026-10-01 に 3 か国", "報告書は 2026-10-01 に 4 か国")],
+            None,
+        ),
+        ("x" * 3 + "\x0b" + "3 か国", "x" * 3 + "\x0b" + "4 か国", [part("x 3", "x 4")], None),
+    ],
+)
+def test_fix_must_stay_inside_the_wrong_spans(a, b, parts, reason):
+    assert dr_pipeline._audit_fix_reject(fix_cand(a, b, parts)) == reason
+
+
+@pytest.mark.unit
+def test_fix_spans_gives_up_at_the_state_cap(monkeypatch):
+    monkeypatch.setattr(dr_pipeline, "AUDIT_FIX_STATES_MAX", 3)
+    a = "推定の値と推定の幅を示した。"
+    assert dr_pipeline._audit_fix_reject(
+        fix_cand(a, "推定の値と幅を示した。", [part("推定の", "")])
+    ) == ("span_mismatch")
+
+
 @pytest.mark.unit
 def test_apply_checks_the_replacement_rules_before_the_fix(monkeypatch, capsys, tmp_path):
     path = confirmed_state(

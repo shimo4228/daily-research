@@ -3356,31 +3356,75 @@ def _audit_summary(state: dict[str, object] | None, reason: str | None = None) -
     return out
 
 
+AUDIT_FIX_STATES_MAX = 200_000  # _audit_fix_spans が辿る状態の上限 (超えたら span_mismatch)
+
+
+def _audit_fix_spans(a: str, b: str, parts: list[tuple[str, str]]) -> bool:
+    """B が、A の中の wrong の出現 (重ならない 1 つ以上) を対の fixed に差し替え、それ以外の字を A のまま残した文か。
+    すべての part を 1 回以上使うこと (第 2 段が挙げた誤りを B が全部直していること) も要件にする。
+    (A の位置, B の位置, 使った part の集合) を左から辿る — 字を写すか、そこで始まる wrong を fixed に替えるか。
+    wrong・fixed の前後の半角空白 1 つずつの増減は差し替えに含める (第 2 段は和文と数字の間の空白を span の外に
+    置いて写す: 語は一度も → 語は 2 件の、wrong「一度も…」fixed「2 件の…」)。difflib の差分は入れ替え
+    (Alice が…、Bob が… → Bob が…、Alice が…) を wrong の外にはみ出す挿入と削除に並べるので使わない。"""
+    pad = ("", " ")
+    subs = {
+        (lw + w + rw, lf + f + rf, k)
+        for k, (w, f) in enumerate(parts)
+        for lw in pad
+        for rw in pad
+        for lf in pad
+        for rf in pad
+    }
+    full = (1 << len(parts)) - 1
+    stack, seen = [(0, 0, 0)], {(0, 0, 0)}
+    while stack:
+        i, j, used = stack.pop()
+        if (i, j, used) == (len(a), len(b), full):
+            return True
+        nxt = []
+        if i < len(a) and j < len(b) and a[i] == b[j]:
+            nxt.append((i + 1, j + 1, used))
+        for wrong, fixed, k in subs:
+            if a.startswith(wrong, i) and b.startswith(fixed, j):
+                nxt.append((i + len(wrong), j + len(fixed), used | (1 << k)))
+        for st in nxt:
+            if st not in seen:
+                if len(seen) >= AUDIT_FIX_STATES_MAX:
+                    return False
+                seen.add(st)
+                stack.append(st)
+    return False
+
+
 def _audit_fix_reject(c: dict[str, object]) -> str | None:
     """第 2 段が置き換え文 B を A の訂正と認めたか (適用の要件)。違反した規則の名前か None。
     fix_unconfirmed = replacement_verdict が consistent でない (B が原典と両立しない・A の誤りを直していない) /
-    span_mismatch = parts が無い、またはどれかの part で wrong が A に無い、fixed があるのに B に無いか A にもある、
-    fixed が空 (消して直した) なのに wrong が B に残る。1 文に主張が 2 つあり、B が正しい方を書き換えた候補を
-    ここで止める — 第 2 段が独立に見つけた A の誤り (wrong) を、B が直した形 (fixed) で持っていなければ当てない。"""
+    span_mismatch = parts が無い、どれかの part で wrong が空か A に無い・fixed が文字列でないか wrong と同じ、
+    または B が「A の wrong の出現を fixed に差し替え、ほかを A のまま残した文」でない (_audit_fix_spans)。
+    1 文に主張が 2 つあり、B が正しい方を書き換えた候補と、wrong の外も書き換えた候補をここで止める — 第 2 段が
+    独立に見つけた A の誤り (wrong) の範囲の中だけを、B が直した形 (fixed) にしたときだけ当てる。fixed が A に
+    もある訂正 (入れ替え・別の箇所に同じ値がある) は通る。A・B・wrong・fixed は制御文字を空白に替えてから
+    突き合わせる (第 2 段の prompt は A と B をその形で見せる)。"""
     conf = c.get("confirm")
     conf = conf if isinstance(conf, dict) else {}
     if conf.get("replacement_verdict") != "consistent":
         return "fix_unconfirmed"
-    a, b = str(c.get("note_sentence")), str(c.get("replacement"))
+    a = _CTRL_RE.sub(" ", str(c.get("note_sentence")))
+    b = _CTRL_RE.sub(" ", str(c.get("replacement")))
     parts = conf.get("parts")
     if not isinstance(parts, list) or not parts:
         return "span_mismatch"
+    pairs: list[tuple[str, str]] = []
     for p in parts:
         wrong, fixed = (p.get("wrong"), p.get("fixed")) if isinstance(p, dict) else (None, None)
-        if not isinstance(wrong, str) or not wrong.strip() or wrong not in a:
+        if not isinstance(wrong, str) or not isinstance(fixed, str):
             return "span_mismatch"
-        if not isinstance(fixed, str):
+        wrong, fixed = _CTRL_RE.sub(" ", wrong), _CTRL_RE.sub(" ", fixed)
+        if not wrong.strip() or wrong not in a or wrong == fixed:
             return "span_mismatch"
-        if fixed.strip() and (fixed not in b or fixed in a):
-            return "span_mismatch"
-        if not fixed.strip() and wrong in b:
-            return "span_mismatch"
-    return None
+        if (wrong, fixed) not in pairs:
+            pairs.append((wrong, fixed))
+    return None if _audit_fix_spans(a, b, pairs) else "span_mismatch"
 
 
 def _audit_apply_all(state: dict[str, object], text: str) -> tuple[str, list[str]]:

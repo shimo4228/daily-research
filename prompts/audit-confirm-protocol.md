@@ -58,8 +58,9 @@ A・B・原典の URL（ノートに書かれた URL）・原典の中の位置�
 - `wrong` は A から、`fixed` は B から一字一句そのまま写す（全角 / 半角・空白・markdown も原文どおり）。数字 1 字でなく
   「3 か国」のように単位や前後の語まで含め、A・B の中でその部分だと分かる長さにする。B が誤りの部分を消して直した
   ときは `fixed` を `""` にする。
-- 置き換えが当たるのは、`replacement_verdict` が `consistent` で、どの part でも `wrong` が A にあり、`fixed` が B に
-  あって A に無い（`fixed` が `""` なら `wrong` が B に無い）ときだけである。
+- 置き換えが当たるのは、`replacement_verdict` が `consistent` で、B が「A の各 part の `wrong` を `fixed` に替え、
+  ほかの字を A のまま残した文」のときだけである（`fixed` が A の別の箇所にあってもよい。入れ替えなら両方の位置を
+  part に挙げる）。
 
 ## 守ること
 
