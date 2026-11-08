@@ -286,6 +286,9 @@ run は失敗扱いになるので、state 更新より先に置く。quiet / ho
 - Sources cited (resolved): {URL 数}
 ```
 
+最終メッセージはこの定型の行だけにし、各行の値は 1 行に収める。分かったことの要約・限界・所感の置き場は
+記事と根拠ファイル（この報告は log に残るだけで、内容の正本は記事・根拠ファイル・receipt）。
+
 ## 規則の出所（LLM 読者向け。書き換えるときはここも直す）
 
 - このプロトコルは `prompts/repo-research-protocol.md`（接地 repo を持つ line の呼1）の姉妹版で、

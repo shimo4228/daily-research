@@ -469,6 +469,8 @@ ECO_TEMPLATE="$PROJECT_DIR/templates/report-template-ecosystem.md"
     grep -q '項目を足すのは、hold の run の保留の問いと、記事の機会メモに載せた日付付き締切の機会だけ' "$P"
     grep -q '一文一命題' "$P"
     grep -q '## Line Research Complete' "$P"
+    # 完了報告は定型の行だけ (要約・所感は記事と根拠ファイルが持つ、H15)
+    grep -q '最終メッセージはこの定型の行だけ' "$P"
     grep -q 'Bash は許可されていない' "$P"
   done
 }
