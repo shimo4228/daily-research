@@ -20,19 +20,20 @@ macOS の `launchd` で無人で動きます。API を呼ぶためのコード�
 flowchart TD
     cron["launchd — 毎朝 05:00"] --> orch["daily-research.sh"]
     orch --> pick["rotation-pick — 連続する lines_per_day 本<br/>(選ぶ範囲は日付とともに進む、決定論)"]
-    pick --> loop["呼1 (1 回目の呼び出し) · claude -p · cwd = ラインの repo · Opus<br/>25 分タイムアウト · リトライ 1 回"]
+    pick --> loop["呼1 (1 回目の呼び出し) · claude -p · Opus · 25 分タイムアウト · リトライ 1 回<br/>cwd = ラインの repo (ecosystem ラインは state/&lt;line&gt;/)"]
     loop --> ctx["入力 (短く): config のラインの設定 + state/&lt;line&gt;/brief.md<br/>+ 過去の問い履歴 · pending.md<br/>repo の詳細 (context_files) は問いを選んだ後に読む"]
-    ctx --> run["state/&lt;line&gt;/ の watched sources を diff-first で確認 + 広い探索<br/>問いの候補を並べて 1 つ選ぶ (または 更新なし / 保留)<br/>citation ゲート付きリサーチ · 根拠ファイル"]
-    run --> out[("state/&lt;line&gt;/runs/ (根拠ファイル · 実行記録) + past_topics.json<br/>+ Obsidian Vault: 解説ノート または 短報 (更新なし / 保留では書かない)")]
-    out -->|ノートを書いたときだけ| clarity["呼2 (2 回目の呼び出し) · 新しいセッションでの読みやすさの修正 + 原典照合 · Sonnet<br/>verify.json を記録"]
+    ctx --> run["広い探索 (ecosystem ラインは先に監視リストを確認)<br/>問いの候補を並べて 1 つ選ぶ (または 更新なし / 保留)<br/>citation ゲート付きリサーチ · 根拠ファイル"]
+    run --> out[("state/&lt;line&gt;/runs/ (根拠ファイル · 実行記録)<br/>+ Obsidian Vault: 解説ノート または 短報 (更新なし / 保留では書かない)")]
+    out --> gate["レポートのゲートが実行記録を読む<br/>通れば、スクリプトが問いを past_topics.json に追記"]
+    gate -->|ノートを書いたときだけ| clarity["呼2 (2 回目の呼び出し) · 新しいセッションでの読みやすさの修正 + 原典照合 · Sonnet<br/>verify.json を記録"]
 ```
 
-図の流れを文で言うと次のとおりです。05:00 に launchd が `scripts/daily-research.sh` を起動し、その日のラインを選びます。輪番から連続する `[general] lines_per_day` 本の repo ラインと、`daily = true` の全ラインです。各ラインは次の順に進みます。
+図の流れを文で言うと次のとおりです。05:00 に launchd が `scripts/daily-research.sh` を起動し、その日のラインを選びます。輪番から連続する `[general] lines_per_day` 本のラインと、輪番の外で毎朝走る `daily = true` の全ラインです。ラインは通常、冒頭で述べた repo ラインです。ecosystem ラインは repo を持たず、代わりに外部のエコシステム（新しい道具、リリース、実践）を見張ります。2 つが違うところは下の各手順に書いてあり、どちらの設定も「[ラインの設定](#ラインの設定)」で行います。各ラインは次の順に進みます。
 
-1. **呼1**（Opus、ラインの repo が作業ディレクトリ）は短い入力から始めます。入力は `config.toml` のラインの設定（名前、focus、sources）、全ラインが共有する `[general]` の設定 `self_signals`（あなた自身の成果物を示す文字列）、`state/<line>/brief.md`（ラインの主題、読者が知っている前提、repo の参照箇所。あなたが書き、実行は読むだけ）と `pending.md`（保留の問い）、直近 14 日の repo の commit 件名、`past_topics.json` から取ったラインの最近の問いです。`past_topics.json` は毎回の実行の後にスクリプトが追記する過去の問いの履歴で、すでに答えた問いをもう一度立てないために読みます。ただし、同じ問いでも新しい証拠があれば、更新として取り上げ直せます。`context_files` に挙げたファイルは、問いを選んだ後にだけ読みます。
-2. 呼1 はまず、ラインの監視ソースのうち前回の実行から変わったところだけを確かめます。これを diff-first パスと呼びます。次に問いの候補を並べて 1 つ選ぶか、ノートを書かずに止めます。止め方は、新しいことがない「更新なし」と、問いは立つが 1 回の実行では確かめられない「保留」（問いは再開の条件とともに `pending.md` に預けられます）で、どちらも正常な結果です。どちらの場合も、実行がどう終わったかを実行記録（run receipt）に書きます。
+1. **呼1**（Opus。作業ディレクトリはラインの repo で、ecosystem ラインでは `state/<line>/`）は短い入力から始めます。入力は `config.toml` のラインの設定（名前、focus、sources）、全ラインが共有する `[general]` の設定 `self_signals`（あなた自身の成果物を示す文字列）、`state/<line>/brief.md`（ラインの主題、読者が知っている前提、repo の参照箇所。あなたが書き、実行は読むだけ）と `pending.md`（保留の問いと、締切の日付がある機会）、直近 14 日の repo の commit 件名（repo ラインだけ）、`past_topics.json` から取ったラインの最近の問いです（ecosystem ラインは、同じ出来事を同じ日に重ねて取り上げないよう、ほかのラインの最近の題も見ます）。`past_topics.json` は過去の問いの履歴で、書くのはモデルではなくスクリプトです。ラインがレポートのゲートを通ると、スクリプトが実行記録から問いを追記します。この履歴は、すでに答えた問いをもう一度立てないために読みます。ただし、同じ問いでも新しい証拠があれば、更新として取り上げ直せます。`context_files` に挙げたファイルは、問いを選んだ後にだけ読みます。
+2. 呼1 は短く広い Web 検索を数本行います。repo ラインでは、うち 1 本を repo の最近の commit の主題に関わる外部の動きに当てます。ecosystem ラインはその前に、ラインが自分で更新する監視リスト（`state/<line>/watched-sources.md`）の一部について、前回報告したあとに何が変わったかを確かめます。そのうえで呼1 は問いの候補を並べて 1 つ選ぶか、ノートを書かずに止めます。止め方は、新しいことがない「更新なし」と、問いは立つが 1 回の実行では確かめられない「保留」（問いは再開の条件とともに `pending.md` に預けられます）で、どちらも正常な結果です。どちらの場合も、実行がどう終わったかを実行記録（run receipt）に書きます。
 3. 問いを選んだときは、調べてノートを書き、ノートが拠って立つ 3〜6 件の主張を並べた根拠ファイルも書きます。引用するのは実行中に WebFetch で取得できたページだけです（これを citation ゲートと呼びます。取得できなかった出典は落とすか「未解決」と書きます）。あなた自身の成果物（`self_signals`）は外部の動向として数えません。
-4. **呼2**（既定 Sonnet、研究の文脈を持たない新しいセッション）は、呼1 がノートを書いたときだけ走ります。初見の読者がつまずく箇所を直したあと、根拠ファイルの主張ごとに原典を取り直して突き合わせ、食い違う箇所を直し、各主張が原典とどう合ったかの件数を `verify.json` に記録します。呼2 が失敗しても、ノートは未検証のまま残ります。
+4. **呼2**（既定 Sonnet、研究の文脈を持たない新しいセッション）は、呼1 がノートを書いたときだけ走ります。ノートを初見の読者として読み通してつまずく箇所を直し、スクリプトが拾った説明の無い略語と長すぎる文の一覧も見ます。そのあと、根拠ファイルの主張ごとに原典を取り直して突き合わせ、食い違う箇所を直し、各主張が原典とどう合ったかの件数を `verify.json` に記録します。呼2 が失敗しても、ノートは未検証のまま残ります。
 
 つまり、更新なし・保留で終わるラインは `claude -p` を 1 回、ノートを書くラインは 2 回呼び、呼1 が失敗してリトライしたときはそれに 1 回加わります。
 
@@ -83,24 +84,23 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 
 ## ラインの設定
 
-各 `[tracks.X]` エントリは研究 **ライン (line)** で（設定と `DR_*_TRACK` 変数ではまだ *track* と呼びます）、`[[tracks.X.repos]]` エントリ 1 つで研究リポジトリ 1 つにマッピングされます。関心領域は、実行時に repo の中から読まれる repo 自身の運用文脈です。`daily = true` のラインは輪番の外で毎朝走ります（[ADR-0011](docs/decision-history/0011-daily-line.md)。ADR は `docs/decision-history/` にある設計判断の記録で、日本語です）。`mode = "ecosystem"` のラインは repo を持たずに外部のエコシステムを見張り、`state/<line>/` から `--safe-mode` で走ります（[ADR-0018](docs/decision-history/0018-ecosystem-mode-and-daily-jev-line.md)）。各項目の説明は [config.example.toml](config.example.toml) のコメントにあり、両方の mode のライン例が 1 つずつ入っています。
+各 `[tracks.X]` エントリは研究 **ライン (line)** で（設定と `DR_*_TRACK` 変数ではまだ *track* と呼びます）、`[[tracks.X.repos]]` エントリ 1 つで研究リポジトリ 1 つにマッピングされます。関心領域は、実行時に repo の中から読まれる repo 自身の運用文脈です。`daily = true` のラインは輪番の外で毎朝走ります（[ADR-0011](docs/decision-history/0011-daily-line.md)。ADR は `docs/decision-history/` にある設計判断の記録で、日本語です）。`mode = "ecosystem"` のラインは repo を持たずに外部のエコシステムを見張り、`state/<line>/` から走ります（[ADR-0018](docs/decision-history/0018-ecosystem-mode-and-daily-jev-line.md)）。各項目の説明は [config.example.toml](config.example.toml) のコメントにあり、両方の mode のライン例が 1 つずつ入っています。
 
 レポートはデフォルトで日本語生成です。出力言語は `prompts/repo-research-protocol.md`（および `prompts/ecosystem-research-protocol.md`）の言語制約を変更します。
 
 ## 中核概念
 
-- **4 つの内容状態** — どの実行も `article`（解説ノート。本文 3,000 字以内で、材料が薄ければ短く）、`brief`（短報。300〜600 字）、`quiet`、`hold` のいずれかで終わり、実行記録に記録されます。レポート存在ゲートはこの実行記録を読みます: 実行記録が無い・壊れているラインは失敗、`article` / `brief` はノートのファイルを要求、`quiet` / `hold` はファイル無しで成功（全ライン quiet の日も成功）。取得失敗が疑われる quiet / hold は metrics で別に数えます。
-- **ノートの形** — 既定のテンプレートでは**固定見出しを置かない**自由形式の散文で、前提知識ゼロの読者向けに書かれます。冒頭は外部の出来事から始め、すべての主張に日付を付け、出典の主張・推論・含意を分けて書きます。末尾に機械検査対象の固定 2 節: 「機会メモ」（日付付き締切を持つ機会のみ: 何を / どこで / 失効日 / 判定の出典 / 更新条件）と「ソース」。提案・承認要求は書きません。
-- **repo は read-only** — マッピングされた repo は編集しない決まりで、三層で守ります: 方針（プロトコルの文言）+ 実行（書き込み先は vault のレポートの置き場と、ラインの `pending.md`・`runs/` のみ）+ 権限の層（各呼び出しは `--permission-mode default` で走るので、設定の既定が auto mode でも `--allowedTools` のパスの外への編集は拒否される。`--disallowedTools` の拒否の層は Bash と、Claude Code の設定・資格情報のフォルダの読み取りを止める）。両方の呼び出しは `--safe-mode` で走り、あなた自身の CLAUDE.md・skill・plugin・hook は読み込まれません（[ADR-0019](docs/decision-history/0019-wide-line-safe-mode-static-state.md)）。
+- **4 つの内容状態** — どの実行も `article`（解説ノート。本文 3,000 字以内で、材料が薄ければ短く）、`brief`（短報。300〜600 字）、`quiet`、`hold` のいずれかで終わり、実行記録に記録されます。レポートのゲートはこの実行記録を読みます: 実行記録が無い・壊れているラインは失敗、`article` / `brief` はノートのファイルを要求、`quiet` / `hold` はファイル無しで成功（全ライン quiet の日も成功）。取得失敗が疑われる quiet / hold は metrics で別に数えます。
+- **ノートの形** — 既定のテンプレートでは**固定見出しを置かない**自由形式の散文で（内容に合わせた見出しは本文に 2 個まで）、前提知識ゼロの読者向けに書かれます。冒頭は外部の出来事から始め、すべての主張に日付を付け、出典の主張・推論・含意を分けて書きます。末尾に機械検査対象の固定 2 節: 「機会メモ」（日付付き締切を持つ機会のみ: 何を / どこで / 失効日 / 判定の出典 / 更新条件）と「ソース」。提案・承認要求は書きません。
+- **repo は read-only** — マッピングされた repo は編集しない決まりで、三層で守ります: 方針（プロトコルの文言）+ 実行（書き込み先は vault のレポートの置き場と、ラインの `pending.md`・`runs/` のみ。ecosystem ラインは監視リストと、表から外した行の置き場も書く）+ 権限の層（各呼び出しは `--permission-mode default` で走るので、設定の既定が auto mode でも `--allowedTools` のパスの外への編集は拒否される。`--disallowedTools` の拒否の層は Bash と、Claude Code の設定・資格情報のフォルダの読み取りを止める）。両方の呼び出しは `--safe-mode` で走り、あなた自身の CLAUDE.md・skill・plugin・hook は読み込まれません（[ADR-0019](docs/decision-history/0019-wide-line-safe-mode-static-state.md)）。
 
 設計判断とその理由は [ADR](docs/decision-history/README.md) にあります。フラグ・書き込み先・拒否の規則の正確な値は `scripts/daily-research.sh` にあります。
 
 ## 注意事項
 
-- **Claude Code セッション内からも実行できます**: `lib/env.sh` が `CLAUDECODE` を unset するため、ネストセッションチェックを通ります。ほかのテスト用の環境変数は [CONTRIB](docs/CONTRIB.ja.md) にあります。
+- **Claude Code セッション内からも実行できます**: `scripts/lib/env.sh` が `CLAUDECODE` を unset するため、ネストセッションチェックを通ります。ほかのテスト用の環境変数は [CONTRIB](docs/CONTRIB.ja.md) にあります。
 - **API モードは再試行せずに止まる**: 429、クレジット残高の不足、key の拒否のどれかが出ると、残りのラインを止めて通知します。呼び出しごとの費用は `state/api-spend.jsonl` に追記され、1 日と 1 か月の上限はこれを読みます。
 - **OAuth トークンは約4日で期限切れ**（subscription モード。著者の観測、2026-06-21 記録）: `claude` を対話的に実行してリフレッシュします。実際に呼び出す認証プローブ（`claude --version` ではなく 1 ターンの Haiku 呼び出し。`--version` は期限切れのトークンでも成功します）は、どのラインも走らせる前に実行を止め、再認証の通知を出します。
-- **Claude Code プラグインがハングを引き起こす**: グローバルインストールされたプラグインは `claude -p` 呼び出しごとに MCP サーバーを起動します（2026-06-21 観測）。`.claude/settings.json` でプロジェクト単位で無効化してください（[RUNBOOK](docs/RUNBOOK.ja.md)）。
 - **launchd は `.zshrc` を読み込まない**: 全 PATH エントリをスクリプトと plist に明示してください。
 
 ## ドキュメント
@@ -131,7 +131,7 @@ daily-research は、運用者自身の研究リポジトリの中で毎朝 Clau
 
 これがあるのは、repo が次に何を必要としているかを知る文脈が repo の中にあるからです。固定トピックで回すリサーチは飽和し、その後の中央 concept-graph パイプラインも repo 自身の枠組みを裏付けるだけのサーベイに流れました（[ADR-0001](docs/decision-history/0001-research-repo-feedback-engine.md)、[ADR-0008](docs/decision-history/0008-per-repo-in-context-research.md)）。
 
-ライセンスは MIT です。構成は Bash のオーケストレーションとプロンプトファイル、それに stdlib のみの Python モジュール 1 つです（`scripts/lib/dr_pipeline.py`、`tomllib` を使うため Python 3.11 以上、ランタイムに pip 依存なし）。テストは bats と pytest です。必要なのは macOS と launchd（Linux では cron か systemd に置き換えます）と Claude Code CLI で、課金は Claude Max プランのログインか Claude API の key です（`[billing] mode`）。外に出るデータとして、Claude Code が読んだものが Anthropic に送られ、実行中は Web を検索・取得します。モデルが書き込めるのは vault のレポートの置き場と `state/` の数ファイルだけです。状態は稼働中で、このリポジトリで手で保守し、著者が毎朝動かしています。repo ラインの輪番に加えて、AI の道具と実践を広く見る daily の ecosystem ラインが 1 本走ります。
+ライセンスは MIT です。構成は Bash のオーケストレーションとプロンプトファイル、それに stdlib のみの Python モジュール 1 つです（`scripts/lib/dr_pipeline.py`、`tomllib` を使うため Python 3.11 以上、ランタイムに pip 依存なし）。テストは bats と pytest です。必要なのは macOS と launchd（Linux では cron か systemd に置き換えます）と Claude Code CLI で、課金は Claude Max プランのログインか Claude API の key です（`[billing] mode`）。外に出るデータとして、Claude Code が読んだものが Anthropic に送られ、実行中は Web を検索・取得します。モデルが書き込めるのは vault のレポートの置き場と `state/` の数ファイルだけです。状態は稼働中で、このリポジトリで手で保守し、著者が毎朝動かしています。repo ラインの輪番に加えて、AI の道具と実践を広く見る ecosystem ラインが毎朝走ります。
 
 例: 設定例から `config.toml` を作って書き換えたあと、`DR_FORCE_TRACK=example_line ./scripts/daily-research.sh` でそのラインを今日 1 本だけ走らせます。ラインは `article`・`brief`（300〜600 字の短報）・`quiet`・`hold` のいずれかで終わり、`state/example_line/runs/{date}.json` に記録されます。article と brief は `{vault_path}/{output_dir}/{date}_example_line_{slug}.md` に書かれ、そのあと呼2 が各主張を supported / partial / unsupported / unverifiable のいずれかに判定し、判定ごとの件数を `state/example_line/runs/{date}.verify.json` に記録します。
 
