@@ -851,7 +851,9 @@ def _repo(tmp_path, commits, config=()):
     repo = tmp_path / "repo"
     repo.mkdir()
     env = {
-        **os.environ,
+        # 呼び出し元の GIT_* (git hook・rebase --exec が GIT_DIR を export する) を落とす — 残ると
+        # git -C <tmp> init / config が実 repo の .git に当たる (2026-11-08 に core.bare = true が書かれた)
+        **{k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
         "GIT_AUTHOR_NAME": "t",
         "GIT_AUTHOR_EMAIL": "t@example.invalid",
         "GIT_COMMITTER_NAME": "t",
