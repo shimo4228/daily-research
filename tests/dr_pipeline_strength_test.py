@@ -242,6 +242,37 @@ def test_spend_gate_row_without_usable_date_is_unreadable(
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    "cost,reason",
+    [
+        ("-50", "cost_usd is negative"),
+        ('"-1"', "cost_usd is negative"),
+        ("NaN", "cost_usd is not finite"),
+        ("Infinity", "cost_usd is not finite"),
+        ("-Infinity", "cost_usd is not finite"),
+        ("1e999", "cost_usd is not finite"),
+    ],
+    ids=["negative", "negative-string", "nan", "inf", "minus-inf", "overflowing-literal"],
+)
+def test_spend_gate_negative_or_non_finite_cost_is_unreadable(
+    monkeypatch, capsys, tmp_path, cost, reason
+):
+    # 負の費用は累計を減らして上限を緩める。NaN / inf は止まりはしたが log の金額が nan / inf になり、
+    # どの行が原因か分からなかった。json.loads は NaN / Infinity を既定で受け付ける
+    ledger = _write(
+        tmp_path,
+        "l.jsonl",
+        f'{{"date": "2026-11-02", "cost_usd": 60}}\n{{"date": "2026-11-02", "cost_usd": {cost}}}\n',
+    )
+    rc, out, err = run_cmd(
+        monkeypatch, capsys, ["spend-gate", ledger, "2026-11-02", "100", "100", "1"]
+    )
+    assert rc == 2
+    assert out == ""
+    assert err == f"spend-gate: 1 unreadable line(s) in {ledger}: line 2 ({reason})\n"
+
+
+@pytest.mark.unit
 def test_spend_gate_zero_cost_is_a_readable_row(monkeypatch, capsys, tmp_path):
     # 0 は報告された費用 (spend-add が total_cost_usd: 0 を記録する)。読めない行にしない
     ledger = _write(tmp_path, "l.jsonl", '{"date": "2026-11-02", "cost_usd": 0}\n')

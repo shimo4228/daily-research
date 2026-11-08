@@ -16,6 +16,7 @@ subcommand に置き換える parser-of-record。test も本モジュールだ�
 """
 
 import json
+import math
 import re
 import sys
 import tomllib
@@ -1892,6 +1893,14 @@ def _spend_totals(ledger: str, date_s: str) -> tuple[float, float, list[str]]:
             c = float(r["cost_usd"])
         except (ValueError, TypeError, OverflowError):  # OverflowError: float に収まらない整数
             unreadable.append(f"line {n} (cost_usd is not a number)")
+            continue
+        # 費用は有限の 0 以上。負は累計を減らして上限を緩め、NaN / inf (json.loads が既定で
+        # 受け付ける) は判定を金額 nan / inf の stop にしてどの行が原因かを消す
+        if not math.isfinite(c):
+            unreadable.append(f"line {n} (cost_usd is not finite)")
+            continue
+        if c < 0:
+            unreadable.append(f"line {n} (cost_usd is negative)")
             continue
         # date で月・日に振り分ける。YYYY-MM-DD でない行はどの累計にも入らず 0 ドルと同じになる
         d = r.get("date")
