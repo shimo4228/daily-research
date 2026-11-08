@@ -198,7 +198,7 @@ The run is invoked with `cd "$TARGET_REPO"`; a `mode = "ecosystem"` line has no 
 
 The day's `verify.json` is removed before call 2 starts and read back run-scoped (newer than `$LOCK_DIR/pid`). When the same line's call 1 ended with an auth / billing error, call 2 does not start and the note stays `unverified`.
 
-**Note**: All `claude -p` calls use `< /dev/null` stdin redirect via the `run_claude()` wrapper. This prevents MCP stdio communication from conflicting with terminal stdin, which was a root cause of past MCP hangs.
+**Note**: All `claude -p` calls use `< /dev/null` stdin redirect — calls 1 and 2 via the `run_claude()` wrapper, the auth probe in `real_auth_probe()` itself. This prevents MCP stdio communication from conflicting with terminal stdin, which was a root cause of past MCP hangs.
 
 ## Architecture Notes
 

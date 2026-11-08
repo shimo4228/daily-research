@@ -198,7 +198,7 @@ run は `cd "$TARGET_REPO"` で起動される。`mode = "ecosystem"` のライ�
 
 呼2 は起動前に当日の `verify.json` を削除し、run スコープ（`$LOCK_DIR/pid` より新しい）で読み直す。同じラインの呼1 が認証・課金のエラーで終わったときは呼2 を始めず、ノートは `unverified` のまま残る。
 
-**備考**: 全 `claude -p` 呼び出しは `run_claude()` ラッパー経由で `< /dev/null` stdin リダイレクトを使用する。これにより MCP の stdio 通信がターミナルの stdin と競合するのを防止する（過去 MCP ハングの根本原因だった）。
+**備考**: 全 `claude -p` 呼び出しは `< /dev/null` stdin リダイレクトを使用する（呼1・呼2 は `run_claude()` ラッパー経由、認証 probe は `real_auth_probe()` 自身が付ける）。これにより MCP の stdio 通信がターミナルの stdin と競合するのを防止する（過去 MCP ハングの根本原因だった）。
 
 ## アーキテクチャ補足
 
