@@ -724,6 +724,8 @@ def _load_metrics(metrics_path, include_test=False):
                     rec = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if not isinstance(rec, dict):
+                    continue
                 if not include_test and rec.get("source") == "test":
                     continue
                 records.append(rec)

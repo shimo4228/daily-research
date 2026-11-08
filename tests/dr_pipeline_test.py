@@ -874,6 +874,15 @@ def test_metrics_append_source_arg_and_load_filter(monkeypatch, capsys, tmp_path
     assert len(dr_pipeline._load_metrics(str(metrics), include_test=True)) == 2
 
 
+@pytest.mark.parametrize("include_test", [False, True])
+def test_load_metrics_skips_json_lines_that_are_not_objects(tmp_path, include_test):
+    # JSON として読めても object でない行は、壊れた行と同じく skip する (収集は non-fatal)
+    metrics = tmp_path / "metrics.jsonl"
+    metrics.write_text('5\n["x"]\n"s"\nnull\n{"date": "2026-08-22", "source": "live"}\n')
+    recs = dr_pipeline._load_metrics(str(metrics), include_test=include_test)
+    assert recs == [{"date": "2026-08-22", "source": "live"}]
+
+
 def test_metrics_append_source_defaults_to_live(monkeypatch, tmp_path):
     metrics = tmp_path / "metrics.jsonl"
     monkeypatch.setattr("sys.stdin", io.StringIO(""))
