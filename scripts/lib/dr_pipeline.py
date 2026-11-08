@@ -7,23 +7,14 @@ subcommand に置き換える parser-of-record。test も本モジュールだ�
 
 呼び出し:  python3 scripts/lib/dr_pipeline.py <subcommand> [args]
 依存:      stdlib のみ (json / tomllib / re / collections)。pip 依存なし。
-           config.toml 解析に python>=3.11 の tomllib を使う (tomli fallback あり)。
+           config.toml 解析に python>=3.11 の tomllib を使う (lib/env.sh が homebrew の
+           python3 を PATH の先頭に置く)。
 """
 
 import json
 import re
 import sys
-
-
-def _tomllib():
-    try:
-        import tomllib
-
-        return tomllib
-    except ImportError:  # python < 3.11
-        import tomli as tomllib
-
-        return tomllib
+import tomllib
 
 
 def _result_dict(raw):
@@ -66,7 +57,6 @@ def _load_tracks(config_path):
     """config.toml を読み (cfg, tracks) を返す。旧 schema (tracks.X 直下に
     target_repo) を検出したら ValueError — 再編後のコードが旧 config のまま
     朝の実行を迎えて静かに誤動作する事故を防ぐ。"""
-    tomllib = _tomllib()
     with open(config_path, "rb") as f:
         cfg = tomllib.load(f)
     tracks = cfg.get("tracks", {})
@@ -226,7 +216,6 @@ def cmd_log_summary(argv):
 # --- vault-path [config_path]: config.toml の [general].vault_path を出力 ---
 def cmd_vault_path(argv):
     config_path = argv[0] if argv else "config.toml"
-    tomllib = _tomllib()
     with open(config_path, "rb") as f:
         print(tomllib.load(f).get("general", {}).get("vault_path", ""))
     return 0
@@ -236,7 +225,6 @@ def cmd_vault_path(argv):
 # どちらか欠けている config では空文字を出力する (呼び出し側はゲートを skip する)。
 def cmd_report_dir(argv):
     config_path = argv[0] if argv else "config.toml"
-    tomllib = _tomllib()
     with open(config_path, "rb") as f:
         general = tomllib.load(f).get("general", {})
     vault = general.get("vault_path", "")
@@ -681,7 +669,6 @@ def cmd_config_get(argv):
     config_path, dotted = argv[:2]
     default = argv[2] if len(argv) >= 3 else ""
     try:
-        tomllib = _tomllib()
         with open(config_path, "rb") as f:
             node = tomllib.load(f)
     except (OSError, ValueError):
@@ -1039,7 +1026,6 @@ def cmd_report_lint(argv):
 
     min_sources = 5
     try:
-        tomllib = _tomllib()
         with open(config_path, "rb") as f:
             min_sources = int(tomllib.load(f).get("report", {}).get("min_sources", min_sources))
     except (FileNotFoundError, ValueError, OSError):
@@ -1381,7 +1367,6 @@ def cmd_billing_config(argv):
         print("usage: billing-config <config_path>", file=sys.stderr)
         return 64
     try:
-        tomllib = _tomllib()
         with open(argv[0], "rb") as f:
             b = _billing(tomllib.load(f))
     except (OSError, ValueError) as e:
