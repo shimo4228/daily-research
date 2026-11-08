@@ -96,19 +96,25 @@ if [ "$KIND" = "probe" ]; then
   echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.01}'
   exit 0
 fi
+# seam .break_ledger_at: この種類の呼び出しの前に台帳を dir に替える (その呼び出しの費用の追記から失敗する)
+if [ "$(cat "$H/.break_ledger_at" 2>/dev/null)" = "$KIND" ]; then
+  rm -f "$H/daily-research/state/api-spend.jsonl"; mkdir -p "$H/daily-research/state/api-spend.jsonl"
+fi
 R=$(printf '%s' "$PROMPT" | grep -oE '/[^ ]*/state/[A-Za-z0-9_-]+/runs/[0-9]{4}-[0-9]{2}-[0-9]{2}\.json' | head -1)
 L=$(basename "$(dirname "$(dirname "$R")")"); D=$(basename "$R" .json)
 case "$SC" in
   timeout)
     exit 124 ;;
   note-audit)
-    # 呼1 はノートと article の receipt を書く。呼2 は何も変えず、呼3 の第 1 段は候補 1 件、第 2 段は確定を返す
+    # 呼1 はノートと article の receipt を書く。呼2 は何も変えず、呼3 の第 1 段は候補 1 件、第 2 段は確定を返す。
+    # 第 1 段の費用は seam .audit_cost (既定 0.3)
     case "$KIND" in
       verification-protocol)
         echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.1,"num_turns":2}'
         exit 0 ;;
       audit-protocol)
-        python3 -c 'import json; d = {"claims_checked": 1, "supported": 0, "unverifiable": [], "discrepancies": [{"note_sentence": "報告書は 3 か国で公開された。", "url": "https://example.com/r", "replacement": "報告書は 4 か国で公開された。", "confidence": "high"}]}; print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "total_cost_usd": 0.3, "num_turns": 9, "result": json.dumps(d)}))'
+        python3 -c 'import json, sys; d = {"claims_checked": 1, "supported": 0, "unverifiable": [], "discrepancies": [{"note_sentence": "報告書は 3 か国で公開された。", "url": "https://example.com/r", "replacement": "報告書は 4 か国で公開された。", "confidence": "high"}]}; print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "total_cost_usd": float(sys.argv[1]), "num_turns": 9, "result": json.dumps(d)}))' \
+          "$(cat "$H/.audit_cost" 2>/dev/null || echo 0.3)"
         exit 0 ;;
       audit-confirm-protocol)
         echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.05,"num_turns":3,"result":"{\"verdict\": \"contradicts\", \"replacement_verdict\": \"consistent\", \"parts\": [{\"wrong\": \"3 か国\", \"fixed\": \"4 か国\"}]}"}'
@@ -413,6 +419,59 @@ assert_unchecked_stop_notified() {
   [ "$status" -ne 0 ]
   [ ! -e "$MOCK_HOME/.calls" ]   # probe より前に止まる
   grep -q 'audit_confirm_max_usd' "$(log_file)"
+}
+
+@test "audit stage 1 gate at a cap (rc 1): stage 1 does not run and the log names the cap" {
+  # 日の上限 15。1 本目の後の今日の支出は probe 0.01 + 呼1 13 + 呼2 0.1 = 13.11、残り 1.89 < 監査の予約 2.25
+  echo "note-audit" > "$MOCK_HOME/.scenario"
+  echo "13" > "$MOCK_HOME/.cost"
+  printf '\n[audit]\nenabled = true\n' >> "$P/config.toml"
+  run run_script
+  [ "$(calls_of repo-research-protocol)" -eq 1 ]
+  [ "$(calls_of audit-protocol)" -eq 0 ]
+  grep -qF 'audit pass skipped — API spend cap (month $13.11, day $13.11, need $2.25)' "$(log_file)"
+  refute_grep -qF 'audit pass skipped — the API spend gate could not check the caps' "$(log_file)"
+  grep '] AUDIT [a-z]*: ' "$(log_file)" | grep -q '"ran": false, "reason": "E_BUDGET_GATE"'
+}
+
+@test "audit stage 1 gate cannot check the caps (rc 2): stage 1 does not run and the log does not call it a cap" {
+  # 呼2 の前に台帳を dir に替える — 呼2 の費用の追記が失敗し、以後の gate は上限を確かめられない
+  echo "note-audit" > "$MOCK_HOME/.scenario"
+  echo "verification-protocol" > "$MOCK_HOME/.break_ledger_at"
+  printf '\n[audit]\nenabled = true\n' >> "$P/config.toml"
+  run run_script
+  [ "$(calls_of verification-protocol)" -eq 1 ]
+  [ "$(calls_of audit-protocol)" -eq 0 ]
+  grep -qF 'audit pass skipped — the API spend gate could not check the caps' "$(log_file)"
+  refute_grep -qF 'audit pass skipped — API spend cap' "$(log_file)"
+  grep '] AUDIT [a-z]*: ' "$(log_file)" | grep -q '"ran": false, "reason": "E_BUDGET_GATE"'
+}
+
+@test "audit stage 2 gate at a cap (rc 1): the candidate is not sent to stage 2 and nothing is applied" {
+  # 1 本目: probe 0.01 + 呼1 2.0 + 呼2 0.1 = 2.11 で第 1 段は回る (残り 12.89 >= 2.25)。第 1 段 12.7 で 14.81、
+  # 残り 0.19 < 第 2 段の 1 回分 0.25
+  echo "note-audit" > "$MOCK_HOME/.scenario"
+  echo "12.7" > "$MOCK_HOME/.audit_cost"
+  printf '\n[audit]\nenabled = true\n' >> "$P/config.toml"
+  run run_script
+  [ "$(calls_of audit-protocol)" -eq 1 ]
+  [ "$(calls_of audit-confirm-protocol)" -eq 0 ]
+  grep -qF 'audit stage 2 stopped — API spend cap (day $14.81)' "$(log_file)"
+  refute_grep -qF 'audit stage 2 stopped — the API spend gate could not check the caps' "$(log_file)"
+  grep '] AUDIT [a-z]*: ' "$(log_file)" | grep -q '"candidates": 1, "confirmed": 0, "applied": 0'
+}
+
+@test "audit stage 2 gate cannot check the caps (rc 2): the candidate is not sent and the log does not call it a cap" {
+  # 第 1 段の前に台帳を dir に替える — 第 1 段の費用の追記が失敗し、第 2 段の前の gate は上限を確かめられない
+  echo "note-audit" > "$MOCK_HOME/.scenario"
+  echo "audit-protocol" > "$MOCK_HOME/.break_ledger_at"
+  printf '\n[audit]\nenabled = true\n' >> "$P/config.toml"
+  run run_script
+  [ "$(calls_of audit-protocol)" -eq 1 ]
+  [ "$(calls_of audit-confirm-protocol)" -eq 0 ]
+  grep -qF 'audit stage 2 stopped — the API spend gate could not check the caps' "$(log_file)"
+  refute_grep -qF 'audit stage 2 stopped — API spend cap' "$(log_file)"
+  grep '] AUDIT [a-z]*: ' "$(log_file)" | grep -q '"candidates": 1, "confirmed": 0, "applied": 0'
 }
 
 @test "timed-out call (no result JSON): the call's cap is recorded as an estimate, not \$0" {
