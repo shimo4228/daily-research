@@ -455,6 +455,8 @@ ECO_TEMPLATE="$PROJECT_DIR/templates/report-template-ecosystem.md"
     grep -q '文の形で分ける' "$P"
     grep -q '承認要求・「〜すべき」・手順の列挙は書かない' "$P"
     grep -q 'citation ゲート' "$P"
+    # PDF は保存先が Read deny に当たる — 論文は HTML 版で取る (H04-A)
+    grep -qF 'arxiv.org/html/<id>' "$P"
     grep -q '自己汚染ガード' "$P"
     grep -q '静的な文書で、\*\*読むだけ\*\*' "$P"
     refute_grep -q '開いた問い' "$P"
