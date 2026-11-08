@@ -841,7 +841,10 @@ else
     PASS3_EXIT=0
     # run の DATE を渡す — 引数なしだと ingest 側が「今日」を探し、日付をまたいだ run (試走 2026-09-14 23:51→00:01) の
     # レポートを skip する (scripts/daily-research.sh:619 producer、vault daily_wiki_ingest.sh:44 sink)
-    bash "$VAULT_INGEST" "$DATE" >> "$LOG_FILE" 2>&1 || PASS3_EXIT=$?
+    # 外側の上限: ingest の中身は Obsidian の終了待ち (最大 30s) + claude (vault 側の INGEST_TIMEOUT 既定
+    # 2700s、-k なし) + index / lint + Slack 通知 (curl -m 15)。SIGTERM を無視する claude で ingest が
+    # 戻らないと lock を握ったまま run が終わらないので、2700s に 15 分の余裕を足した 3600s と -k 60 で切る
+    timeout -k 60 3600 bash "$VAULT_INGEST" "$DATE" >> "$LOG_FILE" 2>&1 || PASS3_EXIT=$?
     if [ "$PASS3_EXIT" != "0" ]; then
       log "WARN: wiki ingest failed (non-fatal, exit $PASS3_EXIT)"
     fi

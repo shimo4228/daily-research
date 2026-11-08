@@ -824,6 +824,22 @@ EOF
   grep -qE "^-k [0-9]+ [0-9]+ $MOCK_HOME/.claude/local/claude --version\$" "$MOCK_HOME/.timeout_calls"
 }
 
+@test "E2E pass3: the vault ingest runs under timeout -k with a limit above the ingest's own claude timeout" {
+  # vault の daily_wiki_ingest.sh は内側の claude を timeout 2700 (-k なし) で回す。SIGTERM を無視する
+  # claude で ingest が戻らないと、lock を握ったまま run が終わらず翌朝以降が全部 skip になる
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  install_timeout_spy
+  mkdir -p "$MOCK_HOME/mock-vault/scripts"
+  printf '#!/bin/bash\necho "ingest stub for $1"\n' > "$MOCK_HOME/mock-vault/scripts/daily_wiki_ingest.sh"
+  chmod +x "$MOCK_HOME/mock-vault/scripts/daily_wiki_ingest.sh"
+
+  run_script
+  get_log | grep -q "ingest stub for $DR_DATE"
+  local call
+  call=$(grep -E "^-k [0-9]+ [0-9]+ bash $MOCK_HOME/mock-vault/scripts/daily_wiki_ingest.sh $DR_DATE\$" "$MOCK_HOME/.timeout_calls")
+  [ "$(echo "$call" | cut -d' ' -f3)" -gt 2700 ]
+}
+
 # === Test: No legacy gtimeout dependency ===
 
 @test "E2E: script does not use gtimeout or legacy timeout patterns" {
