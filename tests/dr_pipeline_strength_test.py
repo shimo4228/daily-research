@@ -382,3 +382,231 @@ def test_past_topics_append_refusals_are_rc1_with_reason(
         assert not past.exists()
     else:
         assert past.read_text(encoding="utf-8") == existing
+
+
+# === log-summary: SUMMARY 行は metrics-backfill の _SUMMARY_RE が読む機械契約 ===
+
+RUN_FULL = (
+    '{"total_cost_usd":0.123456,"num_turns":7,"duration_ms":1500,'
+    '"usage":{"input_tokens":11,"output_tokens":22},"modelUsage":{"m":{"webSearchRequests":4}}}'
+)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("label", ["Run(akc)", "Run(ai-dev_2)", "Clarity"])
+def test_log_summary_line_round_trips_through_backfill_regex(monkeypatch, capsys, label):
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["log-summary", label], RUN_FULL)
+    assert rc == 0
+    # duration は ms → s の四捨五入 (1500 ms = 2 s)。cost は 4 桁
+    expected = (
+        f"SUMMARY {label}: cost=$0.1235 turns=7 duration=2s tokens_in=11 tokens_out=22 searches=4"
+    )
+    assert out == expected + "\n"
+    # log.sh の log() が付ける時刻 prefix 付きの 1 行を、backfill の正規表現が全項目読み戻す
+    m = dr_pipeline._SUMMARY_RE.search(f"[2026-11-02 05:10:00] {out.strip()}")
+    assert m is not None
+    assert m.groups() == ("2026-11-02 05:10:00", label, "0.1235", "7", "2", "11", "22", "4")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "stdin",
+    [
+        '{"total_cost_usd":1,"num_turns":1,"duration_ms":0,"usage":{}}',
+        # server_tool_use が dict でない (形の崩れた usage) も 0 件として 1 行を出す
+        '{"total_cost_usd":1,"num_turns":1,"usage":{"server_tool_use":["x"]}}',
+    ],
+    ids=["empty-usage", "non-dict-server-tool-use"],
+)
+def test_log_summary_missing_fields_are_zero(monkeypatch, capsys, stdin):
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["log-summary", "Run(akc)"], stdin)
+    assert rc == 0
+    # 検索 0 件は searches= を書かない (backfill の正規表現では省略可の群)
+    assert out == "SUMMARY Run(akc): cost=$1.0000 turns=1 duration=0s tokens_in=0 tokens_out=0\n"
+
+
+# === searches: 検索回数 (quiet-suspect の入力) の型の取り違え ===
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "stdin,expected",
+    [
+        ("5", 0),  # JSON だが object でない
+        ('{"tool_counts":{"WebSearch":3}}', 3),
+        ('{"tool_counts":{"WebFetch":2}}', 2),
+        # bool は int の subclass、小数・負値・文字列は回数でない
+        ('{"tool_counts":{"WebSearch":true,"WebFetch":2.5}}', 0),
+        ('{"tool_counts":{"WebSearch":-3,"WebFetch":"4"}}', 0),
+        # 検索しなかった model の modelUsage には webSearchRequests が無い
+        ('{"modelUsage":{"opus":{"inputTokens":5},"haiku":{"webSearchRequests":2}}}', 2),
+        ('{"usage":{"server_tool_use":"x"}}', 0),
+    ],
+    ids=[
+        "scalar-json",
+        "websearch-only",
+        "webfetch-only",
+        "bool-and-float",
+        "negative-and-string",
+        "model-without-key",
+        "non-dict-server-tool-use",
+    ],
+)
+def test_searches_counts_only_positive_ints(monkeypatch, capsys, stdin, expected):
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["searches"], stdin)
+    assert rc == 0
+    assert out == f"{expected}\n"
+
+
+# === metrics-append: metrics.jsonl は expect-check / dr-review が読む機械契約 ===
+
+
+def _metrics(monkeypatch, capsys, tmp_path, stdin, *, report_count="1", extra=()):
+    path = tmp_path / "metrics.jsonl"
+    rc, out, err = run_cmd(
+        monkeypatch,
+        capsys,
+        ["metrics-append", str(path), "2026-11-02", "OK", report_count, "0", *extra],
+        stdin,
+    )
+    assert rc == 0, err
+    return json.loads(path.read_text(encoding="utf-8")), out
+
+
+@pytest.mark.unit
+def test_metrics_append_pass2_has_every_field(monkeypatch, capsys, tmp_path):
+    rec, _ = _metrics(monkeypatch, capsys, tmp_path, f"RUN\t{RUN_FULL}\n")
+    assert rec["pass2"] == {
+        "cost": 0.1235,
+        "turns": 7,
+        "duration_s": 2,
+        "tokens_in": 11,
+        "tokens_out": 22,
+        "searches": 4,
+    }
+    assert rec["total_cost"] == 0.1235
+
+
+ZERO_PASS = {"cost": 0, "turns": 0, "duration_s": 0, "tokens_in": 0, "tokens_out": 0, "searches": 0}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "run_json",
+    [
+        # timeout や error 終了の result は値が null で来る
+        '{"total_cost_usd":null,"num_turns":null,"duration_ms":null,'
+        '"usage":{"input_tokens":null,"output_tokens":null}}',
+        # key ごと無い (usage も無い) result
+        '{"type":"result"}',
+    ],
+    ids=["nulls", "missing-keys"],
+)
+def test_metrics_append_null_or_missing_values_are_zero(monkeypatch, capsys, tmp_path, run_json):
+    rec, _ = _metrics(monkeypatch, capsys, tmp_path, f"RUN\t{run_json}\n")
+    assert rec["pass2"] == ZERO_PASS
+    assert rec["total_cost"] == 0
+
+
+@pytest.mark.unit
+def test_metrics_append_bad_lines_do_not_stop_later_lines(monkeypatch, capsys, tmp_path):
+    # 壊れた行・空行の後ろに来た正常な行も集計する (収集は non-fatal で、1 行で打ち切らない)
+    lint = '{"date":"2026-11-02","files":1,"hard_fail":0,"soft_fail":0,"results":[]}'
+    verify = '{"supported":3,"partial":0,"unsupported":1,"unverifiable":0,"edits":2,"ran":true}'
+    stdin = "\n".join(
+        [
+            "RUN\t{broken",
+            "VERIFY\t{broken",
+            "LINT\t{broken",
+            "",
+            f"RUN\t{RUN_FULL}",
+            f"VERIFY\t{verify}",
+            f"LINT\t{lint}",
+            "STATE\takc\tarticle",
+        ]
+    )
+    rec, out = _metrics(monkeypatch, capsys, tmp_path, stdin)
+    assert rec["pass2"]["turns"] == 7
+    assert rec["lint"] == json.loads(lint)
+    assert rec["verification"] == {
+        "supported": 3,
+        "partial": 0,
+        "unsupported": 1,
+        "unverifiable": 0,
+        "edits": 2,
+        "lines_verified": 1,
+    }
+    assert rec["line_states"]["article"] == 1
+    assert out == "metrics: appended 2026-11-02 (OK, 1 reports, 1 runs)\n"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "stdin,expected",
+    [
+        # JSON が壊れていても ok フラグは残す (ok=1 は成功)
+        ("CLARITY\t1\tnot-json\n", {"ran": True, "ok": True}),
+        # 複数 line で全部壊れていたら費用の key は作らない (0 円と取り違えない)
+        ("CLARITY\t1\tx\nCLARITY\t1\ty\n", {"ran": True, "ok": True}),
+    ],
+    ids=["single-broken-ok", "all-broken"],
+)
+def test_metrics_append_clarity_without_metrics(monkeypatch, capsys, tmp_path, stdin, expected):
+    rec, _ = _metrics(monkeypatch, capsys, tmp_path, stdin)
+    assert rec["clarity_pass"] == expected
+
+
+@pytest.mark.unit
+def test_metrics_append_clarity_all_ok_is_ok(monkeypatch, capsys, tmp_path):
+    rec, _ = _metrics(
+        monkeypatch, capsys, tmp_path, f"CLARITY\t1\t{RUN_FULL}\nCLARITY\t1\t{RUN_FULL}\n"
+    )
+    assert rec["clarity_pass"] == {
+        "ran": True,
+        "ok": True,
+        "cost": 0.247,
+        "turns": 14,
+        "duration_s": 4,
+        "tokens_in": 22,
+        "tokens_out": 44,
+        "searches": 8,
+    }
+
+
+@pytest.mark.unit
+def test_metrics_append_record_keys_and_empty_report_count(monkeypatch, capsys, tmp_path):
+    rec, _ = _metrics(monkeypatch, capsys, tmp_path, "", report_count="", extra=("test",))
+    # backfill の重複判定は (date, ts)、集計は source で本番 run を選ぶ
+    assert set(rec) == {
+        "date",
+        "ts",
+        "source",
+        "final_class",
+        "report_count",
+        "fallback_used",
+        "pass1",
+        "pass2",
+        "clarity_pass",
+        "lint",
+        "line_states",
+        "verification",
+        "total_cost",
+    }
+    assert rec["source"] == "test"
+    assert rec["report_count"] == 0
+    assert len(rec["ts"]) == len("2026-11-02T05:00:00")
+
+
+@pytest.mark.unit
+def test_metrics_append_counts_only_verify_rows_that_ran(monkeypatch, capsys, tmp_path):
+    stdin = "".join(
+        f"VERIFY\t{v}\n"
+        for v in (
+            '{"supported":1,"ran":true}',
+            '{"supported":2,"ran":true}',
+            '{"supported":0,"ran":false}',
+        )
+    )
+    rec, _ = _metrics(monkeypatch, capsys, tmp_path, stdin)
+    assert rec["verification"]["lines_verified"] == 2
+    assert rec["verification"]["supported"] == 3
