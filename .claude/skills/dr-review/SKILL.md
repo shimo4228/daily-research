@@ -48,6 +48,10 @@ python3 scripts/lib/dr_pipeline.py metrics-backfill metrics.jsonl logs   # ロ�
 - **clarity_pass (呼2、ラベルは互換のため据え置き)**: ran/ok 率と cost/turns。中身は
   **検証 + clarity パス** (ADR-0017) の実測。ok=false が続くなら呼2 の timeout /
   max-turns / プロトコルの見直し候補
+- **呼3 の照合監査 (ADR-0020、`[audit] enabled` の日だけ)**: `verification.audit_*` の ran / candidates /
+  confirmed / applied / rejected と cost。`rejected` の理由と各候補の編集距離は
+  `state/<line>/audit/<date>.json` にある — 正当な訂正が規則で落ちているなら閾値の見直し候補、applied が 0 の日が
+  続くなら第 1 段の見直し候補。監査の `--effort` は high 固定 (record の `effort` には入らない)
 - **effort**: record の `effort {call1, call2}` は各呼び出しに渡した `--effort`。値の変わった日で期間を分けて
   turns・cost・verification・本文字数を比べ、品質の揺れが effort の違いによるものかを切り分ける。
   `effort` の無い record (`--effort` を渡す前) は運用者の対話用 settings と model の既定で決まっていて、値は不明
@@ -132,7 +136,9 @@ DR-Expect: fallback_rate <= 0.05
   `fallback_rate` / `report_count_min` / `receipt_count_min` / `no_report_count` /
   `lint_hard_count` / `quiet_rate` / `unsupported_rate` / `unverifiable_rate` /
   `clarity_ok_rate` / `clarity_{undef|long}_{before|after}_mean` (clarity-scan の 1 line あたり
-  平均。分母は CSCAN 行を持つ record の `cscan_lines` の合計)
+  平均。分母は CSCAN 行を持つ record の `cscan_lines` の合計) /
+  `audit_ran_rate` / `audit_<key>_mean` (呼3 の照合監査、ADR-0020。key は `dr_pipeline.py` の
+  `AUDIT_SUM_KEYS` と `cost`。監査を始めた 1 line あたり。分母は AUDIT 行を持つ record の `audit_lines` の合計)
 - 評価窓は「commit 日より後の全 record」。次回 review で自動突合される
 - 期待が書けない変更 (doc 修正等) に無理に付けない。付けた期待が NOT_ACHIEVED でも
   それ自体は失敗ではない — 効果が出ていない事実が見えることが目的
