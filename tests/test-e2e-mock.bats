@@ -29,6 +29,8 @@ setup() {
   cp "$REAL_PROJECT_DIR/prompts/ecosystem-research-protocol.md" "$MOCK_PROJECT/prompts/"
   # 呼2 protocol は mock が名前で識別するだけなので stub で足りる (ADR-0017)
   cp "$REAL_PROJECT_DIR/tests/fixtures/verification-protocol.stub.md" "$MOCK_PROJECT/prompts/verification-protocol.md"
+  # 呼3 の 2 段 (ADR-0020) も mock は protocol の名前で識別する
+  cp "$REAL_PROJECT_DIR/prompts/audit-protocol.md" "$REAL_PROJECT_DIR/prompts/audit-confirm-protocol.md" "$MOCK_PROJECT/prompts/"
   cp "$REAL_PROJECT_DIR/templates/report-template.md" "$MOCK_PROJECT/templates/"
   cp "$REAL_PROJECT_DIR/templates/report-template-ecosystem.md" "$MOCK_PROJECT/templates/"
 
@@ -316,6 +318,44 @@ if [[ "$PROTOCOL" == *verification-protocol.md ]]; then
   python3 -c '
 import json, sys
 print(json.dumps([{"type": "assistant", "message": {"content": []}}, {"type": "result", "subtype": "success", "is_error": False, "total_cost_usd": 0.02, "num_turns": 2, "duration_ms": 8000, "usage": {"input_tokens": 1500, "output_tokens": 300}, "result": open(sys.argv[1]).read()}]))
+' "$RESULT_FILE"
+  exit 0
+fi
+
+# --- 呼3 第 2 段: 候補 1 件の独立確認 (audit-confirm-protocol.md、ADR-0020) ---
+# 判定 seam: .confirm_verdict (既定 contradicts)。呼び出しごとに prompt を .prompt_confirm に追記する
+if [[ "$PROTOCOL" == *audit-confirm-protocol.md ]]; then
+  printf '%s\n----\n' "$PROMPT" >> "$MOCK_HOME_DIR/.prompt_confirm"
+  printf '%s\n' "$@" > "$MOCK_HOME_DIR/.args_confirm"
+  printf '%s' "$DISALLOWED" > "$MOCK_HOME_DIR/.disallowed_confirm"
+  VERDICT=$(cat "$MOCK_HOME_DIR/.confirm_verdict" 2>/dev/null || echo contradicts)
+  python3 -c '
+import json, sys
+final = json.dumps({"verdict": sys.argv[1], "parts": [{"claim": "c", "source_quote": "q", "correct_value": "v"}], "url_read": "u"})
+print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "total_cost_usd": 0.05, "num_turns": 4, "duration_ms": 9000, "usage": {"input_tokens": 900, "output_tokens": 100}, "result": final}))
+' "$VERDICT"
+  exit 0
+fi
+
+# --- 呼3 第 1 段: ノート全体の照合 (audit-protocol.md、ADR-0020) ---
+# 最終メッセージ seam: .audit_result (無ければ食い違い 0 件の JSON)。audit-fail は呼び出しの失敗
+if [[ "$PROTOCOL" == *audit-protocol.md ]]; then
+  printf '%s' "$PROMPT" > "$MOCK_HOME_DIR/.prompt_audit"
+  printf '%s\n' "$@" > "$MOCK_HOME_DIR/.args_audit"
+  printf '%s' "$ALLOWED" > "$MOCK_HOME_DIR/.allowed_audit"
+  printf '%s' "$DISALLOWED" > "$MOCK_HOME_DIR/.disallowed_audit"
+  if [[ "$SCENARIO" == "audit-fail" ]]; then
+    echo "ERROR: simulated audit failure" >&2
+    exit 1
+  fi
+  RESULT_FILE="$MOCK_HOME_DIR/.audit_result"
+  if [ ! -f "$RESULT_FILE" ]; then
+    RESULT_FILE="$MOCK_HOME_DIR/.audit_result_default"
+    printf '%s' '{"claims_checked": 4, "supported": 4, "unverifiable": [], "discrepancies": []}' > "$RESULT_FILE"
+  fi
+  python3 -c '
+import json, sys
+print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "total_cost_usd": 0.3, "num_turns": 12, "duration_ms": 60000, "usage": {"input_tokens": 9000, "output_tokens": 900}, "result": open(sys.argv[1]).read()}))
 ' "$RESULT_FILE"
   exit 0
 fi
@@ -1921,4 +1961,166 @@ EOF
   refute_grep -qF "=== Starting daily research ===" "$MOCK_PROJECT/logs/$DR_DATE.log"
   [ ! -e "$MOCK_HOME/.calls_$PICKED" ]
   [ ! -e "$MOCK_PROJECT/.daily-research.lock" ]
+}
+
+# === 呼3: 照合監査 (ADR-0020) ===
+
+AUDIT_SENTENCE="報告書は 2026-10-01 に欧州の 3 か国で公開された。"
+AUDIT_FIXED="報告書は 2026-10-01 に欧州の 4 か国で公開された。"
+
+# 監査を有効にし、呼1 が書くノート (.report_<line>) と第 1 段の最終メッセージ (.audit_result) を置く。
+# $1 = 候補の置き換え文 (省略時 AUDIT_FIXED)
+setup_audit() {
+  printf '\n[audit]\nenabled = true\n' >> "$MOCK_PROJECT/config.toml"
+  printf -- '---\nkind: article\n---\n\n# mock report for %s\n\n%s\n調査の参加者は 120 人だった。\n\n## ソース\n- [報告書](https://example.com/report)\n' \
+    "$PICKED" "$AUDIT_SENTENCE" > "$MOCK_HOME/.report_$PICKED"
+  python3 -c '
+import json, sys
+d = {"claims_checked": 2, "supported": 1, "unverifiable": [], "discrepancies": [{
+    "note_sentence": sys.argv[1], "claim": "3 か国", "source_quote": "four countries",
+    "url": "https://example.com/report", "correct_value": "第1段だけが知る値", "replacement": sys.argv[2],
+    "type": "scope", "confidence": "high", "drift": False}]}
+print("監査の結果:\n```json\n" + json.dumps(d, ensure_ascii=False) + "\n```")
+' "$AUDIT_SENTENCE" "${1-$AUDIT_FIXED}" > "$MOCK_HOME/.audit_result"
+}
+
+audit_note() { echo "$MOCK_HOME/mock-vault/daily-research/${DR_DATE}_${PICKED}_mock-report.md"; }
+
+# 引数ファイル (1 行 1 引数) で flag の直後の値を出す
+arg_after() { grep -A1 -xF -- "$2" "$1" | sed -n 2p; }
+
+@test "E2E audit: disabled by default — no audit call, no AUDIT line, no audit_* metrics" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  run run_script
+  [ "$status" -eq 0 ]
+  [ ! -e "$MOCK_HOME/.prompt_audit" ]
+  refute_grep -q "AUDIT $PICKED" "$MOCK_PROJECT/logs/$DR_DATE.log"
+  refute_grep -q "Audit pass" "$MOCK_PROJECT/logs/$DR_DATE.log"
+  assert_metrics << 'PY'
+assert not any(k.startswith("audit_") for k in rec["verification"]), rec
+PY
+}
+
+@test "E2E audit: a candidate both stages confirm is applied; the pre-audit copy and state are kept" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  setup_audit
+  run run_script
+  [ "$status" -eq 0 ]
+  local log_content note pre="$MOCK_PROJECT/state/$PICKED/pre-audit/${DR_DATE}.md"
+  log_content=$(get_log)
+  note=$(audit_note)
+  grep -qF "$AUDIT_FIXED" "$note"
+  refute_grep -qF "$AUDIT_SENTENCE" "$note"
+  cmp -s "$pre" "$MOCK_HOME/.report_$PICKED"
+  echo "$log_content" | grep -q "Audit pass: on (model opus, ADR-0020)"
+  echo "$log_content" | grep -q "AUDIT $PICKED: {\"ran\": true, "
+  echo "$log_content" | grep "AUDIT $PICKED:" | grep -q '"applied": 1'
+  refute_grep -q "audit pass: " <<< "$log_content"
+  python3 -c '
+import json, sys
+st = json.load(open(sys.argv[1]))
+assert [c["status"] for c in st["candidates"]] == ["applied"], st
+' "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.audit.json"
+  assert_metrics << 'PY'
+v = rec["verification"]
+assert v["audit_lines"] == 1 and v["audit_ran"] == 1, v
+assert v["audit_candidates"] == 1 and v["audit_confirmed"] == 1 and v["audit_applied"] == 1, v
+assert v["audit_cost"] == 0.35 and v["audit_turns"] == 12 and v["audit_confirm_turns"] == 4, v
+assert rec["total_cost"] >= 0.35, rec
+PY
+}
+
+@test "E2E audit: both stages run read-only with opus, high effort, web tools only, and their turn caps" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  setup_audit
+  run run_script
+  [ "$status" -eq 0 ]
+  local a="$MOCK_HOME/.args_audit" c="$MOCK_HOME/.args_confirm" f
+  for f in "$a" "$c"; do
+    grep -qx -- "--safe-mode" "$f"
+    grep -qx -- "--no-session-persistence" "$f"
+    [ "$(arg_after "$f" --tools)" = "WebFetch,WebSearch" ]
+    [ "$(arg_after "$f" --allowedTools)" = "WebFetch,WebSearch" ]
+    [ "$(arg_after "$f" --permission-mode)" = "default" ]
+    [ "$(arg_after "$f" --model)" = "opus" ]
+    [ "$(arg_after "$f" --effort)" = "high" ]
+    arg_after "$f" --disallowedTools | grep -q ",Read,Glob,Grep,Edit,Write$"
+  done
+  [ "$(arg_after "$a" --max-turns)" = "40" ]
+  [ "$(arg_after "$c" --max-turns)" = "20" ]
+  # 第 1 段はノートと根拠ファイルを prompt で受け取る (Read を持たない)
+  grep -qF "$AUDIT_SENTENCE" "$MOCK_HOME/.prompt_audit"
+  grep -qF "# evidence for $PICKED" "$MOCK_HOME/.prompt_audit"
+  # 第 2 段に渡るのは文・URL・公開日だけ — 第 1 段の正しい値と置き換え文は渡さない
+  grep -qF "$AUDIT_SENTENCE" "$MOCK_HOME/.prompt_confirm"
+  grep -qF "https://example.com/report" "$MOCK_HOME/.prompt_confirm"
+  grep -qF "$DR_DATE" "$MOCK_HOME/.prompt_confirm"
+  refute_grep -qF "第1段だけが知る値" "$MOCK_HOME/.prompt_confirm"
+  refute_grep -qF "$AUDIT_FIXED" "$MOCK_HOME/.prompt_confirm"
+}
+
+@test "E2E audit: stage 1 failure is fail-open — the note stays as after call 2 and the run succeeds" {
+  echo "audit-fail" > "$MOCK_HOME/.mock_scenario"
+  setup_audit
+  run run_script
+  [ "$status" -eq 0 ]
+  local log_content
+  log_content=$(get_log)
+  cmp -s "$(audit_note)" "$MOCK_HOME/.report_$PICKED"
+  echo "$log_content" | grep -q "WARN: Line $PICKED audit stage 1 did not run or failed ("
+  echo "$log_content" | grep -q "AUDIT $PICKED: {\"ran\": false, "
+  [ ! -e "$MOCK_HOME/.prompt_confirm" ]
+  [ ! -e "$MOCK_PROJECT/state/$PICKED/pre-audit/${DR_DATE}.md" ]
+  assert_metrics << 'PY'
+assert rec["final_class"] == "OK", rec
+v = rec["verification"]
+assert v["audit_lines"] == 1 and v["audit_ran"] == 0 and v["audit_applied"] == 0, v
+PY
+}
+
+@test "E2E audit: a candidate stage 2 finds consistent is not applied" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  setup_audit
+  echo "consistent" > "$MOCK_HOME/.confirm_verdict"
+  run run_script
+  [ "$status" -eq 0 ]
+  cmp -s "$(audit_note)" "$MOCK_HOME/.report_$PICKED"
+  get_log | grep "AUDIT $PICKED:" | grep -q '"candidates": 1, "confirmed": 0, "applied": 0'
+  python3 -c '
+import json, sys
+c = json.load(open(sys.argv[1]))["candidates"][0]
+assert (c["status"], c["reason"]) == ("not_confirmed", "consistent"), c
+' "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.audit.json"
+}
+
+@test "E2E audit: a confirmed candidate without a usable replacement is rejected with a WARN" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  setup_audit ""
+  run run_script
+  [ "$status" -eq 0 ]
+  cmp -s "$(audit_note)" "$MOCK_HOME/.report_$PICKED"
+  get_log | grep -q "WARN: Line $PICKED audit pass: 監査で確定した候補 D1 を適用しなかった (empty)"
+  get_log | grep "AUDIT $PICKED:" | grep -q '"confirmed": 1, "applied": 0, "rejected": 1'
+}
+
+@test "E2E audit: a brief note is not audited" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  setup_audit
+  echo brief > "$MOCK_HOME/.state_$PICKED"
+  run run_script
+  [ "$status" -eq 0 ]
+  get_log | grep -q "Line $PICKED audit pass skipped (kind: brief, only article is audited)"
+  [ ! -e "$MOCK_HOME/.prompt_audit" ]
+}
+
+@test "E2E audit: a stale audit state from an earlier invocation is removed before stage 1" {
+  echo "audit-fail" > "$MOCK_HOME/.mock_scenario"
+  setup_audit
+  mkdir -p "$MOCK_PROJECT/state/$PICKED/runs"
+  printf '{"version": 1, "ran": true, "stage1": {}, "confirm": {}, "candidates": [{"id": "D1", "status": "confirmed", "note_sentence": "%s", "replacement": "%s"}]}\n' \
+    "$AUDIT_SENTENCE" "$AUDIT_FIXED" > "$MOCK_PROJECT/state/$PICKED/runs/${DR_DATE}.audit.json"
+  run run_script
+  [ "$status" -eq 0 ]
+  cmp -s "$(audit_note)" "$MOCK_HOME/.report_$PICKED"
+  get_log | grep "AUDIT $PICKED:" | grep -q '"ran": false'
 }

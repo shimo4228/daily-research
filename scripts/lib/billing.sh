@@ -8,6 +8,7 @@
 # - mode = "api": env_file から ANTHROPIC_API_KEY を読んで export する。key の値はログ・通知・
 #   引数に載せない (export した環境変数だけが claude に届く)
 # 支出は 1 呼び出しごとに state/api-spend.jsonl へ追記し、line を始める前に月・日の残額を見る。
+# 予約額 (BILLING_RESERVE = 1 line 分、BILLING_AUDIT_RESERVE = 呼3 の 2 段分) は billing-config が計算する。
 
 SPEND_LEDGER="${SPEND_LEDGER:-$PROJECT_DIR/state/api-spend.jsonl}"
 BILLING_LEDGER_BROKEN=0   # 台帳への追記に失敗した — 以後は上限を判定できないので gate が止める
@@ -28,9 +29,8 @@ billing_load() {
     return 1
   fi
   IFS=$'\t' read -r BILLING_MODE BILLING_ENV_FILE BILLING_MONTHLY_CAP BILLING_DAILY_CAP \
-    BILLING_CALL1_MAX BILLING_CALL2_MAX <<< "$tsv"
-  BILLING_RESERVE=$(python3 -c 'import sys; print(float(sys.argv[1]) + float(sys.argv[2]))' \
-    "$BILLING_CALL1_MAX" "$BILLING_CALL2_MAX")
+    BILLING_CALL1_MAX BILLING_CALL2_MAX BILLING_AUDIT_MAX BILLING_AUDIT_CONFIRM_MAX \
+    BILLING_RESERVE BILLING_AUDIT_RESERVE <<< "$tsv"
   if [ "$BILLING_MODE" != "api" ]; then
     return 0
   fi
@@ -43,15 +43,17 @@ billing_load() {
   return 0
 }
 
-# budget_flags <1|2>: api mode のとき呼び出し 1 回の上限フラグを BUDGET_FLAGS 配列に入れる。
+# budget_flags <1|2|audit|audit_confirm>: api mode のとき呼び出し 1 回の上限フラグを BUDGET_FLAGS 配列に入れる
+# (1 = 呼1、2 = 呼2、audit / audit_confirm = 呼3 の第 1 段 / 第 2 段の 1 回)。
 budget_flags() {
   BUDGET_FLAGS=()
   if [ "${BILLING_MODE:-subscription}" = "api" ]; then
-    if [ "$1" = "1" ]; then
-      BUDGET_FLAGS=(--max-budget-usd "$BILLING_CALL1_MAX")
-    else
-      BUDGET_FLAGS=(--max-budget-usd "$BILLING_CALL2_MAX")
-    fi
+    case "$1" in
+      1) BUDGET_FLAGS=(--max-budget-usd "$BILLING_CALL1_MAX") ;;
+      audit) BUDGET_FLAGS=(--max-budget-usd "$BILLING_AUDIT_MAX") ;;
+      audit_confirm) BUDGET_FLAGS=(--max-budget-usd "$BILLING_AUDIT_CONFIRM_MAX") ;;
+      *) BUDGET_FLAGS=(--max-budget-usd "$BILLING_CALL2_MAX") ;;
+    esac
   fi
 }
 
@@ -69,8 +71,9 @@ billing_record() {
   return 0
 }
 
-# billing_gate: api mode で次の line を始めてよいなら 0、支出の上限 (月・日の残額が 1 line 分の予約に
-# 満たない) で止めるなら 1、上限を確かめられずに止めるなら 2。SPEND_MONTH / SPEND_DAY に今月・今日の累計を
+# billing_gate [reserve]: api mode で月・日の残額が reserve (既定 BILLING_RESERVE = 1 line 分) を満たせば 0、
+# 支出の上限 (残額が reserve に満たない) で止めるなら 1、上限を確かめられずに止めるなら 2。line の前は既定で、
+# 呼3 の前は BILLING_AUDIT_RESERVE / 第 2 段の 1 回分で呼ぶ。SPEND_MONTH / SPEND_DAY に今月・今日の累計を
 # 入れる (2 のときは "?")。2 の理由 (台帳が書けなかった・読めない行がある・mktemp や gate 自体の失敗) は
 # ここで ERROR として log してから返す — 呼ぶ側は 1 と 2 で log と通知の文言を分け、上限に達していない日に
 # 「上限に達した」と言わない。spend-gate の rc 1 は出力が stop で始まるときだけ上限 (python の未捕捉例外も rc 1)。
@@ -87,7 +90,7 @@ billing_gate() {
     return 2
   fi
   out=$(python3 "$DR_PY" spend-gate "$SPEND_LEDGER" "$DATE" "$BILLING_MONTHLY_CAP" \
-    "$BILLING_DAILY_CAP" "$BILLING_RESERVE" 2>"$err") || rc=$?
+    "$BILLING_DAILY_CAP" "${1:-$BILLING_RESERVE}" 2>"$err") || rc=$?
   if [ "$rc" = "0" ] || { [ "$rc" = "1" ] && [ "${out%%$'\t'*}" = "stop" ]; }; then
     IFS=$'\t' read -r _ SPEND_MONTH SPEND_DAY <<< "$out"
   else

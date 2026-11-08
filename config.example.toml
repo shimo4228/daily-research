@@ -31,15 +31,30 @@ model = "sonnet"
 # call1 = "high"
 # call2 = "medium"
 
+# Third call (ADR-0020): a fact audit of each article after call 2 (briefs are not audited).
+# Stage 1 checks the note's claims against their sources and lists only the sentences that
+# contradict a source; stage 2 re-checks each candidate on its own (sentence + URL + note date).
+# Only candidates both stages call a contradiction are replaced, by code, under fixed rules
+# (the sentence appears exactly once in the body, links kept, small length change). The model
+# never writes the note. Results go to state/<line>/runs/{date}.audit.json, the pre-audit note
+# to state/<line>/pre-audit/{date}.md, and the counts to metrics (verification.audit_*).
+# Any failure leaves the note as call 2 left it. Off by default.
+[audit]
+enabled = false
+model = "opus"
+
 # Billing path (scripts/lib/billing.sh; the contract lives in dr_pipeline.py's [billing]).
 # mode = "subscription" (default): claude -p uses your Claude Code login (Max plan OAuth);
 #   any ANTHROPIC_API_KEY inherited from the environment is dropped.
 # mode = "api": ANTHROPIC_API_KEY is read from env_file (outside the repo) and every call
-#   is billed to the Claude API. Each call gets --max-budget-usd (call1 / call2), each call's
-#   cost is appended to state/api-spend.jsonl, and a line starts only when both the month's
-#   and the day's remaining budget cover call1_max_usd + call2_max_usd. When a cap is hit,
-#   the remaining lines are skipped and you get a notification. A 429, a too-low credit
-#   balance or a rejected key stops the remaining lines without retrying.
+#   is billed to the Claude API. Each call gets --max-budget-usd (call1 / call2 / audit /
+#   audit_confirm), each call's cost is appended to state/api-spend.jsonl, and a line starts
+#   only when both the month's and the day's remaining budget cover the line reserve:
+#   call1_max_usd + call2_max_usd, plus audit_max_usd + 5 × audit_confirm_max_usd when
+#   [audit] enabled (stage 2 runs for at most 5 candidates per note). The reserve must fit
+#   in daily_cap_usd. When a cap is hit, the remaining lines are skipped and you get a
+#   notification. A 429, a too-low credit balance or a rejected key stops the remaining lines
+#   without retrying.
 [billing]
 mode = "subscription"
 env_file = "~/.config/daily-research/env"
@@ -47,6 +62,8 @@ monthly_cap_usd = 100   # example values — set yours from state/api-spend.json
 daily_cap_usd = 10
 call1_max_usd = 4
 call2_max_usd = 1.5
+audit_max_usd = 1           # audit stage 1, per note
+audit_confirm_max_usd = 0.25  # audit stage 2, per candidate
 
 # === Lines (tracks) — per-repo in-context research (ADR-0008 / ADR-0010 / ADR-0017) ===
 # Each track is a research LINE mapped 1:1 to a research repository via a

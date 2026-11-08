@@ -101,6 +101,25 @@ L=$(basename "$(dirname "$(dirname "$R")")"); D=$(basename "$R" .json)
 case "$SC" in
   timeout)
     exit 124 ;;
+  note-audit)
+    # 呼1 はノートと article の receipt を書く。呼2 は何も変えず、呼3 の第 1 段は候補 1 件、第 2 段は確定を返す
+    case "$KIND" in
+      verification-protocol)
+        echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.1,"num_turns":2}'
+        exit 0 ;;
+      audit-protocol)
+        python3 -c 'import json; d = {"claims_checked": 1, "supported": 0, "unverifiable": [], "discrepancies": [{"note_sentence": "報告書は 3 か国で公開された。", "url": "https://example.com/r", "replacement": "報告書は 4 か国で公開された。", "confidence": "high"}]}; print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "total_cost_usd": 0.3, "num_turns": 9, "result": json.dumps(d)}))'
+        exit 0 ;;
+      audit-confirm-protocol)
+        echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.05,"num_turns":3,"result":"{\"verdict\": \"contradicts\"}"}'
+        exit 0 ;;
+    esac
+    V=$(printf '%s' "$PROMPT" | grep -oE '1\. レポート: [^ ]+' | head -1 | sed 's/^1\. レポート: //')
+    VD=$(dirname "$V"); mkdir -p "$VD"
+    printf -- '---\nkind: article\n---\n\n# t\n\n報告書は 3 か国で公開された。\n\n## ソース\n- [r](https://example.com/r)\n' > "$VD/${D}_${L}_note.md"
+    printf '{"date":"%s","line":"%s","status":"article","report":"%s_%s_note.md","question":"q","reason":"r","reason_code":"no_new_evidence"}' "$D" "$L" "$D" "$L" > "$R"
+    echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"total_cost_usd\":$COST,\"num_turns\":3}"
+    exit 0 ;;
   note-then-429)
     # ノートと article の receipt を書いた後に 429 で落ちる (呼2 の対象が残る形)
     V=$(printf '%s' "$PROMPT" | grep -oE '1\. レポート: [^ ]+' | head -1 | sed 's/^1\. レポート: //')
@@ -352,6 +371,48 @@ assert_unchecked_stop_notified() {
   if grep -q 'Completed successfully' "$(log_file)"; then false; fi
   grep -q '"final_class": "E_PARTIAL"' "$P/metrics.jsonl"
   grep -q 'リサーチが一部失敗しました (今朝: [a-z]* / 未検証: [a-z]* / 未実行: [a-z]*)' "$MOCK_HOME/.notify_log"
+}
+
+# === 呼3 (照合監査、ADR-0020) の上限と台帳 ===
+
+@test "audit enabled (api mode): both audit stages get their own per-call cap and ledger rows" {
+  echo "note-audit" > "$MOCK_HOME/.scenario"
+  printf '\n[audit]\nenabled = true\n' >> "$P/config.toml"
+  run run_script
+  [ "$status" -eq 0 ]
+  [ "$(grep -c "kind=audit-protocol key=$FAKE_KEY budget=1$" "$MOCK_HOME/.calls")" -eq 2 ]
+  [ "$(grep -c "kind=audit-confirm-protocol key=$FAKE_KEY budget=0.25$" "$MOCK_HOME/.calls")" -eq 2 ]
+  # 台帳: probe 1 + 2 line × (呼1・呼2・呼3 の 2 段)
+  [ "$(wc -l < "$(ledger)" | tr -d ' ')" -eq 9 ]
+  [ "$(grep -c '"call": "audit"' "$(ledger)")" -eq 2 ]
+  [ "$(grep -c '"call": "audit_confirm"' "$(ledger)")" -eq 2 ]
+  grep -q 'audit \$1 / audit_confirm \$0.25; line reserve \$7.75' "$(log_file)"
+  # 2 line × 0.1 + 2.0 + 0.3 + 0.05 と probe 0.01
+  grep -q 'API spend: today \$4.91 / \$15' "$(log_file)"
+  grep -q '"applied": 1' "$(log_file)"
+  grep -q '"audit_applied": 2' "$P/metrics.jsonl"
+}
+
+@test "audit enabled: the day's reserve per line includes the audit, so the second line is not started" {
+  # 日の上限 8。1 本目の後の今日の支出は probe 0.01 + 2.0 + 0.1 + 0.3 + 0.05 = 2.46、残り 5.54。
+  # 監査なしの予約 5.5 なら 2 本目は始まるが、監査ありの予約 7.75 には届かない
+  echo "note-audit" > "$MOCK_HOME/.scenario"
+  sed -i '' 's/daily_cap_usd = 15/daily_cap_usd = 8/' "$P/config.toml"
+  printf '\n[audit]\nenabled = true\n' >> "$P/config.toml"
+  run run_script
+  [ "$status" -eq 0 ]
+  [ "$(calls_of repo-research-protocol)" -eq 1 ]
+  [ "$(calls_of audit-protocol)" -eq 1 ]
+  grep -q 'API spend gate stopped the run' "$(log_file)"
+}
+
+@test "audit enabled with a daily cap below the line reserve: the run stops at config load" {
+  sed -i '' 's/daily_cap_usd = 15/daily_cap_usd = 6/' "$P/config.toml"
+  printf '\n[audit]\nenabled = true\n' >> "$P/config.toml"
+  run run_script
+  [ "$status" -ne 0 ]
+  [ ! -e "$MOCK_HOME/.calls" ]   # probe より前に止まる
+  grep -q 'audit_confirm_max_usd' "$(log_file)"
 }
 
 @test "timed-out call (no result JSON): the call's cap is recorded as an estimate, not \$0" {

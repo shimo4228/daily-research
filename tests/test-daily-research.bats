@@ -83,16 +83,21 @@ teardown() {
   refute_grep -qE 'ALLOWED_TOOLS="[^"]*,(Write|Edit),' "$SCRIPT"
 }
 
-@test "built-in tool sets for both calls never include Bash or Task (ADR-0019)" {
-  local c1 c2
+@test "built-in tool sets for every call never include Bash or Task (ADR-0019 / ADR-0020)" {
+  local c1 c2 c3
   c1=$(sed -n 's/^CALL1_TOOLS="\(.*\)"$/\1/p' "$SCRIPT")
   c2=$(sed -n 's/^CALL2_TOOLS="\(.*\)"$/\1/p' "$SCRIPT")
-  [ -n "$c1" ] && [ -n "$c2" ]
+  c3=$(sed -n 's/^AUDIT_TOOLS="\(.*\)"$/\1/p' "$SCRIPT")
+  [ -n "$c1" ] && [ -n "$c2" ] && [ -n "$c3" ]
   refute_grep -qE '(^|,)(Bash|Task|NotebookEdit)(,|$)' <<< "$c1"
   refute_grep -qE '(^|,)(Bash|Task|NotebookEdit)(,|$)' <<< "$c2"
+  # 呼3 は読み書きの道具を持たない (ノートは prompt で受け取り、置き換えは audit-apply が行う)
+  refute_grep -qE '(^|,)(Bash|Task|NotebookEdit|Read|Glob|Grep|Edit|Write)(,|$)' <<< "$c3"
   grep -q -- '--tools "$CALL1_TOOLS"' "$SCRIPT"
   grep -q -- '--tools "$CALL2_TOOLS"' "$SCRIPT"
-  [ "$(grep -c -- '--safe-mode \\$' "$SCRIPT")" -eq 2 ]
+  grep -q -- '--tools "$AUDIT_TOOLS"' "$SCRIPT"
+  # claude -p の呼び出し箇所 (呼1・呼2・呼3) のすべてが --safe-mode を付ける
+  [ "$(grep -c -- '--safe-mode \\$' "$SCRIPT")" -eq 3 ]
 }
 
 @test "orchestrator uses per-repo research protocol as system prompt" {

@@ -87,7 +87,7 @@ def test_billing_config_accepts_equal_caps(monkeypatch, capsys, tmp_path):
     )
     rc, out, err = run_cmd(monkeypatch, capsys, ["billing-config", cfg])
     assert rc == 0, err
-    assert out.rstrip("\n") == "api\t/x/env\t5\t5\t3.5\t1.5"
+    assert out.rstrip("\n") == "api\t/x/env\t5\t5\t3.5\t1.5\t1\t0.25\t5\t2.25"
 
 
 # === billing: env-key ===

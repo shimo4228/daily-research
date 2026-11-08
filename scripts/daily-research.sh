@@ -73,6 +73,13 @@ CALL1_TOOLS="WebSearch,WebFetch,Read,Glob,Grep,Edit,Write"
 # num_turns 58・59 のまま success (原因は未特定)。なので num_turns との比で WARN は出さない
 CALL1_MAX_TURNS=55
 CALL2_TOOLS="Read,WebFetch,Edit,Write"
+# 呼3 (照合監査、ADR-0020) の 2 段の組み込みツール。ノートと根拠ファイルはタスクプロンプトに全文で入れるので
+# Read を持たない — allow は deny に例外を作れない (permission 規則は deny → ask → allow の順に評価) ので、
+# 「この 2 ファイルだけ Read を許す」を allow では書けない。書き込みの道具も持たない (置き換えは dr_pipeline
+# audit-apply が行う)。deny は DISALLOWED_TOOLS に Read・Glob・Grep・Edit・Write を足したもの (audit_call)
+AUDIT_TOOLS="WebFetch,WebSearch"
+AUDIT_STAGE1_MAX_TURNS=40
+AUDIT_STAGE2_MAX_TURNS=20
 # 無人 run で model に絶対に渡さないツールと読ませない場所 (呼1 / 呼2・全 line 共通)。
 # Bash 等の理由は ALLOWED_TOOLS の注記。Read deny は 2 つの穴を塞ぐ:
 # - safe mode で user の hook が外れる。episode-log ブロッカー (他 agent の生ログ = prompt injection の
@@ -162,7 +169,7 @@ if ! billing_load "$PROJECT_DIR/config.toml"; then
   exit 1
 fi
 if [ "$BILLING_MODE" = "api" ]; then
-  log "Billing: api (key from $BILLING_ENV_FILE; caps month \$$BILLING_MONTHLY_CAP / day \$$BILLING_DAILY_CAP / call1 \$$BILLING_CALL1_MAX / call2 \$$BILLING_CALL2_MAX)"
+  log "Billing: api (key from $BILLING_ENV_FILE; caps month \$$BILLING_MONTHLY_CAP / day \$$BILLING_DAILY_CAP / call1 \$$BILLING_CALL1_MAX / call2 \$$BILLING_CALL2_MAX / audit \$$BILLING_AUDIT_MAX / audit_confirm \$$BILLING_AUDIT_CONFIRM_MAX; line reserve \$$BILLING_RESERVE)"
 else
   log "Billing: subscription (Max plan OAuth)"
 fi
@@ -249,6 +256,120 @@ if ! EFFORT_TSV=$(python3 "$DR_PY" effort-config "$PROJECT_DIR/config.toml" 2>> 
 fi
 IFS=$'\t' read -r CALL1_EFFORT CALL2_EFFORT <<< "$EFFORT_TSV"
 log "Effort: call1 $CALL1_EFFORT (model opus), call2 $CALL2_EFFORT (model $VERIFY_MODEL) — passed as --effort"
+
+# 呼3 (照合監査、ADR-0020) の設定: [audit] enabled (既定 false) と model (既定 opus)。値の検証は起動時の
+# billing-config が済ませている (不正なら billing_load で止まる)。ここで読めなければ監査を切って続ける
+AUDIT_ENABLED="false"
+AUDIT_MODEL="opus"
+if _audit_cfg=$(python3 "$DR_PY" audit-config "$PROJECT_DIR/config.toml" 2>> "$LOG_FILE"); then
+  IFS=$'\t' read -r AUDIT_ENABLED AUDIT_MODEL <<< "$_audit_cfg"
+else
+  log "WARN: [audit] could not be read — the audit pass is off for this run"
+fi
+[ "$AUDIT_ENABLED" = "true" ] && log "Audit pass: on (model $AUDIT_MODEL, effort high, ADR-0020)"
+
+# 呼3 の 1 回の claude -p。AUDIT_JSON / AUDIT_CLASS に結果と classify_exit の分類を入れる。
+# $1 = 段 (audit | audit_confirm、budget_flags と台帳の call 名)、$2 = system prompt に足すプロトコル、
+# $3 = タスクプロンプト、$4 = --max-turns、$5 = 外側の timeout 秒。費用は台帳に記録する (JSON に費用が無ければ
+# その段の 1 回の上限額を見積もりとして)。認証・課金の失敗は呼2 と同じく残 line を止める
+audit_call() {
+  local stage=$1 protocol=$2 prompt=$3 max_turns=$4 limit=$5 code=0 cap
+  budget_flags "$stage"
+  AUDIT_JSON=$(CLAUDE_TIMEOUT="$limit" run_claude -p "$prompt" \
+    ${BUDGET_FLAGS[@]+"${BUDGET_FLAGS[@]}"} \
+    --safe-mode \
+    --tools "$AUDIT_TOOLS" \
+    --permission-mode default \
+    --append-system-prompt-file "$protocol" \
+    --allowedTools "$AUDIT_TOOLS" \
+    --disallowedTools "$DISALLOWED_TOOLS,Read,Glob,Grep,Edit,Write" \
+    --max-turns "$max_turns" \
+    --model "$AUDIT_MODEL" \
+    --effort high \
+    --output-format json \
+    --no-session-persistence \
+    2>> "$LOG_FILE") || code=$?
+  if [ -n "$AUDIT_JSON" ]; then
+    echo "$AUDIT_JSON" >> "$LOG_FILE"
+    if [ "$stage" = "audit" ]; then log_summary "$AUDIT_JSON" "Audit"; else log_summary "$AUDIT_JSON" "AuditConfirm"; fi
+  fi
+  if [ "$stage" = "audit" ]; then cap=$BILLING_AUDIT_MAX; else cap=$BILLING_AUDIT_CONFIRM_MAX; fi
+  billing_record "$AUDIT_JSON" "$TRACK" "$stage" "$cap"
+  AUDIT_CLASS=$(classify_exit "$code" "$AUDIT_JSON")
+  case "$AUDIT_CLASS" in
+    E_AUTH)
+      log "ERROR: audit pass returned an auth error — aborting remaining lines"
+      notify "Claude の認証エラー (呼3)。残りのラインを止めました。" "Daily Research Auth Error"
+      AUTH_ABORT=1 ;;
+    E_BILLING)
+      log "ERROR: audit pass hit a billing/rate-limit error — aborting remaining lines"
+      notify "Claude API の課金エラー (429 またはクレジット切れ)。残りのラインを止めました。" "Daily Research Billing Error"
+      BILLING_ABORT=1 ;;
+  esac
+}
+
+# === 呼3: 照合監査 (ADR-0020) — 呼2 の後の article 1 本 ===
+# 第 1 段 (prompts/audit-protocol.md) がノート本文の主張を原典で確かめ、原典と両立しない文を候補にする。第 2 段
+# (prompts/audit-confirm-protocol.md) が候補ごとに文・URL・公開日だけを見て独立に判定する (第 1 段の理由は渡さない)。
+# 両段が食い違いとした候補だけを dr_pipeline audit-apply が決定論で置き換える — モデルはノートを書かない
+# (規則・状態ファイルの形は dr_pipeline.py の「呼3」節)。どの段の失敗も fail-open: ノートは呼2 の後のまま、
+# AUDIT 行は ran=false で、run の成否は変えない。呼ぶ側は CLARITY_NOTE / TRACK / DATE / STATE_DIR を設定済みであること。
+audit_pass() {
+  local audit_path="$STATE_DIR/runs/${DATE}.audit.json" prompt cls="OK" ids out summary cid _aw _gate
+  local -a cids=()
+  log "=== Audit pass: $(basename "$CLARITY_NOTE") ==="
+  # 前回 run の状態を今回の結果と取り違えない (呼1 は runs/** を書けるので、同日の先行 invocation の残りも消す)
+  rm -f "$audit_path"
+  AUDIT_JSON=""
+  _gate=0
+  billing_gate "$BILLING_AUDIT_RESERVE" || _gate=$?
+  if [ "$_gate" -eq 1 ]; then
+    log "WARN: Line $TRACK audit pass skipped — API spend cap (month \$$SPEND_MONTH, day \$$SPEND_DAY, need \$$BILLING_AUDIT_RESERVE)"
+    cls="E_BUDGET_GATE"
+  elif [ "$_gate" -ne 0 ]; then
+    log "WARN: Line $TRACK audit pass skipped — the API spend gate could not check the caps (the reason is the ERROR line above)"
+    cls="E_BUDGET_GATE"
+  elif ! prompt=$(python3 "$DR_PY" audit-prompt "$CLARITY_NOTE" "$STATE_DIR/runs/${DATE}.md" "$DATE" 2>> "$LOG_FILE"); then
+    cls="E_PROMPT"
+  else
+    audit_call audit "$PROJECT_DIR/prompts/audit-protocol.md" "$prompt" "$AUDIT_STAGE1_MAX_TURNS" 600
+    cls=$AUDIT_CLASS
+  fi
+  ids=$(printf '%s' "$AUDIT_JSON" | python3 "$DR_PY" audit-stage1 "$audit_path" "$DATE" "$cls" 2>> "$LOG_FILE") || ids=""
+  [ "$cls" = "OK" ] || log "WARN: Line $TRACK audit stage 1 did not run or failed ($cls) — note stays as after call 2 (fail-open)"
+  while IFS= read -r cid; do
+    [ -n "$cid" ] && cids+=("$cid")
+  done <<< "$ids"
+  for cid in ${cids[@]+"${cids[@]}"}; do
+    if [ "$AUTH_ABORT" = "1" ] || [ "$BILLING_ABORT" = "1" ]; then
+      break
+    fi
+    _gate=0
+    billing_gate "$BILLING_AUDIT_CONFIRM_MAX" || _gate=$?
+    if [ "$_gate" -eq 1 ]; then
+      log "WARN: Line $TRACK audit stage 2 stopped — API spend cap (day \$$SPEND_DAY)"
+      break
+    elif [ "$_gate" -ne 0 ]; then
+      log "WARN: Line $TRACK audit stage 2 stopped — the API spend gate could not check the caps (the reason is the ERROR line above)"
+      break
+    fi
+    prompt=$(python3 "$DR_PY" audit-confirm-prompt "$audit_path" "$cid" 2>> "$LOG_FILE") || continue
+    audit_call audit_confirm "$PROJECT_DIR/prompts/audit-confirm-protocol.md" "$prompt" "$AUDIT_STAGE2_MAX_TURNS" 240
+    printf '%s' "$AUDIT_JSON" | python3 "$DR_PY" audit-confirm-record "$audit_path" "$cid" "$AUDIT_CLASS" 2>> "$LOG_FILE" \
+      || log "WARN: Line $TRACK audit stage 2 result for $cid could not be recorded"
+  done
+  # 出力の 1 行目が AUDIT 行の JSON、2 行目以降が WARN の本文 (verify-diff と同じ形)
+  out=$(python3 "$DR_PY" audit-apply "$audit_path" "$CLARITY_NOTE" "$STATE_DIR/pre-audit/${DATE}.md" 2>> "$LOG_FILE") || out=""
+  summary=${out%%$'\n'*}
+  [ -n "$summary" ] || summary='{"ran": false, "reason": "apply_failed"}'
+  log "AUDIT $TRACK: $summary"
+  METRICS_STDIN+="AUDIT"$'\t'"$summary"$'\n'
+  if [ -n "$out" ] && [ "$out" != "$summary" ]; then
+    while IFS= read -r _aw; do
+      [ -n "$_aw" ] && log "WARN: Line $TRACK audit pass: $_aw"
+    done <<< "${out#*$'\n'}"
+  fi
+}
 
 # === Per-repo line 実行 (ADR-0008 / 出力形式は ADR-0009 / 輪番は ADR-0010・ADR-0017) ===
 # rotation (ADR-0017): 毎朝、config.toml の line 群から当日担当 line 群を決定論選択
@@ -337,7 +458,8 @@ fi
 
 FAILED_LINES=""       # ctl-015 (receipt gate) に落ちた line (空 = 全 line 成功)
 OK_LINES=""
-# metrics-append へ渡す EFFORT / RUN / CLARITY / STATE / EVENT / VERIFY / VDIFF 行の蓄積 (1 日 1 レコード)
+# metrics-append へ渡す EFFORT / RUN / CLARITY / STATE / EVENT / VERIFY / VDIFF / CSCAN / AUDIT 行の蓄積
+# (1 日 1 レコード)
 METRICS_STDIN="EFFORT"$'\t'"$CALL1_EFFORT"$'\t'"$CALL2_EFFORT"$'\n'
 AUTH_ABORT=0          # 401 検出 — 残 line は中断するが、完走済み line の集計は捨てない
 BILLING_ABORT=0       # 429 / クレジット切れ — 同上 (再試行で踏み抜かない、harness の rules: boundary.md)
@@ -355,7 +477,8 @@ for ROW in "${TRACK_ROWS[@]}"; do
 
 IFS=$'\t' read -r TRACK _ TARGET_REPO <<< "$ROW"
 
-# API 支出の上限 (lib/billing.sh): 月・日の残額が 呼1 + 呼2 の 1 回上限に満たなければ、
+# API 支出の上限 (lib/billing.sh): 月・日の残額が 1 line の予約額 (呼1 + 呼2 の 1 回上限、[audit] enabled なら
+# 呼3 の 2 段の分も — billing-config の line_reserve) に満たなければ、
 # この line から先を始めない。各呼び出しは --max-budget-usd で抑えるので、超過は最後の
 # 1 turn 分に収まる。subscription mode では常に通る。
 GATE_RC=0
@@ -893,6 +1016,19 @@ $CLARITY_HINTS}"
   fi
 fi
 
+# 呼3 (照合監査、ADR-0020): [audit] enabled のとき、呼2 の後のノートのうち kind: article だけ (brief は対象外)。
+# 呼2 が失敗した (未検証の) ノートも監査する。認証・課金の失敗の直後は走らせない
+if [ -n "$CLARITY_NOTE" ] && [ "$AUDIT_ENABLED" = "true" ]; then
+  NOTE_KIND=$(python3 "$DR_PY" note-kind "$CLARITY_NOTE" 2>> "$LOG_FILE") || NOTE_KIND=""
+  if [ "$AUTH_ABORT" = "1" ] || [ "$BILLING_ABORT" = "1" ]; then
+    log "WARN: Line $TRACK audit pass skipped after an auth/billing error"
+  elif [ "$NOTE_KIND" != "article" ]; then
+    log "Line $TRACK audit pass skipped (kind: ${NOTE_KIND:-unreadable}, only article is audited)"
+  else
+    audit_pass
+  fi
+fi
+
 # 認証・課金の失敗の後は残 line を実行しない (同じ失敗を繰り返すだけ)。
 # ここまでに完走した line の集計・lint・ingest は下流で通常どおり行う。
 if [ "$AUTH_ABORT" = "1" ] || [ "$BILLING_ABORT" = "1" ]; then
@@ -1041,7 +1177,8 @@ fi
 # === 自己改善ループの計測 (ADR-0006): run 記録の永続化 + review リマインダー ===
 # logs/ は 30 日ローテーションで消えるため、metrics.jsonl (gitignore) に恒久保存する。
 # 収集は non-fatal — 計測の失敗で生成ジョブの成否を変えない。
-# stdin framing は "LABEL\t[meta\t]payload" で統一 (EFFORT / RUN / LINT / CLARITY / STATE / EVENT / VERIFY / VDIFF / CSCAN)。
+# stdin framing は "LABEL\t[meta\t]payload" で統一 (EFFORT / RUN / LINT / CLARITY / STATE / EVENT / VERIFY /
+# VDIFF / CSCAN / AUDIT)。
 # dr_pipeline 側がラベルで判別し pass2 等に写像する (レコード形は旧来互換 —
 # expect-check / /dr-review が消費)。1 日複数 line の RUN / CLARITY / STATE / VERIFY は
 # METRICS_STDIN に蓄積済みで、dr_pipeline が 1 レコードへ合算する。
