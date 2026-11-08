@@ -830,6 +830,7 @@ EOF
 
   echo "$log_content" | grep -q "config.toml schema check failed"
   [ ! -f "$MOCK_HOME/.prompt_authorship" ]
+  notified "config.toml の設定に誤りがあります"
 }
 
 @test "E2E: repos written as a single table stops before any line run instead of dropping the line" {
@@ -847,6 +848,10 @@ EOF
   echo "$log_content" | grep -qF '[tracks.akc].repos must be an array of tables ([[tracks.akc.repos]])'
   [ ! -f "$MOCK_HOME/.prompt_authorship" ]
   [ ! -f "$MOCK_HOME/.prompt_akc" ]
+  # 旧 schema 以外の誤りでも、通知と log の案内は「旧 schema」と決めつけない (理由は log の直前の行)
+  notified "config.toml の設定に誤りがあります"
+  refute_grep -qF "旧 schema" "$MOCK_HOME/.notify_log"
+  refute_grep -qF "legacy schema?" <<< "$log_content"
 }
 
 # === Test: Absolute path resolution ===

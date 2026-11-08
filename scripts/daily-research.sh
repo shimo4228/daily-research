@@ -167,10 +167,12 @@ fi
 billing_record "$AUTH_PROBE_JSON" "_probe" "probe"
 log "Auth probe passed"
 
-# === config schema チェック (旧 schema fail-fast, ADR-0004/0008) ===
+# === config schema チェック (fail-fast, ADR-0004/0008) ===
+# 旧 schema・line 定義の型違反 (daily / template / mode / repos) は dr_pipeline._load_tracks が
+# ValueError にし、その理由は stderr から下の ERROR 行の直前に log される。通知は誤りの種類を決めつけない。
 if ! python3 "$DR_PY" tracks "$PROJECT_DIR/config.toml" > /dev/null 2>> "$LOG_FILE"; then
-  log "ERROR: config.toml schema check failed (legacy schema? migrate per config.example.toml / ADR-0004)"
-  notify "config.toml が旧 schema のままです。config.example.toml を参照して移行してください" "Daily Research Error"
+  log "ERROR: config.toml schema check failed (the reason is on the line above; see config.example.toml)"
+  notify "config.toml の設定に誤りがあります。理由は log、書き方は config.example.toml を見てください" "Daily Research Error"
   exit 1
 fi
 log "Config schema check passed"
