@@ -14,8 +14,9 @@
 # 隔離の契約:
 # - run ごとに <out>/sandbox/project を PROJECT_DIR にする。daily-research.sh は自分の位置から
 #   PROJECT_DIR を導くので、lock・logs・state・metrics・past_topics はすべて写しの側に閉じる
-# - config.toml は写しで [billing] mode = "subscription"、[general] vault_path = <out>/sandbox/vault
-#   (lib/sandbox_lib.py rewrite-config が他の値の一致を検査する)。実行前に billing-config で再検査する
+# - config.toml は写しで [billing] mode = "subscription"、env_file = <out>/sandbox/no-api-key/env (存在しない)、
+#   [general] vault_path = <out>/sandbox/vault (scripts/dev/sandbox_lib.py rewrite-config が他の値の一致を
+#   検査する)。実行前に billing-config で再検査する
 # - 実行環境は env -i で HOME / USER / LOGNAME / LANG / TMPDIR / PATH と試験 seam だけ (ANTHROPIC_* と
 #   CLAUDE* を持ち込まない)。osascript は shim が受けて <out>/notifications.log に残す
 # - 実行前に、本番の呼1 / 呼2 / auth probe と同じ cwd・flag で claude を起動し、stream-json の init event で
@@ -131,7 +132,11 @@ fi
 DR_PY="$PROJ/scripts/lib/dr_pipeline.py"
 
 # === 私的ファイルを MAIN から写す ===
-"$PY" "$SANDBOX_PY" rewrite-config "$MAIN/config.toml" "$PROJ/config.toml" "$VAULT" \
+# env_file は存在しない path に向ける (本物の key file に届く経路を残さない)。置き場は専用の subdir:
+# daily-research.sh は env_file の dir 全体に Read deny を置くので、$SANDBOX 直下だと project と vault の
+# Read まで塞がる。dir は作らない
+NO_KEY_ENV="$SANDBOX/no-api-key/env"
+"$PY" "$SANDBOX_PY" rewrite-config "$MAIN/config.toml" "$PROJ/config.toml" "$VAULT" "$NO_KEY_ENV" \
   || die "config rewrite failed"
 if [ -f "$MAIN/past_topics.json" ]; then
   cp "$MAIN/past_topics.json" "$PROJ/past_topics.json"
@@ -154,6 +159,9 @@ LINE_ROW=$(printf '%s\n' "$TRACKS_TSV" | awk -F'\t' -v l="$LINE" '$1 == l { prin
 [ -n "$LINE_ROW" ] || die "line $LINE is not in config.toml"
 BILLING_TSV=$("$PY" "$DR_PY" billing-config "$PROJ/config.toml") || die "billing-config rejected the copied config"
 [ "${BILLING_TSV%%$'\t'*}" = "subscription" ] || die "copied config is not subscription mode (${BILLING_TSV%%$'\t'*}) — refusing to run"
+_env_file=${BILLING_TSV#*$'\t'}; _env_file=${_env_file%%$'\t'*}
+[ "$_env_file" = "$NO_KEY_ENV" ] || die "copied config's env_file is $_env_file, not the sandbox placeholder"
+[ ! -e "$NO_KEY_ENV" ] || die "the env_file placeholder exists: $NO_KEY_ENV"
 REPORT_DIR=$("$PY" "$DR_PY" report-dir "$PROJ/config.toml")
 case "$REPORT_DIR" in "$VAULT"/*) ;; *) die "report dir is outside the sandbox vault: $REPORT_DIR" ;; esac
 mkdir -p "$REPORT_DIR"

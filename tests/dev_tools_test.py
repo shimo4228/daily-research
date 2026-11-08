@@ -48,24 +48,31 @@ target_repo = "/repos/akc"
 # === rewrite-config ===
 
 
+NO_KEY = "/sandbox/no-api-key/env"
+
+
 @pytest.mark.unit
-def test_rewrite_config_changes_only_billing_mode_and_vault():
-    out = tomllib.loads(sandbox_lib.rewrite_config_text(CONFIG, "/sandbox/vault"))
+def test_rewrite_config_changes_only_billing_mode_env_file_and_vault():
+    out = tomllib.loads(sandbox_lib.rewrite_config_text(CONFIG, "/sandbox/vault", NO_KEY))
     before = tomllib.loads(CONFIG)
     assert out["billing"]["mode"] == "subscription"
+    # 本物の key file (~/.config/x/env) を指したままにしない
+    assert out["billing"]["env_file"] == NO_KEY
     assert out["general"]["vault_path"] == "/sandbox/vault"
     # 他 section の同名キー (tracks.wide.mode) は触らない
     assert out["tracks"]["wide"]["mode"] == "ecosystem"
     before["billing"]["mode"] = "subscription"
+    before["billing"]["env_file"] = NO_KEY
     before["general"]["vault_path"] = "/sandbox/vault"
     assert out == before
 
 
 @pytest.mark.unit
 def test_rewrite_config_adds_missing_billing_section_and_vault_key():
+    """env_file が無い config にも書く (既定値 ~/.config/daily-research/env が本物を指しうる)。"""
     text = '[general]\noutput_dir = "d"\n\n[tracks.a]\nname = "A"\n'
-    out = tomllib.loads(sandbox_lib.rewrite_config_text(text, "/v"))
-    assert out["billing"] == {"mode": "subscription"}
+    out = tomllib.loads(sandbox_lib.rewrite_config_text(text, "/v", NO_KEY))
+    assert out["billing"] == {"mode": "subscription", "env_file": NO_KEY}
     assert out["general"] == {"vault_path": "/v", "output_dir": "d"}
     assert out["tracks"]["a"]["name"] == "A"
 
@@ -73,7 +80,7 @@ def test_rewrite_config_adds_missing_billing_section_and_vault_key():
 @pytest.mark.unit
 def test_rewrite_config_escapes_awkward_vault_paths():
     path = '/tmp/My "Vault" \\ 日本語'
-    out = tomllib.loads(sandbox_lib.rewrite_config_text(CONFIG, path))
+    out = tomllib.loads(sandbox_lib.rewrite_config_text(CONFIG, path, NO_KEY))
     assert out["general"]["vault_path"] == path
 
 
@@ -81,7 +88,16 @@ def test_rewrite_config_escapes_awkward_vault_paths():
 def test_rewrite_config_refuses_a_multiline_value_it_cannot_replace():
     text = '[billing]\nmode = """\napi"""\n'
     with pytest.raises((ValueError, tomllib.TOMLDecodeError)):
-        sandbox_lib.rewrite_config_text(text, "/v")
+        sandbox_lib.rewrite_config_text(text, "/v", NO_KEY)
+
+
+@pytest.mark.unit
+def test_rewrite_config_cli_refuses_an_env_file_that_exists(tmp_path):
+    src, dst, key = tmp_path / "c.toml", tmp_path / "d.toml", tmp_path / "env"
+    src.write_text(CONFIG, encoding="utf-8")
+    key.write_text("x\n", encoding="utf-8")
+    assert sandbox_lib.cmd_rewrite_config([str(src), str(dst), "/v", str(key)]) == 1
+    assert not dst.exists()
 
 
 @pytest.mark.unit

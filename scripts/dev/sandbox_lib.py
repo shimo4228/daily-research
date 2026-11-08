@@ -4,8 +4,9 @@
 sandbox-run.sh は本番の scripts/daily-research.sh を、run ごとに作る PROJECT_DIR と隔離 vault の中で
 1 line だけ回す。この module はその前後の、shell で書くと壊れやすい部分を持つ:
 
-- rewrite-config: MAIN の config.toml を写し、[billing] mode と [general] vault_path だけを書き換える。
-  書き換え後を tomllib で読み直し、その 2 値以外が元と一致することを検査する (一致しなければ書かない)
+- rewrite-config: MAIN の config.toml を写し、[billing] mode・env_file と [general] vault_path だけを
+  書き換える。書き換え後を tomllib で読み直し、その 3 値以外が元と一致することを検査する (一致しなければ
+  書かない)
 - line-history: past_topics.json から 1 line 分 (aliases を含む) の履歴を抜き出す (eval の重複判定用)
 - auth-probe: claude -p --output-format stream-json を起動し、init event の apiKeySource を読んだ時点で
   止める ("none" = OAuth = サブスク。key の経路なら "ANTHROPIC_API_KEY" 等)。timeout 付き
@@ -70,34 +71,45 @@ def _set_key(lines, section, key, value_literal):
     return out
 
 
-def rewrite_config_text(text, vault_path):
-    """config.toml の本文を、billing.mode = subscription / general.vault_path = vault_path に
-    書き換えた本文を返す。他の値は保つ。検査に落ちたら ValueError。"""
+def rewrite_config_text(text, vault_path, env_file):
+    """config.toml の本文を、billing.mode = subscription / billing.env_file = env_file /
+    general.vault_path = vault_path に書き換えた本文を返す。他の値は保つ。検査に落ちたら ValueError。
+    env_file は存在しない path を渡す: 試すコードの billing.sh が mode を無視して key を読む退行を
+    しても、本物の key file に届かない (既定値 ~/.config/daily-research/env も本物を指しうるので、
+    元の config に env_file が無くても書く)。"""
     original = tomllib.loads(text)
     lines = text.splitlines()
     lines = _set_key(lines, "billing", "mode", _toml_str(BILLING_SUBSCRIPTION))
+    lines = _set_key(lines, "billing", "env_file", _toml_str(env_file))
     lines = _set_key(lines, "general", "vault_path", _toml_str(vault_path))
     new_text = "\n".join(lines) + "\n"
     rewritten = tomllib.loads(new_text)
     expected = json.loads(json.dumps(original))
     expected.setdefault("billing", {})["mode"] = BILLING_SUBSCRIPTION
+    expected["billing"]["env_file"] = env_file
     expected.setdefault("general", {})["vault_path"] = vault_path
     if json.loads(json.dumps(rewritten)) != expected:
         raise ValueError(
-            "rewritten config differs from the original beyond billing.mode / vault_path"
+            "rewritten config differs from the original beyond billing.mode / env_file / vault_path"
         )
     return new_text
 
 
 def cmd_rewrite_config(argv):
-    if len(argv) != 3:
-        print("usage: rewrite-config <src_config> <dst_config> <vault_path>", file=sys.stderr)
+    if len(argv) != 4:
+        print(
+            "usage: rewrite-config <src_config> <dst_config> <vault_path> <env_file>",
+            file=sys.stderr,
+        )
         return 64
-    src, dst, vault = argv
+    src, dst, vault, env_file = argv
+    if os.path.exists(env_file):
+        print(f"rewrite-config: env_file must not exist: {env_file}", file=sys.stderr)
+        return 1
     with open(src, encoding="utf-8") as f:
         text = f.read()
     try:
-        new_text = rewrite_config_text(text, vault)
+        new_text = rewrite_config_text(text, vault, env_file)
     except (ValueError, tomllib.TOMLDecodeError) as e:
         print(f"rewrite-config: {e}", file=sys.stderr)
         return 1

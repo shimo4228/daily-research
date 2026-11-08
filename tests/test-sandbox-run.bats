@@ -115,6 +115,10 @@ run_sandbox() {
   [ "$status" -eq 0 ]
   grep -q '^mode = "subscription"' "$OUT/sandbox/project/config.toml"
   grep -q "^vault_path = \"$(cd "$OUT" && pwd -P)/sandbox/vault\"" "$OUT/sandbox/project/config.toml"
+  # env_file は sandbox の専用 subdir の存在しない path (本物の key file を指さない)
+  grep -q "^env_file = \"$(cd "$OUT" && pwd -P)/sandbox/no-api-key/env\"" "$OUT/sandbox/project/config.toml"
+  refute_grep -q "no-such-env" "$OUT/sandbox/project/config.toml"
+  [ ! -e "$OUT/sandbox/no-api-key" ]
   # 成果物: 最終版のノートと呼1 の原稿 (呼2 の改稿を含まない)
   [ -f "$OUT/2026-08-13_demo_mock-note.md" ]
   grep -q "呼2 の改稿" "$OUT/2026-08-13_demo_mock-note.md"
