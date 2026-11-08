@@ -16,3 +16,17 @@ refute_grep() {
     return 1
   fi
 }
+
+# 使い捨て repo で git に書き込む test の前に呼ぶ。呼び出し元の GIT_* (git hook と `git rebase --exec` は
+# GIT_DIR を export する) を落とす — 残ると git init / config / commit が使い捨て repo でなく実 repo の .git に
+# 当たる (2026-11-08 に共有の .git/config へ core.bare = true が書かれた)。運用者の global / system 設定
+# (hooksPath・署名) からも切り離す。
+isolate_git_env() {
+  local v
+  while IFS= read -r v; do
+    case "$v" in
+      GIT_*) unset "$v" ;;
+    esac
+  done < <(compgen -e)
+  export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+}

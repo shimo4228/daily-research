@@ -1545,6 +1545,7 @@ EOF
   echo "normal" > "$MOCK_HOME/.mock_scenario"
   add_ecosystem_daily_line
   local repo="$MOCK_HOME/mock-repos/authorship-strategy"
+  isolate_git_env
   git -C "$repo" init -q
   git -C "$repo" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m "# feat: mock activity subject"
 

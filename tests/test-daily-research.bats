@@ -285,7 +285,7 @@ skip_unless_private() {
 # 使い捨て repo で /bin/bash (macOS 3.2、hook の実行形) から hook を走らせる。git は運用者の
 # global / system 設定から切り離し、fixture の commit は hook を通さない。
 precommit_repo() {
-  export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+  isolate_git_env
   mkdir -p "$TEST_TMPDIR/repo"
   cd "$TEST_TMPDIR/repo"
   git init -q .
