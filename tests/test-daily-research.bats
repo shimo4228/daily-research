@@ -355,6 +355,15 @@ precommit_fixture_commit() {
   grep -q 'trap release_lock EXIT' "$SCRIPT"
 }
 
+@test "pending.md baseline is reset at each line start, before the cwd check (H02)" {
+  # cwd が無く skip された line の PENDING_BEFORE が前の line の値のまま、同日の古い receipt で
+  # ゲートを通ると、別 line の項目数と比べた log / WARN が出る
+  local reset cwd_check
+  reset=$(grep -nE '^PENDING_BEFORE=""( |$)' "$SCRIPT" | cut -d: -f1)
+  cwd_check=$(grep -n '^if \[ ! -d "\$LINE_CWD" \]; then$' "$SCRIPT" | cut -d: -f1)
+  [ -n "$reset" ] && [ -n "$cwd_check" ] && [ "$reset" -lt "$cwd_check" ]
+}
+
 @test "max-turns is configured" {
   grep -q '\-\-max-turns' "$SCRIPT"
   # 呼1 の上限は 1 つの変数が flag と WARN (turns-near-cap) の両方に効く (H14)

@@ -373,6 +373,7 @@ per-repo リサーチ・プロトコルに厳密に従って実行してくだ�
 fi
 
 LINE_JSON=""
+PENDING_BEFORE=""     # pending-stats の呼1 前の値 (cwd が無い line は測らない — 前の line の値を持ち越さない)
 if [ ! -d "$LINE_CWD" ]; then
   log "WARN: $LINE_CWD_MISSING: $LINE_CWD — line $TRACK を skip"
 else
