@@ -225,8 +225,12 @@ def test_spend_gate_row_without_cost_is_unreadable(monkeypatch, capsys, tmp_path
         ('{"date": "", "cost_usd": 50}', "date is not YYYY-MM-DD"),
         ('{"date": 20261102, "cost_usd": 50}', "date is not YYYY-MM-DD"),
         ('{"date": "2026/11/02", "cost_usd": 50}', "date is not YYYY-MM-DD"),
+        # \d は Unicode 数字にも一致する。全角・アラビア数字の date は月の接頭 (ASCII) と一致せず、
+        # 検査を通したうえで累計から外れていた
+        ('{"date": "２０２６-１１-０２", "cost_usd": 50}', "date is not YYYY-MM-DD"),
+        ('{"date": "٢٠٢٦-١١-٠٢", "cost_usd": 50}', "date is not YYYY-MM-DD"),
     ],
-    ids=["missing", "null", "empty", "int", "slashes"],
+    ids=["missing", "null", "empty", "int", "slashes", "fullwidth-digits", "arabic-indic-digits"],
 )
 def test_spend_gate_row_without_usable_date_is_unreadable(
     monkeypatch, capsys, tmp_path, row, reason

@@ -1853,7 +1853,9 @@ def cmd_env_key(argv: list[str]) -> int:
     return 0
 
 
-_LEDGER_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")  # 台帳の date (spend-add が書く形)
+# 台帳の date (spend-add が書く形)。[0-9] は ASCII 限定 — \d は全角・アラビア数字にも一致し、
+# 月の接頭 (ASCII の DATE) と比べて累計から外れる date を通してしまう
+_LEDGER_DATE_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 
 def _spend_totals(ledger: str, date_s: str) -> tuple[float, float, list[str]]:
