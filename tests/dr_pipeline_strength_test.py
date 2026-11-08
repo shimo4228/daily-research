@@ -894,8 +894,9 @@ def test_tracks_ecosystem_line_before_repo_lines_keeps_all_rows(monkeypatch, cap
 
 
 @pytest.mark.unit
-def test_tracks_half_specified_repo_entry_is_not_a_row(monkeypatch, capsys, tmp_path):
-    # key と target_repo の片方しか無い entry は行にしない ("None" を target_repo にしない)
+def test_tracks_half_specified_repo_entry_is_a_config_error(monkeypatch, capsys, tmp_path):
+    # key と target_repo の片方しか無い entry は行にも "None" の target_repo にもせず、config の
+    # 誤りとして rc 1 (黙って捨てると line の repo が輪番から消える)。最初の欠けた entry を名指す
     cfg = _write(
         tmp_path,
         "c.toml",
@@ -903,9 +904,12 @@ def test_tracks_half_specified_repo_entry_is_not_a_row(monkeypatch, capsys, tmp_
         '[[tracks.a.repos]]\ntarget_repo = "/r/x"\n'
         '[[tracks.a.repos]]\nkey = "a2"\ntarget_repo = "/r/a2"\n',
     )
-    rc, out, _ = run_cmd(monkeypatch, capsys, ["tracks", cfg])
-    assert rc == 0
-    assert out == "a\ta2\t/r/a2\n"
+    rc, out, err = run_cmd(monkeypatch, capsys, ["tracks", cfg])
+    assert rc == 1
+    assert out == ""
+    assert err == (
+        "[[tracks.a.repos]] entry 1 must set target_repo to a non-empty string, got None\n"
+    )
 
 
 @pytest.mark.unit

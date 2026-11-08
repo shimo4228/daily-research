@@ -998,6 +998,60 @@ def test_track_name_must_be_path_safe(monkeypatch, capsys, tmp_path):
     assert "track name" in err
 
 
+# 正しく書いた line b を後ろに置く: 壊れた line a だけが黙って消え、b だけで rc 0 になるのが bug の形
+_GOOD_LINE_B = '[tracks.b]\nname = "B"\n[[tracks.b.repos]]\nkey = "b"\ntarget_repo = "/r/b"\n'
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("sub", [["tracks"], ["rotation-pick", "2026-11-02"]], ids=lambda s: s[0])
+def test_repos_written_as_single_table_errors(monkeypatch, capsys, tmp_path, sub):
+    # [[ ]] を [ ] と書き損じると repos は list でなく dict。輪番から line a が黙って消えていた
+    cfg = tmp_path / "single-table.toml"
+    cfg.write_text(
+        '[tracks.a]\nname = "A"\n[tracks.a.repos]\nkey = "a"\ntarget_repo = "/r/a"\n' + _GOOD_LINE_B
+    )
+    rc, out, err = run_cmd(monkeypatch, capsys, [sub[0], str(cfg), *sub[1:]])
+    assert rc == 1
+    assert out == ""
+    assert "[tracks.a].repos must be an array of tables ([[tracks.a.repos]])" in err
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "entry,missing",
+    [
+        ('key = "a"', "target_repo"),
+        ('target_repo = "/r/a"', "key"),
+        ('key = ""\ntarget_repo = "/r/a"', "key"),
+        ('key = "a"\ntarget_repo = 3', "target_repo"),
+    ],
+    ids=["no-target_repo", "no-key", "empty-key", "non-string-target_repo"],
+)
+def test_repos_entry_without_key_or_target_repo_errors(
+    monkeypatch, capsys, tmp_path, entry, missing
+):
+    # 2 つ目の entry が欠けている。1 つ目は正しいので、捨てても line a は残るが repo が 1 つ消える
+    cfg = tmp_path / "bad-entry.toml"
+    cfg.write_text(
+        '[tracks.a]\nname = "A"\n'
+        '[[tracks.a.repos]]\nkey = "a0"\ntarget_repo = "/r/a0"\n'
+        f"[[tracks.a.repos]]\n{entry}\n" + _GOOD_LINE_B
+    )
+    rc, out, err = run_cmd(monkeypatch, capsys, ["rotation-pick", str(cfg), "2026-11-02"])
+    assert rc == 1
+    assert out == ""
+    assert f"[[tracks.a.repos]] entry 2 must set {missing} to a non-empty string" in err
+
+
+@pytest.mark.unit
+def test_repos_entry_that_is_not_a_table_errors(monkeypatch, capsys, tmp_path):
+    cfg = tmp_path / "bad-entry.toml"
+    cfg.write_text('[tracks.a]\nname = "A"\nrepos = ["/r/a"]\n' + _GOOD_LINE_B)
+    rc, _, err = run_cmd(monkeypatch, capsys, ["tracks", str(cfg)])
+    assert rc == 1
+    assert "[[tracks.a.repos]] entry 1 must be a table" in err
+
+
 # --- line-brief: context_files は選定後の候補として別節 ---
 
 

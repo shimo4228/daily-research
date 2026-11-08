@@ -802,6 +802,23 @@ EOF
   [ ! -f "$MOCK_HOME/.prompt_authorship" ]
 }
 
+@test "E2E: repos written as a single table stops before any line run instead of dropping the line" {
+  # [[tracks.akc.repos]] を [tracks.akc.repos] と書き損じた config。以前は akc が輪番から黙って消え、
+  # authorship だけで rc 0 の朝になっていた
+  sed -i '' 's/^\[\[tracks\.akc\.repos\]\]$/[tracks.akc.repos]/' "$MOCK_PROJECT/config.toml"
+  grep -q '^\[tracks\.akc\.repos\]$' "$MOCK_PROJECT/config.toml"
+
+  run run_script
+  [ "$status" -ne 0 ]
+
+  local log_content
+  log_content=$(get_log)
+  echo "$log_content" | grep -q "config.toml schema check failed"
+  echo "$log_content" | grep -qF '[tracks.akc].repos must be an array of tables ([[tracks.akc.repos]])'
+  [ ! -f "$MOCK_HOME/.prompt_authorship" ]
+  [ ! -f "$MOCK_HOME/.prompt_akc" ]
+}
+
 # === Test: Absolute path resolution ===
 
 @test "E2E: CLAUDE_CMD resolves to absolute path in .claude/local" {

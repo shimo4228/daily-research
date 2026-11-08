@@ -101,14 +101,36 @@ def _load_tracks(config_path: str) -> tuple[dict[str, object], dict[str, object]
                             f'[tracks.{name}] has mode = "ecosystem" and must not set '
                             f"{key} (an ecosystem line has no target repo context)"
                         )
+        # repos は array of tables 限定。[[ ]] を [ ] と書き損じると dict になり、key /
+        # target_repo の欠けた entry と同じく、その line (の repo) が rc 0 のまま輪番から
+        # 黙って消える。どちらも起動時に落とす。
+        if isinstance(v, dict) and "repos" in v:
+            repos = v["repos"]
+            if not isinstance(repos, list):
+                raise ValueError(
+                    f"[tracks.{name}].repos must be an array of tables ([[tracks.{name}.repos]]), "
+                    f"got a {type(repos).__name__}"
+                )
+            for i, r in enumerate(repos, 1):
+                if not isinstance(r, dict):
+                    raise ValueError(
+                        f"[[tracks.{name}.repos]] entry {i} must be a table, got {r!r}"
+                    )
+                for key in ("key", "target_repo"):
+                    if not isinstance(r.get(key), str) or not r[key]:
+                        raise ValueError(
+                            f"[[tracks.{name}.repos]] entry {i} must set {key} to a non-empty "
+                            f"string, got {r.get(key)!r}"
+                        )
     return cfg, tracks
 
 
-def _track_repos(track_cfg: dict[str, object]) -> list[object]:
+def _track_repos(track_cfg: dict[str, object]) -> list[dict[str, str]]:
     """line 定義の repos 配列を返す。無ければ []。repo mode で repos が空の line は
-    行を出さない (実行されない)。repo を持たない line は mode = "ecosystem" で宣言する。"""
-    repos = track_cfg.get("repos", [])
-    return repos if isinstance(repos, list) else []
+    行を出さない (実行されない)。repo を持たない line は mode = "ecosystem" で宣言する。
+    invariant: 型 (array of tables) と各 entry の key / target_repo (空でない文字列) は
+    _load_tracks が検証済み — 違反は ValueError で、ここには届かない。"""
+    return track_cfg.get("repos", [])
 
 
 def _track_rows(tracks: dict[str, object]) -> list[tuple[str, object, object, bool]]:
@@ -125,10 +147,7 @@ def _track_rows(tracks: dict[str, object]) -> list[tuple[str, object, object, bo
             rows.append((track, track, "", daily))
             continue
         for r in _track_repos(v):
-            key = r.get("key")
-            repo = r.get("target_repo")
-            if key and repo:
-                rows.append((track, key, repo, daily))
+            rows.append((track, r["key"], r["target_repo"], daily))
     return rows
 
 
