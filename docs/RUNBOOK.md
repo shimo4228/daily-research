@@ -61,7 +61,8 @@ daily-research.sh (05:00)
 ├── Lock acquisition (atomic mkdir)
 ├── Billing setup ([billing]: api = ANTHROPIC_API_KEY from env_file, subscription = OAuth)
 ├── Auth probe (one real Haiku call on that billing path, with --safe-mode like both calls)
-├── Config schema check (legacy pre-ADR-0008 schema fails fast)
+├── Config schema check (`dr_pipeline.py tracks`: the legacy pre-ADR-0008 schema and malformed line
+│   definitions — e.g. `repos` written as a single table, or an entry without `key` / `target_repo` — fail fast)
 ├── rotation-pick — deterministic selection of today's lines: a rotation window
 │   (start = date.toordinal() × K mod N, then K consecutive lines, K = [general]
 │   lines_per_day — proleptic Gregorian ordinal, ADR-0010 / ADR-0017) + every `daily = true` line (ADR-0011)
@@ -72,18 +73,22 @@ daily-research.sh (05:00)
 │   [mode = "ecosystem" lines have no target_repo: cwd = state/<line>,
 │    prompts/ecosystem-research-protocol.md — ADR-0018; every line runs with --safe-mode — ADR-0019]
 │   ├── Read a short context (line brief + state/<line>/brief.md + question history + pending.md)
-│   ├── Diff-first pass over watched sources + wide search · pick one of 3–6 candidate
-│   │   questions (or quiet / hold) · read context_files after the pick · research with
-│   │   citation gate · evidence file runs/{date}.md
+│   ├── Wide search (an ecosystem line first checks its watched-sources.md watchlist) · pick one
+│   │   of 3–6 candidate questions (or quiet / hold) · read context_files after the pick ·
+│   │   research with citation gate · evidence file runs/{date}.md
 │   ├── Write explanatory note (no fixed headings; article ≤ 3,000 chars / brief 300–600)
 │   │   → vault (nothing is written on a quiet / hold day)
-│   └── Write the run receipt runs/{date}.json right after the note · update state + past_topics.json
+│   └── Write the run receipt runs/{date}.json right after the note · update pending.md
+│       (an ecosystem line also updates its watchlist, moving dropped rows to watched-archive.md)
 ├── ctl-015 report-existence gate (receipt-driven: missing / invalid receipt fails the line,
 │   article & brief require {date}_{track}_*.md in the vault, quiet & hold pass without a file)
+│   → past-topics-append records the question history in past_topics.json from the receipt
 ├── Call 2: fresh-context verification + clarity (Sonnet by default, --max-turns 30, 20-min
 │   timeout, no research context, Read + WebFetch, Edit limited to the day's note and
 │   runs/{date}.verify.json, WebSearch denied; failure is fail-open — the unverified note
-│   survives, ADR-0017)
+│   survives, ADR-0017; an auth / billing error stops the remaining lines as in call 1)
+│   [before: the script copies the note to state/<line>/pre-verify/{date}.md;
+│    after: verify-diff compares the two and logs VERIFY_DIFF]
 ├── ctl-016 deterministic report lint (fixed sections 機会メモ / ソース, synced to
 │   report-template.md; kind: brief is exempt from the 機会メモ and length soft checks)
 ├── Pass 3: Obsidian wiki ingest (vault-side script, non-fatal, under an outer timeout longer than the ingest's own)
@@ -139,6 +144,8 @@ launchctl list | grep daily-research
 | `Auth probe passed` | The real auth probe succeeded |
 | `ERROR: Auth probe failed (<mode>) — status=… result=…` | The probe failed (expired OAuth, or in api mode a rejected key / low credit / 429); the run stops before any line (exit 1) |
 | `WARN: API spend gate stopped the run (month $… / $…, day $… / $…, need $… per line) — stopping remaining lines` | api mode: the remaining budget can't cover one more line, or (after an `ERROR: … spend …` line) the ledger could not be written or read; the rest are skipped and named in `Lines not started: …` |
+| `ERROR: API spend gate failed (rc 2): spend-gate: N unreadable line(s) in …: line K (reason), … — cannot check the caps` | api mode: the gate could not total the ledger, so it stops instead of guessing. The message names each unreadable line of `state/api-spend.jsonl` and why (fix or remove those lines); `cannot read …` means the file itself could not be opened |
+| `Lines not started: a, b` | Lines the run stopped before starting (spend cap, or an auth / billing error) |
 | `ERROR: Line <track> hit a billing/rate-limit error — aborting remaining lines, no retry` | api mode: 429 or credit balance too low (`E_BILLING`) |
 | `WARN: Line <track> reached --max-budget-usd $… — no retry, going to gate` | The per-call cap stopped call 1; whatever it wrote goes to the gate |
 | `API spend: today $… / $…, month $… / $…` | api mode: totals from `state/api-spend.jsonl` after the run |
@@ -151,13 +158,16 @@ launchctl list | grep daily-research
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | Per-line run statistics (cost, turns, duration, tokens) |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | Transient failure; the single retry is starting |
 | `ERROR: Line <track> returned 401 — aborting remaining lines (…)` | Auth failed mid-run (401 / 403: expired OAuth or rejected key); remaining lines are skipped, finished lines' results are kept |
+| `ERROR: clarity pass returned an auth error — aborting remaining lines` / `ERROR: clarity pass hit a billing/rate-limit error — aborting remaining lines` | Call 2 met the same error; the remaining lines are skipped as after call 1 |
+| `WARN: Line <track> clarity pass skipped after an auth/billing error — note stays unverified` | The line's call 1 ended with an auth / billing error after writing its note; call 2 does not start |
 | `Line <track> state: <status>` | The content state the receipt declared (article / brief / quiet / hold) |
 | `Line <track> report gate passed` | ctl-015: the line delivered what its receipt declared (article / brief: `{date}_{track}_*.md` exists in the vault; quiet / hold: no file needed) |
+| `WARN: Line <track> past_topics.json append failed — history not recorded` | The gate passed but the question history could not be appended from the receipt; the line still succeeds, and `past_topics.json.bak` from the run's start remains |
 | `Line <track> pending.md: items A→B, chars C→D` | Items and size of the line's `pending.md` before call 1 and after the gate (headings, bold-led bullets and table rows count as items) |
 | `WARN: Line <track> pending.md の項目が <state> の run で N 件増えた (…)` | A run other than hold added more `pending.md` items than its note's dated-deadline opportunities. The protocols add items only for hold questions and dated-deadline opportunities; log only, the line still succeeds |
 | `WARN: report gate failed for line <track> — no <date>_<track>_*.md (ctl-015)` | The receipt says article / brief but no report exists — counted as failed |
 | `WARN: report gate failed for line <track> — ... receipt ... (ctl-015)` | The run-scoped receipt is missing or invalid — counted as failed (a run that died before writing it) |
-| `Report existence gate passed: N report(s)` | Every picked line passed ctl-015 (partial failure logs `Failed (E_PARTIAL: ...)` instead) |
+| `Report existence gate passed: N report(s)` | Every picked line passed ctl-015. A day with a failed line, or one where an auth / billing error left picked lines unstarted, logs `=== Failed (E_PARTIAL:<failed lines>, exit code 1) ===` instead (the list after the colon is empty when only the unstarted lines are missing) |
 | `Line states: article=N brief=N quiet=N hold=N (...)` | Today's breakdown; the published / quiet / unverified / suspected-fetch-failure segments appear only when non-empty |
 | `VERIFY <track>: {...}` | Call 2's verification tally (supported / partial / unsupported / unverifiable / edits / ran) |
 | `VERIFY_DIFF <track>: {...}` | What call 2 actually changed, compared against the before-copy `state/<line>/pre-verify/{date}.md` that the script writes before call 2: changed spans, characters added / removed, removed sentences, numbers added / removed, new URLs, and whether the frontmatter, 機会メモ or ソース section changed. Summed into the metrics record's `verification` |
@@ -173,7 +183,7 @@ launchctl list | grep daily-research
 |---------|------|
 | `今朝のリサーチレポートが完成しました (今朝: … / 更新なし: … / 未検証: …)` | All lines succeeded and at least one report was published |
 | `今朝は更新なし (更新なし: …)` | Every line ended quiet / hold (a success) |
-| `リサーチが一部失敗しました (今朝: … / 更新なし: … / failed: …)。ログを確認してください。` | E_PARTIAL — the failed lines are named. A day an auth / billing error stopped (401 / 403 / 429 / credit) is also E_PARTIAL; the lines it never started are listed under 未実行 |
+| `リサーチが一部失敗しました (今朝: … / 更新なし: … / failed: …)。ログを確認してください。` | E_PARTIAL — the failed lines are named. When an auth / billing error (401 / 403 / 429 / credit) stops the run while picked lines are still unstarted, the day is E_PARTIAL even if no line failed the gate, and those lines are listed under 未実行. An error in the last picked line leaves nothing unstarted, so that day's notification follows the gate alone (a note whose call 2 failed is listed under 未検証) |
 
 未検証 (unverified) lists lines whose call 2 failed or left no verify.json; their notes are published anyway. A quiet / hold flagged as a suspected fetch failure (zero web searches, or `reason_code = fetch_failed`) points at a network-side problem rather than a quiet day.
 
@@ -249,6 +259,7 @@ rm -rf .daily-research.lock
 - `Your credit balance is too low`: add credit on platform.claude.com.
 - `status=429`: rate limit. The run stops on purpose instead of backing off (a burst of rate limits is a policy signal). Re-run later by hand.
 - `API spend gate stopped the run`: the day's or month's remaining budget is below one line's reserve (`call1_max_usd + call2_max_usd`). Check `state/api-spend.jsonl`; raise the caps in `[billing]` only if the credit covers it.
+- `API spend gate stopped the run` right after `ERROR: API spend gate failed (rc 2): …` or `ERROR: API spend ledger could not be written …`: the caps could not be checked, so no line started. The rc 2 message names each unreadable ledger line and its reason; fix or remove those lines in `state/api-spend.jsonl` (or make the file writable again), then re-run.
 
 The billing path never changes on its own: in subscription mode an `ANTHROPIC_API_KEY` exported in your shell is dropped, and in api mode only the key in `env_file` is used.
 
@@ -271,9 +282,9 @@ ls "/path/to/your/obsidian/vault/daily-research/"
 
 ### 7. Slow Execution or Hangs Due to Plugins
 
-**Symptoms**: A per-line run burns most of its 25-minute timeout on startup, or hangs indefinitely.
+**Symptoms**: A `claude -p` run burns much of its timeout on startup, or hangs indefinitely.
 
-**Cause**: Claude Code plugins (pyright, swift-lsp, hookify, mgrep, claude-mem, etc.) installed globally. Each `claude -p` invocation initializes all plugin MCP servers, adding significant startup overhead.
+**Cause**: Claude Code plugins (pyright, swift-lsp, hookify, mgrep, claude-mem, etc.) installed globally. A `claude -p` invocation without `--safe-mode` initializes all plugin MCP servers, adding significant startup overhead. The unattended calls (call 1, call 2 and the auth probe) start with `--safe-mode`, which disables installed plugins and MCP servers, so this applies to `claude` runs you start by hand in this project — e.g. following a protocol interactively. A per-line run that still stalls at startup points elsewhere; `timeout -k` bounds every unattended call.
 
 **Fix**: Create `.claude/settings.json` in the project root to disable plugins for this project:
 ```json
@@ -298,7 +309,7 @@ ps aux | grep -E "pyright|sourcekit|claude-mem|sequential|japanese|ableton"
 
 **Symptoms**: Reports answer the same question with the same answer as recent days (the same topic under a different question is fine).
 
-**Cause**: `past_topics.json` not updated properly (the run's question selection depends on the past questions and their `answer_scope` it feeds). `state/<line>/brief.md` is a static document you write; if the line keeps returning to one subject, narrow or reword its subject there.
+**Cause**: `past_topics.json` not updated properly (the run's question selection depends on the past questions and their `answer_scope` it feeds). The script appends each line's question from its receipt after the gate passes (`past-topics-append`); a failure logs `WARN: Line <track> past_topics.json append failed`. `state/<line>/brief.md` is a static document you write; if the line keeps returning to one subject, narrow or reword its subject there.
 
 **Fix**:
 ```bash

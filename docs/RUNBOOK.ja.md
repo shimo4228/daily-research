@@ -61,7 +61,8 @@ daily-research.sh (05:00)
 ├── ロック取得（アトミック mkdir）
 ├── 課金経路の設定（[billing]: api = env_file の ANTHROPIC_API_KEY、subscription = OAuth）
 ├── 認証 probe（その経路で Haiku を実際に 1 回呼ぶ。呼1・呼2 と同じく --safe-mode）
-├── config schema チェック（ADR-0008 以前の旧 schema は fail-fast）
+├── config schema チェック（`dr_pipeline.py tracks`: ADR-0008 以前の旧 schema と、壊れたライン定義 —
+│   `repos` を単一 table で書いた、`key` / `target_repo` の無いエントリがある等 — は fail-fast）
 ├── rotation-pick — 当日担当ラインを決定論選択: 輪番 window（開始 = date.toordinal() × K
 │   mod N、そこから連続 K 本。K = [general] lines_per_day、ADR-0010 / ADR-0017）
 │   + `daily = true` の全ライン（毎日実行、ADR-0011）
@@ -72,17 +73,22 @@ daily-research.sh (05:00)
 │   [mode = "ecosystem" のラインは target_repo を持たない: cwd = state/<line>、
 │    prompts/ecosystem-research-protocol.md — ADR-0018。--safe-mode は全ラインに付く — ADR-0019]
 │   ├── 短い文脈（line brief + state/<line>/brief.md + 問いの履歴 + pending.md）を Read
-│   ├── watched sources の diff-first 確認 + 広い探索 · 問いの候補 3〜6 件から 1 つ選ぶ
-│   │   （または quiet / hold）· 選定後に context_files を Read · citation ゲート付き
-│   │   リサーチ · 根拠ファイル runs/{date}.md
+│   ├── 広い探索（ecosystem ラインは先に watched-sources.md の watchlist を確認）· 問いの候補
+│   │   3〜6 件から 1 つ選ぶ（または quiet / hold）· 選定後に context_files を Read ·
+│   │   citation ゲート付きリサーチ · 根拠ファイル runs/{date}.md
 │   ├── 解説ノート（固定見出しなし。article ≤ 3,000 字 / brief 300〜600 字）を vault に
 │   │   Write（quiet / hold の日は書かない）
-│   └── run receipt runs/{date}.json を記事の直後に Write · state + past_topics.json 更新
+│   └── run receipt runs/{date}.json を記事の直後に Write · pending.md 更新
+│       （ecosystem ラインは watchlist も更新し、表から外した行を watched-archive.md へ移す）
 ├── ctl-015 レポート存在ゲート（receipt 駆動: receipt 無し / 不正 → 失敗、article・brief は
 │   vault の {date}_{track}_*.md を要求、quiet・hold はファイル無しで成功）
+│   → past-topics-append が receipt から問いの履歴を past_topics.json に記録
 ├── 呼2: fresh-context の検証 + clarity (既定 Sonnet, --max-turns 30, 20 分タイムアウト,
 │   研究文脈なし, Read + WebFetch, Edit は対象ノートと runs/{date}.verify.json のみ,
-│   WebSearch は disallow, 失敗は fail-open — 未検証版が残り run は成功のまま, ADR-0017)
+│   WebSearch は disallow, 失敗は fail-open — 未検証版が残り run は成功のまま, ADR-0017。
+│   認証・課金のエラーは呼1 と同じく残りのラインを止める)
+│   [前: script が原稿を state/<line>/pre-verify/{date}.md に写す。
+│    後: verify-diff が両者を比べて VERIFY_DIFF をログに出す]
 ├── ctl-016 決定論的レポート lint（固定節 = 機会メモ / ソース、report-template.md に同期。
 │   kind: brief は機会メモと文字数の soft を免除）
 ├── Pass 3: Obsidian wiki ingest（vault 側スクリプト、non-fatal。ingest 自身の上限より長い外側の timeout の下）
@@ -137,6 +143,8 @@ launchctl list | grep daily-research
 | `Auth probe passed` | 実際に呼び出す認証 probe が成功 |
 | `ERROR: Auth probe failed (<mode>) — status=… result=…` | probe が失敗（OAuth 期限切れ、または api モードで key の拒否・クレジット不足・429）。ライン実行前に停止（exit 1） |
 | `WARN: API spend gate stopped the run (month $… / $…, day $… / $…, need $… per line) — stopping remaining lines` | api モード: 残額があと 1 ライン分に満たない、または（直前の `ERROR: … spend …` 行のとおり）台帳が書けない・読めない。残りは止め、`Lines not started: …` に名前が出る |
+| `ERROR: API spend gate failed (rc 2): spend-gate: N unreadable line(s) in …: line K (理由), … — cannot check the caps` | api モード: 台帳を合計できなかったので、推測せずに止めた。`state/api-spend.jsonl` の読めない行を行番号と理由で名指す（その行を直すか消す）。`cannot read …` はファイル自体を開けなかった |
+| `Lines not started: a, b` | run が始める前に止めたライン（支出の上限、または認証・課金のエラー） |
 | `ERROR: Line <track> hit a billing/rate-limit error — aborting remaining lines, no retry` | api モード: 429 またはクレジット残高不足（`E_BILLING`） |
 | `WARN: Line <track> reached --max-budget-usd $… — no retry, going to gate` | 呼び出しごとの上限で呼1 が止まった。書けた分でゲートへ進む |
 | `API spend: today $… / $…, month $… / $…` | api モード: run 後の `state/api-spend.jsonl` の合計 |
@@ -149,13 +157,16 @@ launchctl list | grep daily-research
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | ライン run の実行統計（コスト、ターン数、所要時間、トークン数） |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | transient 失敗。1 回きりのリトライを開始 |
 | `ERROR: Line <track> returned 401 — aborting remaining lines (…)` | run 中に認証が失敗（401 / 403: OAuth 期限切れか key の拒否）。残ラインは中断、完走済みラインの成果は保持 |
+| `ERROR: clarity pass returned an auth error — aborting remaining lines` / `ERROR: clarity pass hit a billing/rate-limit error — aborting remaining lines` | 呼2 が同じエラーに当たった。呼1 の後と同じく残りのラインを止める |
+| `WARN: Line <track> clarity pass skipped after an auth/billing error — note stays unverified` | そのラインの呼1 がノートを書いた後に認証・課金のエラーで終わった。呼2 は始めない |
 | `Line <track> state: <status>` | receipt が申告した内容状態（article / brief / quiet / hold） |
 | `Line <track> report gate passed` | ctl-015: そのラインが receipt どおりの成果を残した（article / brief は `{date}_{track}_*.md` が vault に存在、quiet / hold はファイル無しで通過） |
+| `WARN: Line <track> past_topics.json append failed — history not recorded` | ゲートは通ったが、receipt から問いの履歴を追記できなかった。ラインは成功のままで、run 開始時の `past_topics.json.bak` が残る |
 | `Line <track> pending.md: items A→B, chars C→D` | そのラインの `pending.md` の項目数と字数の、呼1 の前とゲート通過後（見出し・太字で始まる箇条・表の行を項目と数える） |
 | `WARN: Line <track> pending.md の項目が <state> の run で N 件増えた (…)` | hold 以外の run が、ノートの日付付き締切の機会の数より多く `pending.md` に項目を足した。プロトコルが項目を足してよいとするのは hold の問いと日付付き締切の機会だけ。log だけで、ラインは成功のまま |
 | `WARN: report gate failed for line <track> — no <date>_<track>_*.md (ctl-015)` | receipt が article / brief なのにレポートが無い — 失敗として計上 |
 | `WARN: report gate failed for line <track> — ... receipt ... (ctl-015)` | run スコープの receipt が無い・壊れている — 失敗として計上（timeout で receipt を書く前に落ちた run） |
-| `Report existence gate passed: N report(s)` | 当日担当ラインが全て ctl-015 を通過（一部失敗時は `Failed (E_PARTIAL: ...)` になる） |
+| `Report existence gate passed: N report(s)` | 当日担当ラインが全て ctl-015 を通過。失敗したラインがある日と、認証・課金のエラーで始めずに残ったラインがある日は、代わりに `=== Failed (E_PARTIAL:<失敗したライン>, exit code 1) ===` が出る（始めなかったラインだけの日はコロンの後が空） |
 | `Line states: article=N brief=N quiet=N hold=N (...)` | 当日の内訳（今朝 / 更新なし / 未検証 / 取得失敗の疑い の各段は該当があるときだけ出る） |
 | `VERIFY <track>: {...}` | 呼2 の照合結果（supported / partial / unsupported / unverifiable / edits / ran） |
 | `VERIFY_DIFF <track>: {...}` | 呼2 が実際に変えた量。script が呼2 の前に書く改稿前の写し `state/<line>/pre-verify/{date}.md` と比べる: 変更範囲の数・字数の増減・消えた文・数字の増減・新しい URL・frontmatter / 機会メモ / ソース節の変更の有無。metrics の `verification` に合算する |
@@ -171,7 +182,7 @@ launchctl list | grep daily-research
 |---------|------|
 | `今朝のリサーチレポートが完成しました (今朝: … / 更新なし: … / 未検証: …)` | 全ライン成功し、公開されたレポートがある |
 | `今朝は更新なし (更新なし: …)` | 全ラインが quiet / hold で終わった（成功） |
-| `リサーチが一部失敗しました (今朝: … / 更新なし: … / failed: …)。ログを確認してください。` | E_PARTIAL — 失敗したラインを名指しする。認証・課金のエラー（401 / 403 / 429 / クレジット）で止めた日も E_PARTIAL で、始めなかったラインは「未実行」に並ぶ |
+| `リサーチが一部失敗しました (今朝: … / 更新なし: … / failed: …)。ログを確認してください。` | E_PARTIAL — 失敗したラインを名指しする。認証・課金のエラー（401 / 403 / 429 / クレジット）で run が止まり、当日担当ラインが始まらずに残った日は、ゲートに落ちたラインが無くても E_PARTIAL で、そのラインは「未実行」に並ぶ。最後の担当ラインでのエラーは始めずに残るラインを作らないので、その日の通知はゲートだけで決まる（呼2 が失敗したノートは「未検証」に並ぶ） |
 
 「未検証」は呼2 が失敗した（または verify.json が無い）ラインで、レポート自体は公開されている。「取得失敗の疑い」が付く quiet / hold は、web 検索 0 回または `reason_code = fetch_failed` のラインで、ネットワーク側の問題を疑う材料になる。
 
@@ -247,6 +258,7 @@ rm -rf .daily-research.lock
 - `Your credit balance is too low`: platform.claude.com でクレジットを足す。
 - `status=429`: レート制限。backoff で踏み抜かず、意図して止めている（連発する rate limit は policy signal）。時間をおいて手で再実行する。
 - `API spend gate stopped the run`: 1 日または 1 か月の残額が 1 ライン分の予約額（`call1_max_usd + call2_max_usd`）を下回った。`state/api-spend.jsonl` を確認し、上限はクレジットが足りるときだけ `[billing]` で上げる。
+- `ERROR: API spend gate failed (rc 2): …` か `ERROR: API spend ledger could not be written …` の直後の `API spend gate stopped the run`: 上限を判定できなかったので、ラインを始めなかった。rc 2 のメッセージは台帳の読めない行を行番号と理由で名指す。`state/api-spend.jsonl` のその行を直すか消して（または書き込めるように戻して）から再実行する。
 
 課金経路は設定なしに変わらない。subscription モードではシェルで export した `ANTHROPIC_API_KEY` を捨て、api モードでは `env_file` の key だけを使う。
 
@@ -269,9 +281,9 @@ ls "/path/to/your/obsidian/vault/daily-research/"
 
 ### 7. プラグインによる実行遅延・ハング
 
-**症状**: ライン run が起動だけで 25 分タイムアウトの大半を消費する、または無限にハングする。
+**症状**: `claude -p` の run が起動だけでタイムアウトの多くを消費する、または無限にハングする。
 
-**原因**: Claude Code のプラグイン（pyright, swift-lsp, hookify, mgrep, claude-mem 等）がグローバルにインストールされている。`claude -p` 呼び出しごとに全プラグインの MCP サーバーが初期化され、大幅なオーバーヘッドが発生する。
+**原因**: Claude Code のプラグイン（pyright, swift-lsp, hookify, mgrep, claude-mem 等）がグローバルにインストールされている。`--safe-mode` の無い `claude -p` 呼び出しは全プラグインの MCP サーバーを初期化し、大幅なオーバーヘッドが発生する。無人の呼び出し（呼1・呼2・認証 probe）は `--safe-mode` で起動し、インストール済みのプラグインと MCP サーバーを外すので、これが当たるのはこのプロジェクトで手で起動する `claude`（対話でプロトコルを追う場合など）。それでも起動で止まるライン run は別の原因を疑う。無人の呼び出しはすべて `timeout -k` で上限が付く。
 
 **対処**: プロジェクトルートに `.claude/settings.json` を作成し、プラグインを無効化する:
 ```json
@@ -296,7 +308,7 @@ ps aux | grep -E "pyright|sourcekit|claude-mem|sequential|japanese|ableton"
 
 **症状**: 最近と同じ問いに同じ答えを返すレポートが生成される（同じ topic を別の問いで扱うのは正常）。
 
-**原因**: `past_topics.json` が正しく更新されていない（run の問い選定はここから渡される過去の問い・`answer_scope` の一覧に依存する）。`state/<line>/brief.md` はあなたが書く静的な文書なので、同じ題材に戻り続けるならそこで主題を絞るか言い換える。
+**原因**: `past_topics.json` が正しく更新されていない（run の問い選定はここから渡される過去の問い・`answer_scope` の一覧に依存する）。script はゲートを通ったラインの問いを receipt から追記する（`past-topics-append`）。失敗するとログに `WARN: Line <track> past_topics.json append failed` が出る。`state/<line>/brief.md` はあなたが書く静的な文書なので、同じ題材に戻り続けるならそこで主題を絞るか言い換える。
 
 **対処**:
 ```bash
