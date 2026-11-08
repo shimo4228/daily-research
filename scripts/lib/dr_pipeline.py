@@ -2630,7 +2630,8 @@ def _clarity_scan_mean(name: str, verif: list[dict[str, object]]) -> float | Non
 #                             第 1 段の申告 (確かめた主張・一致・原典が取れない主張の数) と、形が壊れていて
 #                             捨てた候補の数
 #   stage1 {class, cost, turns} / confirm {calls, cost, turns}
-#   candidates[]  {id "D<n>", note_sentence, replacement, url (ノートの URL), url_read, locator, claim,
+#   candidates[]  {id "D<n>", note_sentence, replacement, url (第 1 段が写した URL), note_url (url と
+#                  _url_key で一致したノートの URL の文字列。第 2 段の prompt に載るのはこちら), url_read, locator, claim,
 #                  source_quote, correct_value, type, confidence, drift, status, reason,
 #                  confirm {verdict, replacement_verdict, parts [{wrong, fixed, source_quote, correct_value}],
 #                  url_read} | null, edit_distance / edit_cap (audit-apply が confirmed の候補に足す。A → B の
@@ -2882,24 +2883,30 @@ def _url_key(u: str) -> str:
 _NOTE_URL_TOKEN_RE = re.compile(r"(?i:https?)://[^\s\"'<>`)\]（）「」『』、。]+")
 
 
-def _note_url_keys(text: str) -> set[str]:
-    """ノートに書かれた URL (本文の link・ソース節・裸の URL) の _url_key の集合。URL の直後に和文が続く
-    書き方 (https://x/yを参照) のために、ASCII の外の文字で切った形も入れる。"""
+def _note_url_keys(text: str) -> dict[str, str]:
+    """ノートに書かれた URL (本文の link・ソース節・裸の URL) の _url_key → ノートの URL の文字列 (最初の出現)。
+    URL の直後に和文が続く書き方 (https://x/yを参照) のために、ASCII の外の文字で切った形も入れる。第 2 段の
+    prompt にはこの文字列を載せる — _url_key はパーセント符号を戻してから比べるので、第 1 段の生の URL
+    (https://news.ycombinator.com%2Fitem%3Fid%3D1%23@evil.example/x) はノートの URL と一致しても host が違う。"""
     import html
 
-    keys = set()
+    keys: dict[str, str] = {}
     for tok in _NOTE_URL_TOKEN_RE.findall(html.unescape(text)):
         ascii_part = _ANY_URL_RE.match(tok)
-        keys.add(_url_key(tok))
+        keys.setdefault(_url_key(tok), tok)
         if ascii_part:
-            keys.add(_url_key(ascii_part.group(0)))
+            keys.setdefault(_url_key(ascii_part.group(0)), ascii_part.group(0))
     return keys
 
 
+# locator から捨てる形: scheme・www.・host に見える語 (字で始まる 2 字以上の TLD を持つ a.b)・IPv4
+_LOCATOR_HOST_RE = re.compile(r"(?i)://|www\.|[a-z0-9-]+\.[a-z][a-z0-9-]+|\d{1,3}(?:\.\d{1,3}){3}")
+
+
 def _audit_locator(v: object) -> str:
-    """第 1 段の locator (原典の中の位置)。第 2 段の prompt に載るので、URL を含むもの・改行を含むものは捨てる
-    (第 2 段が読む URL をノートの URL に限る)。"""
-    if not isinstance(v, str) or "://" in v or "\n" in v:
+    """第 1 段の locator (原典の中の位置)。第 2 段の prompt に載るので、URL や host に見える語を含むもの・改行を
+    含むものは捨てる (第 2 段が読む URL をノートの URL に限る。§3.2・p. 12・item 50316100 は残る)。"""
+    if not isinstance(v, str) or "\n" in v or _LOCATOR_HOST_RE.search(v):
         return ""
     return _clip(v, AUDIT_LOCATOR_MAX)
 
@@ -2934,16 +2941,20 @@ def _audit_candidate(raw: object, i: int) -> dict[str, object] | None:
     }
 
 
-def _audit_select(cands: list[dict[str, object]], note_urls: set[str]) -> None:
+def _audit_select(cands: list[dict[str, object]], note_urls: dict[str, str]) -> None:
     """第 2 段に送る候補を決める (その場で status を書き換える): drift (原典が公開日より後に変わった疑い)・
     URL がノートの URL (note_urls = _note_url_keys) に無い (url_not_in_note — 第 2 段が読む先をノートの原典に限る)・
-    同じ文の 2 件目は skipped、残りは確信度の高い順に AUDIT_MAX_CONFIRM 件まで pending、超えた分は skipped。"""
+    同じ文の 2 件目は skipped、残りは確信度の高い順に AUDIT_MAX_CONFIRM 件まで pending、超えた分は skipped。
+    一致した候補には note_url (ノートの URL の文字列) を足す。"""
     seen: set[str] = set()
     pending = []
     for c in cands:
+        note_url = note_urls.get(_url_key(str(c["url"])))
+        if note_url is not None:
+            c["note_url"] = note_url
         if c["drift"]:
             c["status"], c["reason"] = "skipped", "drift"
-        elif _url_key(str(c["url"])) not in note_urls:
+        elif note_url is None:
             c["status"], c["reason"] = "skipped", "url_not_in_note"
         elif c["note_sentence"] in seen:
             c["status"], c["reason"] = "skipped", "duplicate"
@@ -3080,14 +3091,15 @@ def _audit_pending(path: str, cid: str) -> tuple[dict[str, object], dict[str, ob
 
 
 # --- audit-confirm-prompt <audit_path> <cid>: 第 2 段のタスクプロンプトを出力 ---
-# 渡すのは候補の文 (A)・置き換え文 (B)・ノートの URL・原典の中の位置・公開日 (第 1 段の理由と正しい値は渡さない)。
-# 文字列は区切りの行で挟む。候補が pending でなければ rc 1。
+# 渡すのは候補の文 (A)・置き換え文 (B)・ノートの URL (note_url — 第 1 段が写した url でなく、ノートの中の文字列)・
+# 原典の中の位置・公開日 (第 1 段の理由と正しい値は渡さない)。文字列は区切りの行で挟む。候補が pending でない・
+# note_url を持たないときは rc 1 (SH はその候補の第 2 段を飛ばし、候補は pending のまま適用されない)。
 def cmd_audit_confirm_prompt(argv: list[str]) -> int:
     if len(argv) < 2:
         print("usage: audit-confirm-prompt <audit_path> <cid>", file=sys.stderr)
         return 64
     found = _audit_pending(argv[0], argv[1])
-    if found is None:
+    if found is None or not isinstance(found[1].get("note_url"), str):
         print(f"audit-confirm-prompt: no pending candidate {argv[1]!r}", file=sys.stderr)
         return 1
     state, c = found
@@ -3099,7 +3111,7 @@ def cmd_audit_confirm_prompt(argv: list[str]) -> int:
             date=state.get("date") or "(不明)",
             sentence=_CTRL_RE.sub(" ", str(c["note_sentence"])),
             replacement=_CTRL_RE.sub(" ", str(c.get("replacement") or "")) or "(案なし)",
-            url=c["url"],
+            url=c["note_url"],
             locator=_audit_locator(c.get("locator")),
         )
     )

@@ -477,6 +477,8 @@ def test_stage1_normalizes_fields(monkeypatch, capsys, tmp_path):
         ("https://EXAMPLE.COM/report/", True),  # host の大文字と末尾の /
         ("https://example.com/report#sec-2", True),
         ("https://example.com/%72eport", True),  # パーセント符号
+        # パーセント符号を戻すと一致する host のすり替え (第 2 段にはノートの URL を渡す)
+        ("https://example.com%2Freport%23@evil.example/x", True),
         ("https://example.com/Report", False),  # path の大文字は別の URL
         ("https://example.com/reportx", False),
         ("https://example.com/", False),
@@ -496,11 +498,40 @@ def test_stage1_skips_candidates_whose_url_is_not_in_the_note(
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("url", "note_url"),
+    [
+        ("https://example.com%2Freport%23@evil.example/x", "https://example.com/report"),
+        ("https://EXAMPLE.COM/report/", "https://example.com/report"),
+        ("https://example.com/study#sec-2", "https://example.com/study"),
+    ],
+)
+def test_confirm_prompt_carries_the_note_url_not_the_stage1_url(
+    monkeypatch, capsys, tmp_path, url, note_url
+):
+    path, ids, st = stage1(monkeypatch, capsys, tmp_path, [disc(S_REPORT, "x", url=url)])
+    assert ids == ["D1"] and st["candidates"][0]["note_url"] == note_url
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["audit-confirm-prompt", str(path), "D1"])
+    assert rc == 0 and fenced(out, "原典の URL")[1] == note_url
+    assert "evil" not in out
+
+
+@pytest.mark.unit
+def test_confirm_prompt_refuses_a_candidate_without_note_url(monkeypatch, capsys, tmp_path):
+    path, _, st = stage1(monkeypatch, capsys, tmp_path, [disc(S_REPORT, "x")])
+    del st["candidates"][0]["note_url"]
+    path.write_text(json.dumps(st, ensure_ascii=False))
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["audit-confirm-prompt", str(path), "D1"])
+    assert (rc, out) == (1, "")
+
+
+@pytest.mark.unit
 def test_note_url_keys_cut_at_japanese_after_a_bare_url():
     keys = dr_pipeline._note_url_keys(
         "詳細は https://example.com/a/b を参照。原典 https://example.com/cを見よ。"
     )
-    assert "https://example.com/a/b" in keys and "https://example.com/c" in keys
+    assert keys["https://example.com/a/b"] == "https://example.com/a/b"
+    assert keys["https://example.com/c"] == "https://example.com/c"
 
 
 @pytest.mark.unit
@@ -630,10 +661,28 @@ def test_confirm_prompt_fences_change_per_call_and_hold_a_spoof(monkeypatch, cap
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("locator", ["https://evil.example/x を見よ", "1 行目\n2 行目", 42])
-def test_stage1_drops_locators_with_urls_or_newlines(monkeypatch, capsys, tmp_path, locator):
+@pytest.mark.parametrize(
+    "locator",
+    [
+        "https://evil.example/x を見よ",
+        "www.evil.example/x",
+        "evil.example/x の節",
+        "README.md の Usage 節",
+        "10.0.0.1 の頁",
+        "1 行目\n2 行目",
+        42,
+    ],
+)
+def test_stage1_drops_locators_with_urls_hosts_or_newlines(monkeypatch, capsys, tmp_path, locator):
     _, _, st = stage1(monkeypatch, capsys, tmp_path, [disc(S_REPORT, "x", locator=locator)])
     assert st["candidates"][0]["locator"] == ""
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("locator", ["§3.2 の表", "p. 12", "item 50316100 のコメント", "Fig. 3"])
+def test_stage1_keeps_plain_locators(monkeypatch, capsys, tmp_path, locator):
+    _, _, st = stage1(monkeypatch, capsys, tmp_path, [disc(S_REPORT, "x", locator=locator)])
+    assert st["candidates"][0]["locator"] == locator
 
 
 @pytest.mark.unit
