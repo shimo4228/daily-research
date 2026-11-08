@@ -28,7 +28,9 @@ python3 scripts/lib/dr_pipeline.py metrics-backfill metrics.jsonl logs   # ロ�
 - Pass2 (呼1 研究 run の合算 — 1 日 3 line 分が 1 record に足し込まれている) の turns
   分布 (p50 / p90 / max) と **設定中の `--max-turns` との余白** (daily-research.sh の
   `--max-turns 55` と比較。p90 が上限に接近していたら警告。line 数で割って 1 line
-  あたりを見る)。**pass1 は ADR-0008 以降つねに `None`** (旧 Opus 選定パスの
+  あたりを見る)。個々の run の turns は `logs/<date>.log` の `SUMMARY Run(<line>)` 行で見る
+  — 日の合計を line 数で割ると、上限を超えて success した run (as-of 2026-11-08: 10-30 jev 58、
+  11-08 ans 59) が平均に隠れる。**pass1 は ADR-0008 以降つねに `None`** (旧 Opus 選定パスの
   名残) — `pass1_*` の expect は恒久的に INSUFFICIENT_DATA になるので書かない
 - total_cost の推移 (mean / max、異常スパイク)
 - fallback 発動率と、`final_class != "OK"` の失敗一覧
@@ -60,7 +62,19 @@ python3 scripts/lib/dr_pipeline.py wiki-quality-scan "<vault>" 30 config.toml
 - **本文字数の推移 (ADR-0014 / ADR-0017)**: lint 出力の `results[].body_chars` (metrics.jsonl の
   `lint` にも入る) を `kind` 別に見る。目安は article が 3,000 字以内 (材料に応じて
   短く)、brief が 300〜600 字 — 超過が常態化したらプロトコル Step 5 の長さ指示が
-  効いていない signal (機械 lint は意図的に置かない)
+  効いていない signal (機械 lint は意図的に置かない)。`body_chars` は 837b6f5 で定義が変わり、
+  時系列はそこで段差がつく: `file_chars` を持つ record の `body_chars` は本文 (frontmatter と H1 の後から
+  機会メモ / ソース節の前まで、空白を除く) の字数、`file_chars` の無い旧 record の `body_chars` は
+  ファイル全体の長さ。比べるのは `file_chars` を持つ record どうしにする。本文の見出し数は
+  `body_headings` (本文の `##`・`###` の数)
+- **ノートの新しさ (ADR-0017 D4)**: 出来事からの日数を line 別に見る:
+
+  ```bash
+  python3 scripts/lib/dr_pipeline.py event-age-stats metrics.jsonl "<前回 review 日>"
+  ```
+
+  line 別の `notes` / `unknown_rate` / `median_days`。選定に新しさを入れるかの判断材料
+  (運用者は as-of 2026-11-08 に「2 週間は計測だけ」と決めた)。`event_age_days` の無い旧 record は数えない
 - **可読性の主観判定 (ADR-0014 Review-when)**: 2026-08-30 に 2026-08-23 以降の 7 日分を
   通読し「最後まで読めたか / repo に使えたものがあったか」を判定する。
   `theme_rank` 分布の集計は ADR-0014 で廃止した (frontmatter に無い)
@@ -114,7 +128,8 @@ DR-Expect: fallback_rate <= 0.05
   `pass1_cost_mean|max` / `pass2_cost_mean|max` / `total_cost_mean|max` /
   `fallback_rate` / `report_count_min` / `receipt_count_min` / `no_report_count` /
   `lint_hard_count` / `quiet_rate` / `unsupported_rate` / `unverifiable_rate` /
-  `clarity_ok_rate`
+  `clarity_ok_rate` / `clarity_{undef|long}_{before|after}_mean` (clarity-scan の 1 line あたり
+  平均。分母は CSCAN 行を持つ record の `cscan_lines` の合計)
 - 評価窓は「commit 日より後の全 record」。次回 review で自動突合される
 - 期待が書けない変更 (doc 修正等) に無理に付けない。付けた期待が NOT_ACHIEVED でも
   それ自体は失敗ではない — 効果が出ていない事実が見えることが目的
