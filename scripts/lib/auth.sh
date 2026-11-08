@@ -19,13 +19,16 @@
 real_auth_probe() {
   local fields code err
   AUTH_PROBE_JSON=""
+  # --safe-mode: 呼1 / 呼2 と同じ起動形で認証を確かめる。user の plugin / MCP / hook / CLAUDE.md を
+  # 載せない (TERM を無視する MCP の孫が $(…) の pipe を握る hang の経路も消える)。safe mode でも
+  # 認証の経路は変わらない (claude --help、2.1.319 で確認)
   if command -v timeout >/dev/null 2>&1; then
     # -k 10: SIGTERM を無視する claude を待ち続けない (lib/claude.sh の run_claude と同じ穴。
     # probe は lock 取得後に走るので、待ち続けると翌朝以降の run が全部 skip になる)
-    AUTH_PROBE_JSON=$(timeout -k 10 60 "$CLAUDE_CMD" -p ok --max-turns 1 --model haiku \
+    AUTH_PROBE_JSON=$(timeout -k 10 60 "$CLAUDE_CMD" -p ok --safe-mode --max-turns 1 --model haiku \
       --output-format json --no-session-persistence < /dev/null 2>/dev/null) || true
   else
-    AUTH_PROBE_JSON=$("$CLAUDE_CMD" -p ok --max-turns 1 --model haiku \
+    AUTH_PROBE_JSON=$("$CLAUDE_CMD" -p ok --safe-mode --max-turns 1 --model haiku \
       --output-format json --no-session-persistence < /dev/null 2>/dev/null) || true
   fi
   # error-fields の "api_error_status<TAB>is_error<TAB>kind" から先頭 2 つを取り出す。

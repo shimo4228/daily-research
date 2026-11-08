@@ -283,6 +283,23 @@ EOF
   [[ "$(sed -n 2p "$TMP/timeout_args")" =~ ^[0-9]+$ ]]
 }
 
+@test "real_auth_probe starts claude with --safe-mode, like call 1 / call 2" {
+  # probe だけが user の plugin / MCP / hook / CLAUDE.md を載せて起動していた。認証の経路は safe mode でも
+  # 変わらない (claude --help: "Auth ... work normally") ので、本番の呼び出しと同じ起動形で認証を確かめる
+  cat > "$TMP/claude" <<EOF
+#!/bin/bash
+printf '%s\n' "\$@" > "$TMP/probe_args"
+echo '{"type":"result","is_error":false}'
+EOF
+  chmod +x "$TMP/claude"
+  CLAUDE_CMD="$TMP/claude"
+  DR_PY="$(_dr_py)"
+  source "$LIB_DIR/auth.sh"
+  run real_auth_probe
+  [ "$status" -eq 0 ]
+  grep -qx -- "--safe-mode" "$TMP/probe_args"
+}
+
 # === claude.sh (classify_exit) ===
 
 _fixtures() {
