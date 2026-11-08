@@ -40,7 +40,7 @@ if [[ "$MODE" == "--staged" ]]; then
       *.py) py_files+=("$f") ;;
       *.sh) sh_files+=("$f") ;;
     esac
-  done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+  done < <(git diff --cached --name-only --diff-filter=ACMRT -z)
 else
   while IFS= read -r -d '' f; do py_files+=("$f"); done < <(git ls-files -z -- '*.py')
   while IFS= read -r -d '' f; do sh_files+=("$f"); done < <(git ls-files -z -- '*.sh')
