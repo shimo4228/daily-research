@@ -5,8 +5,9 @@ SH は claude を 2 段で呼び、dr_pipeline.py の audit-* が prompt の組�
 食い違いとした候補 (confirmed) だけを audit-apply が _audit_replace の規則で置き換える。ここが検査する
 invariant:
 - 置き換えは本文にちょうど 1 回現れる文だけ。frontmatter・題・機会メモ・ソース節は変わらない
-- 置き換えはノート全体の URL・link 先・強調と inline code の対・見出しを変えない。実行・埋め込み・HTML になる
-  記号と見えない文字を足さない。文の最小長と編集距離の上限がある。空・改行の増減は拒否
+- 置き換え (文 A → 文 B の字単位の差分) が足し引きする字は字・数字・空白・基本の句読点だけ (書式の記号・
+  制御文字・見えない文字は拒否)。結果のノートの URL・link・見出し・HTML のタグ・エンティティ・%%・書式の骨格は
+  変わらない。文の最小長と編集距離の上限がある。空と改行を含む候補は拒否
 - 候補の URL はノートの URL に限る (第 2 段が読む先をノートの原典に限る)
 - 第 2 段の prompt に第 1 段の理由と正しい値は入らない。ノート由来の文字列は呼び出しごとの乱数の区切りで挟む
 - 第 2 段が置き換え文を訂正と認め (replacement_verdict)、A の誤りの部分を B が直した形で持つときだけ当てる
@@ -167,12 +168,14 @@ def test_replace_once_in_body_keeps_fixed_sections():
         (S_REPORT, S_REPORT, "unchanged"),
         (S_REPORT, "報告書は\n欧州で公開された。", "newline"),
         (S_REPORT, "報告書は\t欧州で公開された。", "control"),
-        (S_Q2, "第 2 四半期の売上は前年より伸びた。", "url_changed"),
+        # URL の / と link の [ ] ( ) は消すのも書式の記号の足し引き
+        (S_Q2, "第 2 四半期の売上は前年より伸びた。", "disallowed_char"),
         (S_Q2, "第 2 四半期の売上は伸びた（https://example.com/other）。", "url_changed"),
+        (S_Q2, S_Q2.replace("q2", "q3"), "url_changed"),
         (
             S_STUDY,
             "調査は観察研究 https://example.com/study として行われ、参加者は 120 人だった。",
-            "link_changed",
+            "disallowed_char",
         ),
         (
             S_REPORT,
@@ -190,23 +193,40 @@ def test_replace_once_in_body_keeps_fixed_sections():
         (S_REPORT, S_REPORT.replace("報告書は", "報告書は\x85"), "control"),
         (S_REPORT, S_REPORT.replace("3", "4​"), "invisible"),
         (S_REPORT, S_REPORT.replace("報告書", "‮報告書"), "invisible"),
-        # vault で実行・埋め込み・HTML になる書式を足す
-        (S_REPORT, S_REPORT.replace("3", "`$=dv.x`"), "markup"),
-        (S_REPORT, S_REPORT.replace("3", "$=dv.x"), "markup"),
-        (S_REPORT, S_REPORT.replace("3", "<img src=x>"), "markup"),
-        (S_REPORT, S_REPORT.replace("3", "&#60;b&#62;"), "markup"),
-        (S_REPORT, S_REPORT.replace("3", "[[秘密]]"), "markup"),
-        (S_REPORT, S_REPORT.replace("3", "![[x]]"), "markup"),
-        (S_REPORT, S_REPORT.replace("3", "%% x %%"), "markup"),
-        (S_STUDY, S_STUDY.replace(") として", ")<!----> として"), "markup"),
-        # URL は大文字の scheme でも数え、link 先のすり替えも URL の変化として止める
-        (S_REPORT, S_REPORT.replace("欧州の 3 か国", "HTTPS://evil.example"), "url_changed"),
+        (S_REPORT, S_REPORT.replace("3", "4\u3164"), "invisible"),  # 字に分類される埋め字 (U+3164)
+        # vault で実行・埋め込み・HTML・強調になる書式の記号を足す
+        (S_REPORT, S_REPORT.replace("3", "`$=dv.x`"), "disallowed_char"),
+        (S_REPORT, S_REPORT.replace("3", "$=dv.x"), "disallowed_char"),
+        (S_REPORT, S_REPORT.replace("3", "<img src=x>"), "disallowed_char"),
+        (S_REPORT, S_REPORT.replace("3", "&#60;b&#62;"), "disallowed_char"),
+        (S_REPORT, S_REPORT.replace("3", "[[秘密]]"), "disallowed_char"),
+        (S_REPORT, S_REPORT.replace("3", "![[x]]"), "disallowed_char"),
+        (S_STUDY, S_STUDY.replace("[観察研究]", "![観察研究]"), "disallowed_char"),
+        (S_STUDY, S_STUDY.replace(") として", ")<!----> として"), "disallowed_char"),
+        (S_REPORT, S_REPORT.replace("報告書", "file:///etc/passwd"), "disallowed_char"),
+        (S_REPORT, S_REPORT.replace("3", "3\u0301"), "disallowed_char"),  # 結合文字 (Mn)
+        (S_REPORT, S_REPORT.replace("3 か国", "3\u00a0か国"), "disallowed_char"),  # no-break space
+        # 強調の記号は 1 つでも足さない (対の数を数えない)
+        (S_REPORT, S_REPORT.replace("3", "*3*"), "disallowed_char"),
+        (S_REPORT, S_REPORT.replace("3", "__3__"), "disallowed_char"),
+        (S_REPORT, S_REPORT.replace("3", "~~3~~"), "disallowed_char"),
+        (S_REPORT, S_REPORT.replace("3", "==3=="), "disallowed_char"),
+        # % と & は通すが、%% (comment) と HTML エンティティは結果のノートで止める
+        (S_REPORT, S_REPORT.replace("3", "%% x %%"), "comment_changed"),
+        (S_REPORT, S_REPORT.replace("3", "5%%"), "comment_changed"),
+        (S_REPORT, S_REPORT.replace("3", "&lt;b&gt;"), "entity_changed"),
+        (S_REPORT, S_REPORT.replace("報告書", "&sol;&sol;e"), "entity_changed"),
+        # URL は大文字の scheme でも数え、scheme の無い www. の URL も数える
+        (S_REPORT, S_REPORT.replace("欧州の 3 か国", "www.evil.example"), "url_changed"),
         (S_STUDY, S_STUDY.replace("https://example.com/", "HTTPS://exampl.com/"), "url_changed"),
-        # 断片が link をまたぐ: [ を外すと URL は残っても link が壊れる
-        ("調査は [観察研究](https://exa", "調査は 観察研究 (https://exa", "link_changed"),
-        # 本文に固定節と同じ見出しを作る (このノートは機会メモ・ソースの両節を持つ)
-        ("締切の話はこのノートでは扱わない。", "## 機会メモ", "heading_changed"),
-        ("締切の話はこのノートでは扱わない。", "## ソース", "heading_changed"),
+        # 断片が link をまたぐ: [ を外す
+        ("調査は [観察研究](https://exa", "調査は 観察研究 (https://exa", "disallowed_char"),
+        # 見出しの記号 # を足す
+        ("締切の話はこのノートでは扱わない。", "## 機会メモ", "disallowed_char"),
+        # 行全体を - の行にすると区切り線か、前の行を見出しにする setext の下線になる
+        ("締切の話はこのノートでは扱わない。", "-" * 17, "heading_changed"),
+        # 改行を含む候補: 改行をまたぐ参照形 link の定義を足す形
+        (S_REPORT, "報告書は [42%][r]\n[r]: obsidian://x", "newline"),
     ],
 )
 def test_replace_rejects_with_named_reason(sentence, replacement, reason):
@@ -218,25 +238,92 @@ def test_replace_rejects_with_named_reason(sentence, replacement, reason):
 @pytest.mark.parametrize(
     ("line", "sentence", "replacement", "reason"),
     [
-        # 対の片方だけを外す
+        # 対の片方だけを外す: 消す記号も足し引きに数える
         (
             "報告書は **2026-10-01** に欧州の 3 か国で公開された。",
             "**2026-10-01** に欧州の 3 か国",
             "2026-10-01** に欧州の 4 か国",
-            "emphasis_changed",
+            "disallowed_char",
         ),
         (
             "`v1.2` は 2026-10-01 に公開された版である。",
             "`v1.2` は 2026-10-01 に公開された",
             "v1.2` は 2026-10-02 に公開された",
-            "emphasis_changed",
+            "disallowed_char",
         ),
-        # 元からある & を使い回して HTML エンティティで URL を隠す (& の数は増えない)
+        # 元の文の < > を並べ替えて HTML にする: 記号を足さずに数を保つ形
+        (
+            "比較は a < b かつ c > d の形で 2026-10-01 に示された。",
+            "比較は a < b かつ c > d の形で 2026-10-01 に示された。",
+            "比較は <a href=obsidian://open?file=Secret>報告 d の形で 2026-10-01 に示された。",
+            "disallowed_char",
+        ),
+        (
+            "比較は a < b かつ c > d の形で 2026-10-01 に示された。",
+            "比較は a < b かつ c > d の形で 2026-10-01 に示された。",
+            "比較は <iframe srcdoc=x> d の形で 2026-10-01 に示された。",
+            "disallowed_char",
+        ),
+        # 字と空白だけの書き換えでタグ・autolink を作る
+        (
+            "比較は a < b かつ c > d の形で 2026-10-01 に示された。",
+            "比較は a < b かつ c > d の形で 2026-10-01 に示された。",
+            "比較は a <b かつ c> d の形で 2026-10-01 に示された。",
+            "html_changed",
+        ),
+        (
+            "比較は a < b かつ c > d の形で 2026-10-01 に示された。",
+            "比較は a < b かつ c > d の形で 2026-10-01 に示された。",
+            "比較は a <obsidian:open> d の形で 2026-10-01 に示された。",
+            "html_changed",
+        ),
+        # 行をまたぐタグの開きを作る (閉じは次の行の >)
+        (
+            "比較は x < y の形で 2026-10-01 に示された。\n続く行は z > w である。",
+            "比較は x < y の形で 2026-10-01 に示された。",
+            "比較は x <iframe の形で 2026-10-01 に示された。",
+            "html_changed",
+        ),
+        # 元からある & を使い回して HTML エンティティを書き換える (& の数は増えない)
         (
             "報告書は A &amp; B 社が 2026-10-01 に公開した資料である。",
             "報告書は A &amp; B 社が 2026-10-01 に公開した",
-            "報告書は https:&#47;/e.x 社が 2026-10-01 に公開した",
-            "url_changed",
+            "報告書は A &sol; B 社が 2026-10-01 に公開した",
+            "entity_changed",
+        ),
+        # 記号と記号の間の字を消して参照形 link にする
+        (
+            "注は [a] と [b] の 2 つで 2026-10-01 に足された。",
+            "注は [a] と [b] の 2 つで 2026-10-01 に足された。",
+            "注は [a][b] の 2 つで 2026-10-01 に足された。",
+            "markup",
+        ),
+        # 行頭の [r] を参照形 link の定義にする (: は通す字)
+        (
+            "[r] は 2026-10-01 に公開された資料の番号である。",
+            "[r] は 2026-10-01 に公開された資料の番号である。",
+            "[r]: 2026-10-01 に公開された資料の番号である。",
+            "link_changed",
+        ),
+        # wikilink・相対 link の先を字だけで書き換える (秘密のノートを埋め込む・開く)
+        (
+            "詳しくは [[報告]] にある 2026-10-01 の版を読む。",
+            "詳しくは [[報告]] にある 2026-10-01 の版を読む。",
+            "詳しくは [[秘密]] にある 2026-10-01 の版を読む。",
+            "link_changed",
+        ),
+        (
+            "詳しくは [付録](appendix) にある 2026-10-01 の版を読む。",
+            "詳しくは [付録](appendix) にある 2026-10-01 の版を読む。",
+            "詳しくは [付録](secret) にある 2026-10-01 の版を読む。",
+            "link_changed",
+        ),
+        # Dataview の inline の式の中を字だけで書き換える
+        (
+            "値は `$=dv.current()` で 2026-10-01 に出した。",
+            "値は `$=dv.current()` で 2026-10-01 に出した。",
+            "値は `$=dv.pages()` で 2026-10-01 に出した。",
+            "markup",
         ),
         # 本文の見出しを固定節の見出しに変える: 見出し行の数は同じでも、固定節と同じ見出しが 2 つになる
         (
@@ -255,8 +342,11 @@ def test_replace_compares_the_whole_note(line, sentence, replacement, reason):
 
 @pytest.mark.unit
 def test_replace_that_would_create_a_fixed_section_is_rejected():
+    # 本文の見出しを字だけ消して固定節と同じ見出しにする (このノートは機会メモの節を持たない)
+    head = "## 機会メモの扱いについての補足と注意"
     note = NOTE.replace("## 機会メモ\n\n- 公募の締切は 2026-12-01（失効日 2026-12-01）。\n\n", "")
-    new, why = dr_pipeline._audit_replace(note, "締切の話はこのノートでは扱わない。", "## 機会メモ")
+    note = note.replace("締切の話はこのノートでは扱わない。", head)
+    new, why = dr_pipeline._audit_replace(note, head, "## 機会メモ")
     assert (new, why) == (None, "heading_changed")
 
 
@@ -303,12 +393,26 @@ def test_edit_distance(a, b, cap, dist):
 
 
 @pytest.mark.unit
-def test_replace_keeps_percent_and_existing_markup_counts():
-    # 元からある記号の数を増やさない訂正は通る (割合の訂正・リンクの文言の訂正)
-    note = NOTE.replace(S_REPORT, "報告書は回答者の 52% が 2026-10-01 に同意したとした。")
-    s = "報告書は回答者の 52% が 2026-10-01 に同意したとした。"
-    new, why = dr_pipeline._audit_replace(note, s, s.replace("52%", "48%"))
-    assert why is None and "48%" in new
+@pytest.mark.parametrize(
+    ("line", "old", "new"),
+    [
+        ("報告書は回答者の 52% が 2026-10-01 に同意したとした。", "52%", "48%"),
+        ("報告書は回答者の半数が 2026-10-01 に同意したとした。", "半数", "48%"),
+        ("報告書は研究開発部門が 2026-10-01 に公開した資料である。", "研究開発部門", "R&D 部門"),
+        ("報告書は A & B 社が 2026-10-01 に公開した資料である。", "A & B 社", "A&B 社"),
+        # 元からある記号の間の字の書き換え (link の文言・強調の中・ASCII の括弧の中)
+        ("報告書は **2026-10-01** に欧州の 3 か国で公開された。", "3 か国", "4 か国"),
+        ("報告書は (2026-10-01) に欧州の 3 か国で公開された。", "(2026-10-01)", "(2026-10-02)"),
+        ("報告書は x < y の形で 2026-10-01 に示された。", "2026-10-01", "2026-10-02"),
+        # 元の文に残るタブは足し引きに数えない
+        ("報告書は\t2026-10-01 に欧州の 3 か国で公開された。", "3 か国", "4 か国"),
+    ],
+)
+def test_replace_allows_plain_corrections(line, old, new):
+    # 字・数字・空白・基本の句読点 (% と & を含む) だけの訂正は通る
+    note = NOTE.replace(S_REPORT, line)
+    out, why = dr_pipeline._audit_replace(note, line, line.replace(old, new))
+    assert why is None and line.replace(old, new) in out
 
 
 @pytest.mark.unit
