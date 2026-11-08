@@ -190,7 +190,7 @@ launchctl list | grep daily-research
 | `WARN: Line <track> pre-verify copy failed — …` / `WARN: Line <track> verify-diff could not run (non-fatal)` | 改稿前の写しを書けなかったか比べられなかった。呼2 の結果は残り、改稿の差分だけが記録されない |
 | `WARN: report lint hard fail (ctl-016): ...` | 決定論 lint がソース節不在・出典 0 件を検出 |
 | `WARN: clarity pass failed ...` | 呼2（検証 + clarity）の失敗 (fail-open — run 全体は成功のまま、そのラインは `unverified` として計上) |
-| `Audit pass: on (model <m>, ADR-0020)` | `[audit] enabled = true`。article ごとに呼2 の後で呼3 が走る |
+| `Audit pass: on (model <m>, effort high, ADR-0020)` | `[audit] enabled = true`。article ごとに呼2 の後で呼3 が走る |
 | `AUDIT <track>: {...}` | そのラインの呼3 の集計: `ran`（第 1 段が読める結果を返したか）、`reason`（返さなかった理由: `E_TRANSIENT` などの呼び出しの分類・`parse`・`E_BUDGET_GATE`・`note_unreadable`）、確かめた主張・一致・原典が取れない主張の数、`invalid`（形が壊れていて捨てた候補）、`candidates`、`confirmed`（両段が食い違いとした）、`applied`、`rejected`、第 2 段の呼び出し数・turns・費用。metrics の `verification` に `audit_*` として合算する |
 | `WARN: Line <track> audit stage 1 did not run or failed (<class>) — …` | 第 1 段を始めなかった（支出の上限・ノートが読めない・長すぎる）か失敗した。ノートは呼2 の後のままで、run の成否は変わらない |
 | `WARN: Line <track> audit pass: 監査で確定した候補 D<n> を適用しなかった (<規則>) — …` | 両段が誤りと確定したが、置き換えが規則に外れた（`not_found` / `ambiguous` / `outside_body`: 文が本文にちょうど 1 回ない、`url_changed` / `link_changed`、`length`、`empty`、`unchanged`、`newline`、`control`、`sections_changed`）。誤りはノートに残る — `runs/{date}.audit.json` を見て手で直す |

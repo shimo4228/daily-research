@@ -2012,7 +2012,7 @@ PY
   grep -qF "$AUDIT_FIXED" "$note"
   refute_grep -qF "$AUDIT_SENTENCE" "$note"
   cmp -s "$pre" "$MOCK_HOME/.report_$PICKED"
-  echo "$log_content" | grep -q "Audit pass: on (model opus, ADR-0020)"
+  echo "$log_content" | grep -q "Audit pass: on (model opus, effort high, ADR-0020)"
   echo "$log_content" | grep -q "AUDIT $PICKED: {\"ran\": true, "
   echo "$log_content" | grep "AUDIT $PICKED:" | grep -q '"applied": 1'
   refute_grep -q "audit pass: " <<< "$log_content"
