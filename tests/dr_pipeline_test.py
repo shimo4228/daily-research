@@ -1282,6 +1282,21 @@ def test_receipt_read_missing_reason_code_is_unspecified(monkeypatch, capsys, tm
     assert out == "hold\t\t\tunspecified\n"
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "event_date",
+    ["2026-09-10", "unknown", "2026-13-45", "last week", 20260910, None, "absent"],
+)
+def test_receipt_read_ignores_event_date(monkeypatch, capsys, tmp_path, event_date):
+    # event_date は記録用 (H17) — 旧 receipt (key 無し) も形式外の値も gate を落とさない
+    obj = {"status": "article", "report": "2026-09-15_akc_x.md", "reason_code": "carry_over"}
+    if event_date != "absent":
+        obj["event_date"] = event_date
+    rc, out, _ = _rr(monkeypatch, capsys, _receipt(tmp_path, obj))
+    assert rc == 0
+    assert out == "article\t2026-09-15_akc_x.md\t\tcarry_over\n"
+
+
 # --- verify-read ---
 
 
@@ -2311,9 +2326,15 @@ def _full_receipt(**over):
         "reason_code": "no_new_evidence",
         "answer_scope": "as of 2026-09-15",
         "title": "Some title",
+        "event_date": "2026-09-10",
     }
     d.update(over)
     return d
+
+
+@pytest.mark.unit
+def test_full_receipt_fixture_follows_receipt_keys():
+    assert tuple(_full_receipt()) == dr_pipeline.RECEIPT_KEYS
 
 
 @pytest.mark.unit
@@ -2324,6 +2345,7 @@ def test_past_topics_append_creates_file_with_entry(monkeypatch, capsys, tmp_pat
     assert rc == 0, err
     data = json.loads(past.read_text())
     assert data["version"] == 1
+    # event_date は問いの履歴に写さない — 履歴は選定の入力で、新しさは計測だけ (H17)
     assert data["topics"] == [
         {
             "date": "2026-09-15",

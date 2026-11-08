@@ -549,9 +549,11 @@ def cmd_line_brief(argv: list[str]) -> int:
 # report は model 由来文字列なので {date}_{track}_[A-Za-z0-9._-]+.md に限定する
 # (パス区切り・カンマを通さない)。shell は report を allowedTools に埋めない
 # (呼2 の対象は run スコープの find 結果) — ここでの検証は gate 判定用。
+# event_date は gate に効かせない (記録用。key の無い旧 receipt も形式外の値も通す)。
 RECEIPT_STATUSES = ("article", "brief", "quiet", "hold")
 # receipt (呼1 が state/<line>/runs/{date}.json に書く) のキーと順序。両プロトコルの receipt 例は
 # この順で書く — tests/dr_pipeline_test.py がプロトコル本文と照合する (共有契約の正本)。
+# event_date = 記事の中心の出来事の日付 YYYY-MM-DD か "unknown" (ノートの新しさの計測、H17)。
 RECEIPT_KEYS = (
     "date",
     "line",
@@ -562,6 +564,7 @@ RECEIPT_KEYS = (
     "reason_code",
     "answer_scope",
     "title",
+    "event_date",
 )
 REASON_CODES = ("no_new_evidence", "thin_material", "fetch_failed", "carry_over")
 _CTRL_RE = re.compile(r"[\x00-\x1f\x7f]")

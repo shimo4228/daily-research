@@ -235,12 +235,17 @@ run は失敗扱いになるので、state 更新より先に置く。quiet / ho
  "report": "<ファイル名 basename>|null", "question": "<最終形の問い>",
  "reason": "<quiet/hold の理由 1 行。article/brief は空でよい>",
  "reason_code": "no_new_evidence|thin_material|fetch_failed|carry_over|unspecified",
- "answer_scope": "<何が分かったところまで答えたか 1 行>", "title": "<記事の題。quiet/hold は空でよい>"}
+ "answer_scope": "<何が分かったところまで答えたか 1 行>", "title": "<記事の題。quiet/hold は空でよい>",
+ "event_date": "<記事の中心の出来事の日付 YYYY-MM-DD|unknown。quiet/hold は unknown でよい>"}
 ```
 
 `question` と `answer_scope` は quiet / hold でも書く — orchestrator がこの receipt から問いの履歴
 （タスクプロンプトの「過去テーマ履歴」の元）を記録し、次回の重複判定の基準になる。`answer_scope` には
 **どの時点のどの変化まで答えたか**を書く。
+
+`event_date` は記事が主題にした外部の出来事（発表・公開・リリース・判決など）が起きた日で、根拠ファイルの
+`published_at` と同じく原典で確かめた日付を書く。出来事が複数なら中心の 1 つ、日まで確かめられなければ
+`unknown`。orchestrator がノートの新しさの記録に使う。問いの選定は Step 3 の基準のまま行う。
 
 ### Step 6: state 更新
 
@@ -304,3 +309,5 @@ run は失敗扱いになるので、state 更新より先に置く。quiet / ho
   列に経過が溜まった）。
 - `pending.md` に足す項目の制限: 運用の観測（2026-11、article の run の経過メモで `pending.md` が膨らみ、
   選定前の読込を占めた）。
+- receipt の `event_date`: 運用の観測（2026-11、根拠ファイルの出典の発表日の中央値が line によって 1 週間から
+  4 か月まで開き、ノートの新しさが記録されていなかった）。記録だけで、選定の基準は変えない。

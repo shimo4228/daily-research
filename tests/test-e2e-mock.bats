@@ -208,11 +208,14 @@ if [[ "$PROTOCOL" == *repo-research-protocol.md || "$PROTOCOL" == *ecosystem-res
   REPORT_DIR="$MOCK_HOME_DIR/mock-vault/daily-research"
   mkdir -p "$REPORT_DIR"
   REPORT_NAME="${DR_DATE:-$(date +%Y-%m-%d)}_${TRACK}_mock-report.md"
+  # event_date seam (H17): .event_date_<track> の中身 (既定 = DR_DATE)。absent なら key を書かない (旧 receipt)
+  EVENT_DATE=$(cat "$MOCK_HOME_DIR/.event_date_$TRACK" 2>/dev/null || echo "$DR_DATE")
   write_receipt() {  # $1 = status, $2 = report basename or empty
-    local report_json=null
+    local report_json=null event_json=""
     [ -n "$2" ] && report_json="\"$2\""
-    printf '{"date": "%s", "line": "%s", "status": "%s", "report": %s, "question": "mock question for %s", "reason": "mock reason", "reason_code": "%s", "answer_scope": "mock scope", "title": "mock title for %s"}\n' \
-      "$DR_DATE" "$TRACK" "$1" "$report_json" "$TRACK" "$REASON_CODE" "$TRACK" > "$RECEIPT"
+    [ "$EVENT_DATE" != "absent" ] && event_json=", \"event_date\": \"$EVENT_DATE\""
+    printf '{"date": "%s", "line": "%s", "status": "%s", "report": %s, "question": "mock question for %s", "reason": "mock reason", "reason_code": "%s", "answer_scope": "mock scope", "title": "mock title for %s"%s}\n' \
+      "$DR_DATE" "$TRACK" "$1" "$report_json" "$TRACK" "$REASON_CODE" "$TRACK" "$event_json" > "$RECEIPT"
   }
 
   # pending.md 追記 seam (H02): .pending_add_<track> があれば state の pending.md に追記する

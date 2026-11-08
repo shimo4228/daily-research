@@ -481,6 +481,9 @@ ECO_TEMPLATE="$PROJECT_DIR/templates/report-template-ecosystem.md"
     grep -q 'fetch_status' "$P"
     grep -qF '"status": "article|brief|quiet|hold"' "$P"
     grep -qF '"reason_code": "no_new_evidence|thin_material|fetch_failed|carry_over|unspecified"' "$P"
+    # event_date は新しさの記録だけで、選定の基準は変えない (H17、ADR-0017 D4)
+    grep -qF '"event_date": "<記事の中心の出来事の日付 YYYY-MM-DD|unknown。' "$P"
+    grep -q '問いの選定は Step 3 の基準のまま行う' "$P"
     grep -q 'pending.md' "$P"
     # pending.md に項目を足すのは hold の問いと日付付き締切の機会だけ (SH の pending-stats WARN と対、H02)
     grep -q '項目を足すのは、hold の run の保留の問いと、記事の機会メモに載せた日付付き締切の機会だけ' "$P"
