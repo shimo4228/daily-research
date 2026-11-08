@@ -107,6 +107,18 @@ case "$SC" in
     printf '{"date":"%s","line":"%s","status":"article","report":"%s_%s_note.md","question":"q","reason":"r","reason_code":"no_new_evidence"}' "$D" "$L" "$D" "$L" > "$R"
     echo '{"type":"result","is_error":true,"api_error_status":429,"total_cost_usd":1.0,"result":"rate_limit_error"}'
     exit 1 ;;
+  call2-429)
+    # 呼1 はノートと article の receipt を書いて成功し、呼2 が 429 で落ちる
+    if [ "$KIND" = "verification-protocol" ]; then
+      echo '{"type":"result","is_error":true,"api_error_status":429,"total_cost_usd":0.2,"result":"rate_limit_error"}'
+      exit 1
+    fi
+    V=$(printf '%s' "$PROMPT" | grep -oE '1\. レポート: [^ ]+' | head -1 | sed 's/^1\. レポート: //')
+    VD=$(dirname "$V"); mkdir -p "$VD"
+    printf -- '---\nkind: article\n---\nbody\n' > "$VD/${D}_${L}_note.md"
+    printf '{"date":"%s","line":"%s","status":"article","report":"%s_%s_note.md","question":"q","reason":"r","reason_code":"no_new_evidence"}' "$D" "$L" "$D" "$L" > "$R"
+    echo '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":2.0,"num_turns":3}'
+    exit 0 ;;
   rate-limit)
     echo '{"type":"result","is_error":true,"api_error_status":429,"total_cost_usd":0.3,"result":"rate_limit_error"}'
     exit 1 ;;
@@ -266,6 +278,25 @@ calls_of() { grep -c "kind=$1" "$MOCK_HOME/.calls" || true; }
   [ "$(calls_of verification-protocol)" -eq 0 ]
   grep -q 'billing/rate-limit error' "$(log_file)"
   grep -q 'clarity pass skipped after an auth/billing error' "$(log_file)"
+  # ゲートに落ちた line は無いが、2 本目は始めていない — 「全 line 成功」ではない (ADR-0011)
+  [ "$status" -eq 1 ]
+  grep -q '"final_class": "E_PARTIAL"' "$P/metrics.jsonl"
+}
+
+@test "429 in call 2: the remaining line is not started and the day is E_PARTIAL, not a success" {
+  # 呼2 の課金・認証の中断は残 line を止めるが、止めた line はゲートを通らないので FAILED_LINES が
+  # 空のまま残り、最終が OK / exit 0 / 「完成しました」になっていた
+  echo "call2-429" > "$MOCK_HOME/.scenario"
+  run run_script
+  [ "$status" -eq 1 ]
+  [ "$(calls_of repo-research-protocol)" -eq 1 ]
+  [ "$(calls_of verification-protocol)" -eq 1 ]
+  grep -q 'clarity pass hit a billing/rate-limit error' "$(log_file)"
+  grep -q 'Lines not started: ' "$(log_file)"
+  grep -q 'Failed (E_PARTIAL' "$(log_file)"
+  if grep -q 'Completed successfully' "$(log_file)"; then false; fi
+  grep -q '"final_class": "E_PARTIAL"' "$P/metrics.jsonl"
+  grep -q 'リサーチが一部失敗しました (今朝: [a-z]* / 未検証: [a-z]* / 未実行: [a-z]*)' "$MOCK_HOME/.notify_log"
 }
 
 @test "timed-out call (no result JSON): the call's cap is recorded as an estimate, not \$0" {

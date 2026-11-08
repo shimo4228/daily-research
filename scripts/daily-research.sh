@@ -765,7 +765,13 @@ if [ -d "$REPORT_DIR" ]; then
   REPORT_COUNT=$(find "$REPORT_DIR" -maxdepth 1 -name "${DATE}_*.md" 2>/dev/null | wc -l | tr -d ' ') || true
 fi
 # E_BUDGET = 支出の上限で 1 line も始めなかった日 (失敗した line は無いが成果も無い)。
-if [ -n "$FAILED_LINES" ]; then
+# 認証・課金の失敗で残 line を始めなかった日は、ゲートに落ちた line が無くても「全 line 成功」では
+# ない (ADR-0011)。呼2 か receipt を書いた後の呼1 で止まると FAILED_LINES は空のまま残る。
+ABORT_STOPPED=""
+if [ -n "$STOPPED_LIST" ] && { [ "$AUTH_ABORT" = "1" ] || [ "$BILLING_ABORT" = "1" ]; }; then
+  ABORT_STOPPED=1
+fi
+if [ -n "$FAILED_LINES" ] || [ -n "$ABORT_STOPPED" ]; then
   if [ -n "$OK_LINES" ]; then PASS2_CLASS="E_PARTIAL"; else PASS2_CLASS="E_NO_REPORT"; fi
 elif [ -z "$OK_LINES" ] && [ "$BUDGET_STOP" = "1" ]; then
   PASS2_CLASS="E_BUDGET"
@@ -813,7 +819,8 @@ else
     notify "API 支出の上限のため、今朝のリサーチは実行していません (未実行: $STOPPED_LIST)" "Daily Research Budget"
   elif [ -n "$OK_LINES" ]; then
     # 部分成功 — 成果が存在することを通知から消さない (alarm fatigue 回避)
-    notify "リサーチが一部失敗しました (${STATE_DETAIL:+$STATE_DETAIL / }failed:$FAILED_LINES)。ログを確認してください。" "Daily Research Error"
+    # 認証・課金で止めた日は FAILED_LINES が空でありうる (止めた line は STATE_DETAIL の「未実行」)
+    notify "リサーチが一部失敗しました (${STATE_DETAIL}${FAILED_LINES:+${STATE_DETAIL:+ / }failed:$FAILED_LINES})。ログを確認してください。" "Daily Research Error"
   else
     notify "リサーチが失敗しました (lines:$FAILED_LINES)。ログを確認してください。" "Daily Research Error"
   fi
