@@ -24,6 +24,7 @@ source "$LIB_DIR/lock.sh"     # acquire_lock() / release_lock() (flock の mutex
 source "$LIB_DIR/auth.sh"     # real_auth_probe() (実 OAuth probe、2 entrypoint 共有)
 source "$LIB_DIR/claude.sh"   # run_claude() / classify_exit() (E_AUTH/E_BILLING/E_BUDGET/E_TRANSIENT/E_FATAL)
 source "$LIB_DIR/billing.sh"  # billing_load() / budget_flags() / billing_record() / billing_gate()
+source "$LIB_DIR/notes.sh"    # notes_publish() (ノートの置き場が git なら commit / push)
 
 log_init  # logs/ 作成 + 権限 600/700 (作成時) + 30日ローテーション
 # run_claude の全呼び出しが --debug-file を logs/debug/ に残す (timeout で kill された呼び出しの止まった箇所を読むため)
@@ -1156,10 +1157,11 @@ else
   fi
 fi
 
-# === Pass 3: Obsidian wiki 自動 ingest (vault 側スクリプト。non-fatal) ===
+# === Pass 3: wiki 自動 ingest (ノートの置き場 vault_path 側のスクリプト。non-fatal) ===
 # line の一部が失敗していても、生成済みレポートの ingest は行う。
 # vault パスは config.toml の [general].vault_path から取得 (個人パスのハードコード禁止)。
 VAULT_PATH=$(python3 "$DR_PY" vault-path "$PROJECT_DIR/config.toml" 2>> "$LOG_FILE") || VAULT_PATH=""
+PASS3_EXIT=skipped  # notes publish が wiki/ を送るのは Pass 3 が 0 で終わった日だけ
 if [ -z "$VAULT_PATH" ]; then
   log "WARN: vault_path が config.toml に未設定。Pass 3 wiki ingest を skip"
 else
@@ -1195,6 +1197,16 @@ else
   else
     log "WARN: wiki ingest スクリプトが見つからない/実行不可: $VAULT_INGEST"
   fi
+fi
+
+# === ノートの置き場の commit / push (lib/notes.sh。non-fatal) ===
+# Pass 3 の wiki 更新まで含めて 1 commit にするので Pass 3 の後に置く。置き場が git でなければ何もしない
+if [ -n "$VAULT_PATH" ]; then
+  NOTES_REL=""
+  case "$REPORT_DIR" in "$VAULT_PATH"/?*) NOTES_REL="${REPORT_DIR#"$VAULT_PATH"/}" ;; esac
+  NOTES_WIKI=0
+  if [ "$PASS3_EXIT" = "0" ]; then NOTES_WIKI=1; fi
+  notes_publish "$VAULT_PATH" "$DATE" "$NOTES_REL" "$NOTES_WIKI"
 fi
 
 # === 自己改善ループの計測 (ADR-0006): run 記録の永続化 + review リマインダー ===

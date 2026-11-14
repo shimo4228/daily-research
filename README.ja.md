@@ -2,7 +2,7 @@ Language: [English](README.md) | 日本語
 
 # daily-research
 
-**毎朝、研究 repo に関わる外部の動向を 1 つと、それを repo にどう使えるかを解説したノートが Obsidian Vault に届きます。** 毎朝、[Claude Code](https://docs.anthropic.com/en/docs/claude-code)（英語）が、研究ライン (line) のうち数本について、*そのラインの repo を作業ディレクトリとして* 起動されます（ラインは研究 repo 1 つと、その周りで見張る対象の組です）。repo 自身の運用文脈（CLAUDE.md、タスク台帳、開いた問い、実施履歴）を読み、新しい発表の場・仕組み・仕様・締切付きの機会といった **repo に関係する外部の動向**を 1 つ問いの形で選び、何が起きたか・なぜ重要か・この repo にどう使えるかを解説します。ノートは前提知識ゼロで読めるように書かれ、[Obsidian](https://obsidian.md) Vault に置かれます。朝のコーヒーと読む読み物であって、todo キューではありません。
+**毎朝、研究 repo に関わる外部の動向を 1 つと、それを repo にどう使えるかを解説したノートがノートの置き場に届きます。** 毎朝、[Claude Code](https://docs.anthropic.com/en/docs/claude-code)（英語）が、研究ライン (line) のうち数本について、*そのラインの repo を作業ディレクトリとして* 起動されます（ラインは研究 repo 1 つと、その周りで見張る対象の組です）。repo 自身の運用文脈（CLAUDE.md、タスク台帳、開いた問い、実施履歴）を読み、新しい発表の場・仕組み・仕様・締切付きの機会といった **repo に関係する外部の動向**を 1 つ問いの形で選び、何が起きたか・なぜ重要か・この repo にどう使えるかを解説します。ノートは前提知識ゼロで読めるように書かれ、[Obsidian](https://obsidian.md) Vault に置かれます。朝のコーヒーと読む読み物であって、todo キューではありません。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/shimo4228/daily-research) ![python](https://img.shields.io/badge/python-3.11%2B%20stdlib-3776ab.svg)
 
@@ -23,7 +23,7 @@ flowchart TD
     pick --> loop["呼1 (1 回目の呼び出し) · claude -p · Opus · 25 分タイムアウト · リトライ 1 回<br/>cwd = ラインの repo (ecosystem ラインは state/&lt;line&gt;/)"]
     loop --> ctx["入力 (短く): config のラインの設定 + state/&lt;line&gt;/brief.md<br/>+ 過去の問い履歴 · pending.md<br/>repo の詳細 (context_files) は問いを選んだ後に読む"]
     ctx --> run["広い探索 (ecosystem ラインは先に監視リストを確認)<br/>問いの候補を並べて 1 つ選ぶ (または 更新なし / 保留)<br/>citation ゲート付きリサーチ · 根拠ファイル"]
-    run --> out[("state/&lt;line&gt;/runs/ (根拠ファイル · 実行記録)<br/>+ Obsidian Vault: 解説ノート または 短報 (更新なし / 保留では書かない)")]
+    run --> out[("state/&lt;line&gt;/runs/ (根拠ファイル · 実行記録)<br/>+ ノートの置き場: 解説ノート または 短報 (更新なし / 保留では書かない)")]
     out --> gate["レポートのゲートが実行記録を読む<br/>通れば、スクリプトが問いを past_topics.json に追記"]
     gate -->|ノートを書いたときだけ| clarity["呼2 (2 回目の呼び出し) · 新しいセッションでの読みやすさの修正 + 原典照合 · Sonnet<br/>verify.json を記録"]
 ```
@@ -48,7 +48,7 @@ flowchart TD
 | `python3` >= 3.11 | JSON/TOML 解析に stdlib のみ（`json` / `tomllib` / `re`）。macOS system 3.9 は `tomllib` 非対応のため Homebrew の `python3` を使う |
 | macOS | スケジューリングに `launchd` を使用（Linux は `cron` / `systemd` に適宜変更） |
 | coreutils の `timeout` | 必須。無いとスクリプトは開始時に止まる。Homebrew で入れる（`brew install coreutils`） |
-| Obsidian (任意) | Markdown 対応ツールなら何でも可 |
+| ノートの置き場 | Markdown を置ける dir なら何でも可。`origin` remote を持つ git の作業ツリーなら、run ごとにその日のノートを commit して push する |
 | 研究リポジトリ | 実行時に読める運用文脈（CLAUDE.md、タスク台帳、開いた問い）を持つ repo を 1 つ以上 |
 
 ## クイックスタート

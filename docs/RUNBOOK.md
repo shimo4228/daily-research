@@ -104,8 +104,11 @@ daily-research.sh (05:00)
 │       call 2 left it
 ├── ctl-016 deterministic report lint (fixed sections 機会メモ / ソース, synced to
 │   report-template.md; kind: brief is exempt from the 機会メモ and length soft checks)
-├── Pass 3: Obsidian wiki ingest (vault-side script, non-fatal, under an outer timeout = the ingest's own claude
+├── Pass 3: wiki ingest (script in the notes folder, non-fatal, under an outer timeout = the ingest's own claude
 │   limit (`WIKI_INGEST_TIMEOUT`, else the vault default) plus a margin; logged as `Pass 3 outer timeout: …`)
+├── notes publish (lib/notes.sh, non-fatal): when vault_path is the top of a git work tree on main, commit the
+│   new notes (and wiki/ when Pass 3 exited 0) as `notes: <date>` and push main to origin under a 120 s limit;
+│   a rewritten committed note is left unstaged with a warning
 └── metrics.jsonl append (incl. clarity_pass / line_states / verification / event_age_days / effort) + /dr-review age check
 ```
 
@@ -134,7 +137,7 @@ A call that timed out (`exit 124`) leaves no result JSON, but its debug log is k
 cat logs/$(date +%Y-%m-%d).log
 
 # Check if report was generated (use your vault_path from config.toml)
-ls -la "/path/to/your/obsidian/vault/daily-research/"
+ls -la "/path/to/your/notes/daily-research/"
 
 # Check launchd job status
 launchctl list | grep daily-research
@@ -298,22 +301,27 @@ rm -rf .daily-research.lock
 
 The billing path never changes on its own: in subscription mode an `ANTHROPIC_API_KEY` exported in your shell is dropped, and in api mode only the key in `env_file` is used.
 
-### 6. Reports Not Appearing in Obsidian
+### 6. Reports Not Reaching the Notes Folder or Its Remote
 
-**Symptoms**: Script completes successfully but reports aren't visible in Obsidian.
+**Symptoms**: Call 1 times out (`exit 124`) day after day, or the notes are written but never reach the remote.
 
-**Cause**: iCloud sync delay, or vault path changed.
+**Cause**: a notes folder inside a sync service (iCloud Drive and the like) whose storage is full: writes there stop
+returning, so call 1 waits on its Write until the 25-minute limit (the debug log shows a `tool_dispatch_start
+tool=Write` with no `tool_dispatch_end`). For the remote: the push failed (`WARN: notes publish — git push failed`).
 
 **Fix**:
 ```bash
-# Verify vault path matches config.toml
+# Where the notes go
 grep vault_path config.toml
 
-# Check if files exist on disk (use your vault_path)
-ls "/path/to/your/obsidian/vault/daily-research/"
-
-# Force iCloud sync: open Files app on iOS or wait
+# Did today's notes get committed and pushed?
+grep "Notes publish" logs/$(date +%Y-%m-%d).log
+git -C "<vault_path>" log --oneline -3
+git -C "<vault_path>" status --short
 ```
+
+Keep `vault_path` on a local disk (a git work tree with a private remote is the intended shape). A failed push needs
+no action beyond fixing the cause: the next run pushes the backlog.
 
 ### 7. Slow Execution or Hangs Due to Plugins
 

@@ -1,5 +1,6 @@
 [general]
-vault_path = "/path/to/your/obsidian/vault"
+# ノートの置き場。git の作業ツリーの root なら run の最後に commit し、origin があれば push する (lib/notes.sh)
+vault_path = "/path/to/your/notes"
 output_dir = "daily-research"
 # Rotating lines run per morning (ADR-0017). Integer >= 1 (default 1). The window
 # advances by lines_per_day each day; daily = true lines run in addition.

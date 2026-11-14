@@ -2,7 +2,7 @@ Language: English | [日本語](README.ja.md)
 
 # daily-research
 
-**An explanatory note in your Obsidian vault each morning: one outside development that matters to your research repo, and how the repo can use it.** Every morning, [Claude Code](https://docs.anthropic.com/en/docs/claude-code) is launched for a few of your research *lines* (a line is one research repo plus what to watch around it), *with the line's repo as its working directory*. It reads the repo's own operational context (CLAUDE.md, task ledger, open questions, implementation log), picks **one external development that matters to the repo** as a question, such as a new venue, mechanism, spec, or deadline-bound opportunity, and explains what happened, why it matters, and how the repo can use it. The note lands in your [Obsidian](https://obsidian.md) vault, written for a reader with zero prior context: something to read with your morning coffee, not a to-do queue.
+**An explanatory note in your notes folder each morning: one outside development that matters to your research repo, and how the repo can use it.** Every morning, [Claude Code](https://docs.anthropic.com/en/docs/claude-code) is launched for a few of your research *lines* (a line is one research repo plus what to watch around it), *with the line's repo as its working directory*. It reads the repo's own operational context (CLAUDE.md, task ledger, open questions, implementation log), picks **one external development that matters to the repo** as a question, such as a new venue, mechanism, spec, or deadline-bound opportunity, and explains what happened, why it matters, and how the repo can use it. The note lands in your [Obsidian](https://obsidian.md) vault, written for a reader with zero prior context: something to read with your morning coffee, not a to-do queue.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/shimo4228/daily-research) ![python](https://img.shields.io/badge/python-3.11%2B%20stdlib-3776ab.svg)
 
@@ -23,7 +23,7 @@ flowchart TD
     pick --> loop["call 1 · claude -p · Opus · 25-min timeout · 1 retry<br/>cwd = the line's repo (an ecosystem line: state/&lt;line&gt;/)"]
     loop --> ctx["input (short): the line's config settings + state/&lt;line&gt;/brief.md<br/>+ past question history · pending.md<br/>repo detail (context_files) is read after the question is chosen"]
     ctx --> run["wide search (an ecosystem line first checks its watchlist)<br/>list candidate questions, pick one (or quiet / hold)<br/>research with citation gate · evidence file"]
-    run --> out[("state/&lt;line&gt;/runs/ (evidence · receipt)<br/>+ Obsidian vault: explanatory note or short note, unless quiet / hold")]
+    run --> out[("state/&lt;line&gt;/runs/ (evidence · receipt)<br/>+ notes folder: explanatory note or short note, unless quiet / hold")]
     out --> gate["report gate reads the receipt<br/>on a pass, the script appends the question to past_topics.json"]
     gate -->|only when a note was written| clarity["call 2 · fresh-context clarity + source verification · Sonnet<br/>writes verify.json"]
 ```
@@ -48,7 +48,7 @@ The full run, step by step (lock, auth probe, both calls, the report gate and th
 | `python3` >= 3.11 | Stdlib only (`json` / `tomllib` / `re`) for JSON/TOML parsing. macOS system 3.9 lacks `tomllib`; use Homebrew's `python3` |
 | macOS | Uses `launchd` for scheduling (Linux: adapt to `cron` / `systemd`) |
 | coreutils `timeout` | Required: the script stops at start without it. Install it from Homebrew (`brew install coreutils`) |
-| Obsidian (optional) | Any markdown tool works |
+| A notes folder | Any folder of markdown; when it is a git work tree with an `origin` remote, each run commits the day's notes and pushes them |
 | Research repositories | One or more repos whose operational context (CLAUDE.md, task ledger, open questions) the runs can read |
 
 ## Quick start

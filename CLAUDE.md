@@ -1,7 +1,7 @@
 # daily-research
 
 Claude Code 非対話モード (`claude -p`) と macOS launchd で毎朝 5:00 に自律リサーチを実行し、前提知識ゼロで
-読める解説ノートを Obsidian vault へ書くシステム。line の種類は 2 つ:
+読める解説ノートをノートの置き場（`vault_path`。git の作業ツリーなら run の最後に commit / push する）へ書くシステム。line の種類は 2 つ:
 
 - **per-repo line**（`mode = "repo"`、既定）: 研究 repo 1 つに接地し、cwd = その repo で走る。repo に関係する
   外部の動向を 1 つ問いの形で選ぶ（ADR-0008 / ADR-0014）。輪番 window で毎朝 `[general] lines_per_day` 本
