@@ -6,13 +6,24 @@
 # CLAUDE_CMD は認証チェック時に絶対パスへ解決済み
 # < /dev/null: MCP の stdio 通信とターミナル stdin の競合を防止
 # CLAUDE_TIMEOUT: 0 以外を設定すると timeout コマンドで制限（秒）
+# CLAUDE_DEBUG_DIR: 設定すると呼び出しごとに --debug-file をその dir に置き、パスを LOG_FILE に 1 行残す。
+#   --output-format json は timeout で kill されると何も残さないが、debug log は途中まで残り、
+#   `[Stall] tool_dispatch_start/end` と `[API REQUEST]` で止まった箇所が分かる (2026-11-12〜14 の
+#   25 分無応答は記録が無く原因を特定できなかった)。dir が作れなければ debug log なしで続ける
 run_claude() {
+  local -a dbg=()
+  if [ -n "${CLAUDE_DEBUG_DIR:-}" ] && mkdir -p "$CLAUDE_DEBUG_DIR" 2>/dev/null; then
+    local dbg_path
+    dbg_path="$CLAUDE_DEBUG_DIR/$(date '+%Y-%m-%d_%H%M%S')-$$-${RANDOM}.log"
+    dbg=(--debug-file "$dbg_path")
+    [ -n "${LOG_FILE:-}" ] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] claude debug log: $dbg_path" >> "$LOG_FILE"
+  fi
   if [ "${CLAUDE_TIMEOUT:-0}" -gt 0 ] 2>/dev/null; then
     # -k 60: SIGTERM を無視する node / MCP 子プロセスが lock を握ったまま永久待機し、
     # 翌朝以降の run を全部 "Another instance is running" で潰す事故を防ぐ (2026-08-22 review)
-    timeout -k 60 "$CLAUDE_TIMEOUT" "$CLAUDE_CMD" "$@" < /dev/null
+    timeout -k 60 "$CLAUDE_TIMEOUT" "$CLAUDE_CMD" ${dbg[@]+"${dbg[@]}"} "$@" < /dev/null
   else
-    "$CLAUDE_CMD" "$@" < /dev/null
+    "$CLAUDE_CMD" ${dbg[@]+"${dbg[@]}"} "$@" < /dev/null
   fi
 }
 

@@ -121,6 +121,11 @@ material that requests no approval.)
 | Application log | `logs/YYYY-MM-DD.log` | 30 days (auto-rotated) |
 | launchd stdout | `logs/launchd-stdout.log` | Manual cleanup |
 | launchd stderr | `logs/launchd-stderr.log` | Manual cleanup |
+| claude debug log (one per `claude -p` call; the application log names each path as `claude debug log: …`) | `logs/debug/*.log` | 14 days (auto-rotated) |
+
+A call that timed out (`exit 124`) leaves no result JSON, but its debug log is kept up to the kill: the last
+`[Stall] tool_dispatch_start` with no matching `tool_dispatch_end` names the tool it was waiting on, and a final
+`[API REQUEST]` with no `Stream started` after it means it was waiting on the API.
 
 ### Daily Checks
 

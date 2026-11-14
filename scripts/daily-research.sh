@@ -26,6 +26,9 @@ source "$LIB_DIR/claude.sh"   # run_claude() / classify_exit() (E_AUTH/E_BILLING
 source "$LIB_DIR/billing.sh"  # billing_load() / budget_flags() / billing_record() / billing_gate()
 
 log_init  # logs/ 作成 + 権限 600/700 (作成時) + 30日ローテーション
+# run_claude の全呼び出しが --debug-file を logs/debug/ に残す (timeout で kill された呼び出しの止まった箇所を読むため)
+# shellcheck disable=SC2034  # CLAUDE_DEBUG_DIR は source した lib/claude.sh の run_claude で使用
+CLAUDE_DEBUG_DIR="$LOG_DIR/debug"
 
 # === ヘルパー関数 ===
 # claude -p の JSON 出力からサマリー行を生成してログに記録

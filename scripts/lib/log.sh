@@ -13,6 +13,8 @@ log_init() {
   : >> "$LOG_FILE"
   chmod 600 "$LOG_FILE"
   find "$LOG_DIR" -name "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].log" -mtime +30 -delete 2>/dev/null || true
+  # logs/debug/ は claude の --debug-file (lib/claude.sh の CLAUDE_DEBUG_DIR)。1 本が数百 KB〜数 MB なので 14 日で消す
+  find "$LOG_DIR/debug" -name "*.log" -mtime +14 -delete 2>/dev/null || true
 }
 
 log() {

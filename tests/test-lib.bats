@@ -93,6 +93,55 @@ refute_out() {
   grep -q 'timeout -k 60 "\$CLAUDE_TIMEOUT"' "$LIB_DIR/claude.sh"
 }
 
+# 引数を 1 行ずつ出す stub claude
+args_stub() {
+  printf '#!/bin/sh\nfor a in "$@"; do echo "ARG:$a"; done\n' > "$TMP/claude"
+  chmod +x "$TMP/claude"
+}
+
+@test "run_claude adds --debug-file under CLAUDE_DEBUG_DIR and logs its path (timeout and no-timeout)" {
+  args_stub
+  for t in 0 30; do
+    run /bin/bash -c "set -Eeuo pipefail; CLAUDE_CMD='$TMP/claude'; LOG_FILE='$TMP/run.log'; CLAUDE_DEBUG_DIR='$TMP/dbg'
+      source '$LIB_DIR/claude.sh'; CLAUDE_TIMEOUT=$t run_claude -p hi --output-format json"
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -q "^ARG:--debug-file$"
+    echo "$output" | grep -qE "^ARG:$TMP/dbg/[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{6}-[0-9]+-[0-9]+\.log$"
+    # 呼び出し元の引数はそのまま後ろに続く (出力の契約 --output-format json は変えない)
+    echo "$output" | grep -q "^ARG:json$"
+  done
+  [ "$(grep -c 'claude debug log: ' "$TMP/run.log")" -eq 2 ]
+}
+
+@test "run_claude without CLAUDE_DEBUG_DIR passes no --debug-file" {
+  args_stub
+  run /bin/bash -c "set -Eeuo pipefail; CLAUDE_CMD='$TMP/claude'; source '$LIB_DIR/claude.sh'; run_claude -p hi"
+  [ "$status" -eq 0 ]
+  refute_out "debug-file"
+}
+
+@test "run_claude still runs (without a debug log) when CLAUDE_DEBUG_DIR cannot be created" {
+  args_stub
+  : > "$TMP/notadir"
+  run /bin/bash -c "set -Eeuo pipefail; CLAUDE_CMD='$TMP/claude'; CLAUDE_DEBUG_DIR='$TMP/notadir/dbg'
+    source '$LIB_DIR/claude.sh'; run_claude -p hi"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "^ARG:hi$"
+  refute_out "debug-file"
+}
+
+@test "log_init deletes debug logs older than 14 days and keeps newer ones" {
+  LOG_DIR="$TMP/logs"
+  LOG_FILE="$LOG_DIR/2026-01-31.log"
+  mkdir -p "$LOG_DIR/debug"
+  : > "$LOG_DIR/debug/old.log"; touch -t 202501010000 "$LOG_DIR/debug/old.log"
+  : > "$LOG_DIR/debug/new.log"
+  source "$LIB_DIR/log.sh"
+  log_init
+  [ ! -f "$LOG_DIR/debug/old.log" ]
+  [ -f "$LOG_DIR/debug/new.log" ]
+}
+
 @test "notify does not crash with quotes/backslashes in body (injection guard)" {
   run /bin/bash -c "source '$LIB_DIR/notify.sh'; notify 'a\"b\\c' 'ti\"tle'"
   [ "$status" -eq 0 ]
