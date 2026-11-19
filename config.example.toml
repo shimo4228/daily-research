@@ -50,8 +50,12 @@ model = "opus"
 # Billing path (scripts/lib/billing.sh; the contract lives in dr_pipeline.py's [billing]).
 # mode = "subscription" (default): claude -p uses your Claude Code login (Max plan OAuth);
 #   any ANTHROPIC_API_KEY inherited from the environment is dropped.
-# mode = "api": ANTHROPIC_API_KEY is read from env_file (outside the repo) and every call
-#   is billed to the Claude API. Each call gets --max-budget-usd (call1 / call2 / audit /
+# mode = "api": every call is billed to the Claude API. credential picks where the
+#   credential comes from: "env_file" (default) reads ANTHROPIC_API_KEY from env_file (outside
+#   the repo); "ant" uses your Console login from `ant auth login --profile <ant_profile>`
+#   (no key to expire): before each call the script asks ant for the current access token and
+#   runs claude with a dedicated CLAUDE_CONFIG_DIR (state/claude-config, which never holds a
+#   claude.ai login), so a stored claude.ai subscription login cannot take over. Each call gets --max-budget-usd (call1 / call2 / audit /
 #   audit_confirm), each call's cost is appended to state/api-spend.jsonl, and a line starts
 #   only when both the month's and the day's remaining budget cover the line reserve:
 #   call1_max_usd + call2_max_usd, plus audit_max_usd + 5 × audit_confirm_max_usd when
@@ -62,6 +66,8 @@ model = "opus"
 [billing]
 mode = "subscription"
 env_file = "~/.config/daily-research/env"
+# credential = "ant"        # api mode only; then env_file is not read
+# ant_profile = "default"
 monthly_cap_usd = 100   # example values — set yours from state/api-spend.jsonl
 daily_cap_usd = 10
 call1_max_usd = 4

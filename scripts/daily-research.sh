@@ -174,7 +174,13 @@ if ! billing_load "$PROJECT_DIR/config.toml"; then
   exit 1
 fi
 if [ "$BILLING_MODE" = "api" ]; then
-  log "Billing: api (key from $BILLING_ENV_FILE; caps month \$$BILLING_MONTHLY_CAP / day \$$BILLING_DAILY_CAP / call1 \$$BILLING_CALL1_MAX / call2 \$$BILLING_CALL2_MAX / audit \$$BILLING_AUDIT_MAX / audit_confirm \$$BILLING_AUDIT_CONFIRM_MAX; line reserve \$$BILLING_RESERVE)"
+  if [ "$BILLING_CREDENTIAL" = "ant" ]; then
+    _cred="ant login, profile $BILLING_ANT_PROFILE, config dir $BILLING_CLAUDE_CONFIG_DIR"
+  else
+    _cred="key from $BILLING_ENV_FILE"
+  fi
+  log "Billing: api ($_cred; caps month \$$BILLING_MONTHLY_CAP / day \$$BILLING_DAILY_CAP / call1 \$$BILLING_CALL1_MAX / call2 \$$BILLING_CALL2_MAX / audit \$$BILLING_AUDIT_MAX / audit_confirm \$$BILLING_AUDIT_CONFIRM_MAX; line reserve \$$BILLING_RESERVE)"
+  unset _cred
 else
   log "Billing: subscription (Max plan OAuth)"
 fi
@@ -194,6 +200,11 @@ if [ -n "${BILLING_ENV_FILE:-}" ]; then
     *) log "WARN: [billing] env_file が絶対パスでない ($BILLING_ENV_FILE) — Read deny を置けない" ;;
   esac
 fi
+# credential = "ant" の専用 config dir (claude の transcript・設定の置き場) も model に読ませない。
+# ant の資格情報 (~/.config/anthropic) は上の ~/.config deny が塞ぐ
+if [ -n "${BILLING_CLAUDE_CONFIG_DIR:-}" ]; then
+  DISALLOWED_TOOLS="$DISALLOWED_TOOLS,Read(//${BILLING_CLAUDE_CONFIG_DIR#/}/**),Edit(//${BILLING_CLAUDE_CONFIG_DIR#/}/**)"
+fi
 
 # 実 auth probe (lib/auth.sh)。`claude --version` は認証切れを検出できないため、
 # 安価な Haiku 呼び出しで実 API を叩き is_error/api_error_status を検査する。
@@ -201,7 +212,7 @@ if ! real_auth_probe; then
   billing_record "$AUTH_PROBE_JSON" "_probe" "probe"
   log "ERROR: Auth probe failed ($BILLING_MODE) — $(auth_probe_reason)"
   if [ "$BILLING_MODE" = "api" ]; then
-    notify "Claude API の認証に失敗しました (key の拒否・クレジット切れ・429 のいずれか)。ログを確認してください。" "Daily Research Auth Error"
+    notify "Claude API の認証に失敗しました (資格情報の拒否・クレジット切れ・429 のいずれか)。$(billing_credential_hint)" "Daily Research Auth Error"
   else
     notify "Claude認証エラー。claude を起動して再認証してください。" "Daily Research Auth Error"
   fi
@@ -733,7 +744,7 @@ $LINE_TEMPLATE"
       # 捨てないため (ループ末尾の AUTH_ABORT 判定で break する)。
       log "ERROR: Line $TRACK returned 401 — aborting remaining lines (E_AUTH = 401/403, billing $BILLING_MODE)"
       if [ "$BILLING_MODE" = "api" ]; then
-        notify "Claude API key が拒否されました (401/403)。key を確認してください。" "Daily Research Auth Error"
+        notify "Claude API が資格情報を拒否しました (401/403)。$(billing_credential_hint)" "Daily Research Auth Error"
       else
         notify "Claude認証エラー(401)。claude を起動して再認証してください。" "Daily Research Auth Error"
       fi

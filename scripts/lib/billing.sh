@@ -5,8 +5,15 @@
 #
 # 契約の正本は dr_pipeline.py の [billing] 節 (BILLING_MODES / _billing)。
 # - mode = "subscription": env.sh が ANTHROPIC_API_KEY を unset した状態のまま (OAuth)
-# - mode = "api": env_file から ANTHROPIC_API_KEY を読んで export する。key の値はログ・通知・
-#   引数に載せない (export した環境変数だけが claude に届く)
+# - mode = "api": 資格情報の出どころは credential が決める。値はログ・通知・引数に載せない
+#   (export した環境変数だけが claude に届く)
+#   - credential = "env_file": env_file から ANTHROPIC_API_KEY を読んで export する
+#   - credential = "ant": Console の `ant auth login` のアクセストークン (寿命 8 時間、ant が更新する) を
+#     billing_refresh_token が ANTHROPIC_AUTH_TOKEN に入れる (auth probe は billing_load で取った値、以後は run_claude が
+#     呼び出しごとに取り直す)。CLAUDE_CONFIG_DIR を claude.ai ログインを持たない専用 dir
+#     (BILLING_CLAUDE_CONFIG_DIR) にする — 通常の config dir では保存済みの claude.ai (Max) ログインが優先され、
+#     偽のトークンでも Max で成功した (2026-11-19 実測、plan docs/plans/keyless-console-login.md)。
+#     Claude Code は ANTHROPIC_PROFILE の profile を読まなかったので、トークンを直接渡す
 # 支出は 1 呼び出しごとに state/api-spend.jsonl へ追記し、line を始める前に月・日の残額を見る。
 # 予約額 (BILLING_RESERVE = 1 line 分、BILLING_AUDIT_RESERVE = 呼3 の 2 段分) は billing-config が計算する。
 
@@ -18,7 +25,7 @@ _billing_log() {
   if declare -F log >/dev/null 2>&1; then log "$1"; else echo "$1" >&2; fi
 }
 
-# billing_load <config_path>: BILLING_MODE ほかを設定し、api なら key を export する。
+# billing_load <config_path>: BILLING_MODE ほかを設定し、api なら資格情報を export する。
 # 失敗は BILLING_ERROR に理由を入れて 1 を返す (呼ぶ側が log / notify / exit する)。
 billing_load() {
   local tsv key
@@ -30,8 +37,23 @@ billing_load() {
   fi
   IFS=$'\t' read -r BILLING_MODE BILLING_ENV_FILE BILLING_MONTHLY_CAP BILLING_DAILY_CAP \
     BILLING_CALL1_MAX BILLING_CALL2_MAX BILLING_AUDIT_MAX BILLING_AUDIT_CONFIRM_MAX \
-    BILLING_RESERVE BILLING_AUDIT_RESERVE <<< "$tsv"
+    BILLING_RESERVE BILLING_AUDIT_RESERVE BILLING_CREDENTIAL BILLING_ANT_PROFILE <<< "$tsv"
   if [ "$BILLING_MODE" != "api" ]; then
+    BILLING_CREDENTIAL=""
+    return 0
+  fi
+  if [ "$BILLING_CREDENTIAL" = "ant" ]; then
+    BILLING_ENV_FILE=""
+    BILLING_CLAUDE_CONFIG_DIR="${BILLING_CLAUDE_CONFIG_DIR:-$PROJECT_DIR/state/claude-config}"
+    if ! mkdir -p "$BILLING_CLAUDE_CONFIG_DIR" 2>/dev/null; then
+      BILLING_ERROR="claude の専用 config dir を作れない: $BILLING_CLAUDE_CONFIG_DIR"
+      return 1
+    fi
+    export CLAUDE_CONFIG_DIR="$BILLING_CLAUDE_CONFIG_DIR"
+    if ! billing_refresh_token; then
+      BILLING_ERROR="ant のトークンを取れない (profile $BILLING_ANT_PROFILE)。\`ant auth login --profile $BILLING_ANT_PROFILE\` でログインし直す"
+      return 1
+    fi
     return 0
   fi
   if ! key=$(python3 "$DR_PY" env-key "$BILLING_ENV_FILE" 2>/dev/null); then
@@ -41,6 +63,32 @@ billing_load() {
   printf -v ANTHROPIC_API_KEY '%s' "$key"
   export ANTHROPIC_API_KEY
   return 0
+}
+
+# billing_refresh_token: credential = "ant" のとき ant から今のアクセストークンを取り ANTHROPIC_AUTH_TOKEN に
+# export する (期限切れ間近なら ant が更新してから出す)。run_claude が呼び出しごとに呼ぶ。取れなければ 1 を返し、
+# 前の値を残す (まだ有効なら使え、切れていれば claude が 401 を返して E_AUTH になる)。他の credential では何もしない
+billing_refresh_token() {
+  [ "${BILLING_CREDENTIAL:-}" = "ant" ] || return 0
+  local tok
+  tok=$("${ANT_CMD:-ant}" --profile "$BILLING_ANT_PROFILE" auth print-credentials --access-token < /dev/null 2>/dev/null) || tok=""
+  tok=$(printf '%s' "$tok" | tr -d '[:space:]')
+  if [ -z "$tok" ]; then
+    _billing_log "WARN: ant auth print-credentials returned no token (profile $BILLING_ANT_PROFILE)"
+    return 1
+  fi
+  printf -v ANTHROPIC_AUTH_TOKEN '%s' "$tok"
+  export ANTHROPIC_AUTH_TOKEN
+  return 0
+}
+
+# billing_credential_hint: api mode の認証失敗のときに運用者へ出す「何を確かめるか」の 1 文 (通知・check-auth 用)
+billing_credential_hint() {
+  if [ "${BILLING_CREDENTIAL:-}" = "ant" ]; then
+    echo "ant のログイン (profile $BILLING_ANT_PROFILE) が切れていないか確かめ、必要なら ant auth login --profile $BILLING_ANT_PROFILE でログインし直してください"
+  else
+    echo "$BILLING_ENV_FILE の API key (期限切れ・失効) とクレジット残高を確かめてください"
+  fi
 }
 
 # budget_flags <1|2|audit|audit_confirm>: api mode のとき呼び出し 1 回の上限フラグを BUDGET_FLAGS 配列に入れる

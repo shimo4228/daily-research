@@ -59,7 +59,7 @@ launchctl start com.yourname.daily-research   # plist の Label
 ```
 daily-research.sh (05:00)
 ├── ロック取得（flock の mutex の中で判定と mkdir）
-├── 課金経路の設定（[billing]: api = env_file の ANTHROPIC_API_KEY、subscription = OAuth）
+├── 課金経路の設定（[billing]: api = env_file の ANTHROPIC_API_KEY か ant のログイン（credential）、subscription = OAuth）
 ├── 認証 probe（その経路で Haiku を実際に 1 回呼ぶ。呼1・呼2 と同じく --safe-mode）
 ├── config schema チェック（`dr_pipeline.py tracks`: ADR-0008 以前の旧 schema と、壊れたライン定義 —
 │   `repos` を単一 table で書いた、`key` / `target_repo` の無いエントリがある等 — は fail-fast）
@@ -150,7 +150,7 @@ launchctl list | grep daily-research
 | メッセージ | 意味 |
 |---------|------|
 | `Billing: api (key from …; caps …)` / `Billing: subscription (Max plan OAuth)` | `[billing] mode` が選んだ課金経路 |
-| `ERROR: billing setup failed — …` | `[billing]` が不正、または（api モードで）`env_file` に `ANTHROPIC_API_KEY` が無い。どの呼び出しより前に停止（exit 1） |
+| `ERROR: billing setup failed — …` | `[billing]` が不正、または api モードで `env_file` に `ANTHROPIC_API_KEY` が無い（`credential = "env_file"`）か `ant` がトークンを返さない（`credential = "ant"`: `ant auth login --profile <ant_profile>` でログインし直す）。どの呼び出しより前に停止（exit 1） |
 | `Auth probe passed` | 実際に呼び出す認証 probe が成功 |
 | `ERROR: Auth probe failed (<mode>) — status=… result=…` | probe が失敗（OAuth 期限切れ、または api モードで key の拒否・クレジット不足・429）。ライン実行前に停止（exit 1） |
 | `WARN: API spend gate stopped the run (month $… / $…, day $… / $…, need $… per line) — stopping remaining lines` | api モード: 残額があと 1 ライン分に満たない。残りは止め、`Lines not started: …` に名前が出る（通知: `API 支出の上限に達したため、…`） |
@@ -281,13 +281,13 @@ rm -rf .daily-research.lock
 **症状**: ログに `ERROR: Auth probe failed (api) — …`、`hit a billing/rate-limit error`、`API spend gate stopped the run`、`API spend gate could not check the caps` のどれかが出て、macOS 通知が表示される。
 
 **原因と対処**:
-- `status=401` / `403`: `env_file` の key が違うか失効している。そこで差し替え（repo には置かない）、`./scripts/check-auth.sh` で確かめる。
+- `status=401` / `403`: `credential = "env_file"` なら `env_file` の key が違うか期限切れか失効している。そこで差し替える（repo には置かない）。`credential = "ant"` なら Console のログインを更新できなかったので、`ant auth login --profile <ant_profile>` でログインし直す。どちらも `./scripts/check-auth.sh` で確かめる。
 - `Your credit balance is too low`: platform.claude.com でクレジットを足す。
 - `status=429`: レート制限。backoff で踏み抜かず、意図して止めている（連発する rate limit は policy signal）。時間をおいて手で再実行する。
 - `API spend gate stopped the run`: 1 日または 1 か月の残額が 1 ライン分の予約額（`call1_max_usd + call2_max_usd`。`[audit] enabled` なら `audit_max_usd + 5 × audit_confirm_max_usd` を足す。ログの `Billing: api` 行に `line reserve` として出る）を下回った。`state/api-spend.jsonl` を確認し、上限はクレジットが足りるときだけ `[billing]` で上げる。
 - `ERROR: API spend gate failed (rc …): …` か `ERROR: API spend ledger could not be written …` の直後の `API spend gate could not check the caps`: 上限を判定できなかったので、gate が次のラインの前で止めた。残りのラインは始まらず（最初のラインの前なら全部）、完走済みのラインの成果は残る。rc 2 のメッセージは台帳の読めない行のうち先頭 5 件を行番号と理由で名指し、残りを `and N more` で数える。`state/api-spend.jsonl` のその行を直すか消して（または書き込めるように戻して）から再実行する。
 
-課金経路は設定なしに変わらない。subscription モードではシェルで export した `ANTHROPIC_API_KEY` を捨て、api モードでは `env_file` の key だけを使う。
+課金経路は設定なしに変わらない。subscription モードではシェルで export した `ANTHROPIC_API_KEY` を捨て、api モードでは `[billing] credential` が指す資格情報だけを使う（親の環境の `ANTHROPIC_AUTH_TOKEN`・`CLAUDE_CONFIG_DIR` も捨てる）。
 
 ### 6. レポートが Obsidian に表示されない
 
@@ -409,7 +409,7 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 | mode | 認証 | 課金 | 上限 |
 |---|---|---|---|
 | `subscription`（既定） | Claude Code のログイン（OAuth） | Max プランならトークン単位の課金なし。プランの利用上限に数えられる | プランの上限。環境にある `ANTHROPIC_API_KEY` は捨てる |
-| `api` | `env_file` から読む `ANTHROPIC_API_KEY`（repo の外のファイルで、モデルの読み取りは拒否される） | すべての呼び出しが Claude API の課金 | 呼び出しごとに `--max-budget-usd`（`call1_max_usd`、`call2_max_usd`、`audit_max_usd`、`audit_confirm_max_usd`）。1 日と 1 か月の残額がどちらも 呼1 + 呼2（`[audit] enabled` なら + 監査の予約額）の分を満たすときだけラインを始める（`daily_cap_usd`、`monthly_cap_usd`）。満たさなければ残りのラインを止めて通知する。1 本も始められなかった日は `E_BUDGET`（exit 1） |
+| `api` | `credential = "env_file"`: `env_file` から読む `ANTHROPIC_API_KEY`（repo の外のファイルで、モデルの読み取りは拒否される）。`credential = "ant"`: `ant auth login` の Console ログインのアクセストークン（呼び出しごとに取り直す。`~/.config/anthropic` はモデルの読み取りを拒否）を使い、claude は claude.ai ログインを持たない専用の `state/claude-config` で動かす | すべての呼び出しが Claude API の課金 | 呼び出しごとに `--max-budget-usd`（`call1_max_usd`、`call2_max_usd`、`audit_max_usd`、`audit_confirm_max_usd`）。1 日と 1 か月の残額がどちらも 呼1 + 呼2（`[audit] enabled` なら + 監査の予約額）の分を満たすときだけラインを始める（`daily_cap_usd`、`monthly_cap_usd`）。満たさなければ残りのラインを止めて通知する。1 本も始められなかった日は `E_BUDGET`（exit 1） |
 
 `api` モードでは、呼び出しごとの費用（Claude Code が報告する `total_cost_usd`。認証 probe を含む）を `state/api-spend.jsonl` に追記する。上限の判定はこのファイルを読み、その日と月の合計は `API spend: today … month …` としてログに出る。429、クレジット残高の不足、key の拒否が出たら、再試行せずに残りのラインを止める（`E_BILLING` / `E_AUTH`）。
 

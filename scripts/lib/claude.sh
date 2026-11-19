@@ -10,8 +10,11 @@
 #   --output-format json は timeout で kill されると何も残さないが、debug log は途中まで残り、
 #   `[Stall] tool_dispatch_start/end` と `[API REQUEST]` で止まった箇所が分かる (2026-11-12〜14 の
 #   25 分無応答は記録が無く原因を特定できなかった)。dir が作れなければ debug log なしで続ける
+# credential = "ant" の api mode では呼び出しの直前にトークンを取り直す (lib/billing.sh の billing_refresh_token。
+# 1 run が 8 時間の寿命をまたいでも切れない)。取れなくても呼び出しは行い、401 を E_AUTH として扱わせる
 run_claude() {
   local -a dbg=()
+  if declare -F billing_refresh_token >/dev/null 2>&1; then billing_refresh_token || true; fi
   if [ -n "${CLAUDE_DEBUG_DIR:-}" ] && mkdir -p "$CLAUDE_DEBUG_DIR" 2>/dev/null; then
     local dbg_path
     dbg_path="$CLAUDE_DEBUG_DIR/$(date '+%Y-%m-%d_%H%M%S')-$$-${RANDOM}.log"

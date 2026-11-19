@@ -1226,10 +1226,10 @@ def test_billing_reserve_includes_audit_only_when_enabled(monkeypatch, capsys, t
     cfg = tmp_path / "c.toml"
     cfg.write_text(base)
     rc, out, _ = run_cmd(monkeypatch, capsys, ["billing-config", str(cfg)])
-    assert rc == 0 and out.rstrip("\n").split("\t")[6:] == ["1.5", "0.2", "5.5", "2.5"]
+    assert rc == 0 and out.rstrip("\n").split("\t")[6:10] == ["1.5", "0.2", "5.5", "2.5"]
     cfg.write_text(base + "[audit]\nenabled = true\n")
     rc, out, _ = run_cmd(monkeypatch, capsys, ["billing-config", str(cfg)])
-    assert rc == 0 and out.rstrip("\n").split("\t")[8:] == ["8", "2.5"]
+    assert rc == 0 and out.rstrip("\n").split("\t")[8:10] == ["8", "2.5"]
 
 
 @pytest.mark.unit

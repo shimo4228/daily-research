@@ -2433,7 +2433,7 @@ def test_billing_config_defaults_to_subscription(monkeypatch, capsys, tmp_path):
     assert not env_file.startswith("~")
     # monthly / daily / call1 / call2 / audit / audit_confirm / line_reserve / audit_reserve。
     # [audit] が無い (enabled = false) ので line の予約額は呼1 + 呼2 だけ
-    assert usd == ["100", "10", "4", "1.5", "1", "0.25", "5.5", "2.25"]
+    assert usd == ["100", "10", "4", "1.5", "1", "0.25", "5.5", "2.25", "env_file", "default"]
 
 
 # --- effort-config ([effort]: 呼1 / 呼2 の --effort) ---
@@ -2532,7 +2532,7 @@ def test_billing_config_api(monkeypatch, capsys, tmp_path):
     )
     rc, out, _ = run_cmd(monkeypatch, capsys, ["billing-config", cfg])
     assert rc == 0
-    assert out.rstrip("\n") == "api\t/x/env\t100\t8\t3\t1\t1\t0.25\t4\t2.25"
+    assert out.rstrip("\n") == "api\t/x/env\t100\t8\t3\t1\t1\t0.25\t4\t2.25\tenv_file\tdefault"
 
 
 @pytest.mark.unit

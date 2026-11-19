@@ -3,7 +3,8 @@ set -euo pipefail
 
 # Claude の認証状態チェック (手動実行用)。daily-research.sh と同じ経路で確かめる:
 # config.toml の [billing] (lib/billing.sh) で課金経路を決め、lib/auth.sh の real_auth_probe で
-# 実 API を叩く。api mode は env_file の ANTHROPIC_API_KEY、subscription mode は Max plan の OAuth。
+# 実 API を叩く。api mode は [billing] credential (env_file の ANTHROPIC_API_KEY か ant のログイン)、
+# subscription mode は Max plan の OAuth。
 # `claude --version` は認証切れでも成功するので認証検証に使わない。
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,7 +31,7 @@ if ! billing_load "$PROJECT_DIR/config.toml"; then
   echo "ERROR: $BILLING_ERROR"
   exit 1
 fi
-echo "Billing mode: $BILLING_MODE"
+echo "Billing mode: $BILLING_MODE${BILLING_CREDENTIAL:+ (credential: $BILLING_CREDENTIAL)}"
 
 # 実 API を叩いて認証を検証する (api mode の probe 費用は支出台帳に記録する)
 if real_auth_probe; then
@@ -45,8 +46,8 @@ fi
 billing_record "$AUTH_PROBE_JSON" "_probe" "probe"
 if [ "$BILLING_MODE" = "api" ]; then
   echo "WARN: Claude API rejected the request — $(auth_probe_reason)"
-  echo "      Check ANTHROPIC_API_KEY in $BILLING_ENV_FILE and the credit balance on platform.claude.com"
-  osascript -e 'display notification "Claude API の認証に失敗しました。key とクレジット残高を確認してください。" with title "Daily Research Auth Warning"' 2>/dev/null || true
+  echo "      $(billing_credential_hint)"
+  osascript -e 'display notification "Claude API の認証に失敗しました。資格情報とクレジット残高を確認してください。" with title "Daily Research Auth Warning"' 2>/dev/null || true
 else
   echo "WARN: Claude authentication expired — run 'claude' to re-authenticate"
   osascript -e 'display notification "Claude認証の更新が必要です。ターミナルで claude を起動してください。" with title "Daily Research Auth Warning"' 2>/dev/null || true

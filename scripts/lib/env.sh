@@ -5,6 +5,8 @@
 # 親の環境から来た API key は使わない。課金経路は config.toml の [billing] だけが決め、
 # api mode のときに lib/billing.sh が env_file から key を読み直して export する
 unset ANTHROPIC_API_KEY
+# credential = "ant" のトークンと専用 config dir も billing.sh だけが入れる (親の環境の値で課金経路を変えない)
+unset ANTHROPIC_AUTH_TOKEN CLAUDE_CONFIG_DIR ANTHROPIC_PROFILE
 # CLAUDECODE が残っているとネストチェック・起動挙動が変わるため除去
 unset CLAUDECODE 2>/dev/null || true
 # 呼1 / 呼2 の effort は daily-research.sh が [effort] から --effort で渡す。CLAUDE_CODE_EFFORT_LEVEL は

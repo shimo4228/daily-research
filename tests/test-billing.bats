@@ -87,7 +87,7 @@ for a in "$@"; do
 done
 KIND=probe
 [ -n "$PROTOCOL" ] && KIND=$(basename "$PROTOCOL" .md)
-echo "CALL kind=$KIND key=${ANTHROPIC_API_KEY:-unset} budget=$BUDGET" >> "$H/.calls"
+echo "CALL kind=$KIND key=${ANTHROPIC_API_KEY:-unset} budget=$BUDGET auth=${ANTHROPIC_AUTH_TOKEN:-unset} cfg=${CLAUDE_CONFIG_DIR:-unset}" >> "$H/.calls"
 if [ "$KIND" = "probe" ]; then
   if [ "$SC" = "probe-401" ]; then
     echo '{"type":"result","is_error":true,"api_error_status":401,"total_cost_usd":0,"result":"Invalid API key"}'
@@ -170,6 +170,17 @@ H="$(dirname "$(dirname "$(dirname "$0")")")"
 echo "$*" >> "$H/.notify_log"
 STUB
   chmod +x "$MOCK_HOME/.claude/local/osascript"
+  # mock ant: print-credentials --access-token のたびに新しいトークン (tok-1, tok-2, …) を出す。
+  # 引数は .ant_args に残す。seam .ant_fail があれば失敗する
+  cat > "$MOCK_HOME/.claude/local/ant" <<'STUB'
+#!/bin/bash
+H="$(dirname "$(dirname "$(dirname "$0")")")"
+echo "$*" >> "$H/.ant_args"
+[ -e "$H/.ant_fail" ] && { echo "not logged in" >&2; exit 1; }
+n=$(( $(cat "$H/.ant_n" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$H/.ant_n"
+echo "tok-$n"
+STUB
+  chmod +x "$MOCK_HOME/.claude/local/ant"
 }
 
 run_script() {
@@ -386,8 +397,8 @@ assert_unchecked_stop_notified() {
   printf '\n[audit]\nenabled = true\n' >> "$P/config.toml"
   run run_script
   [ "$status" -eq 0 ]
-  [ "$(grep -c "kind=audit-protocol key=$FAKE_KEY budget=1$" "$MOCK_HOME/.calls")" -eq 2 ]
-  [ "$(grep -c "kind=audit-confirm-protocol key=$FAKE_KEY budget=0.25$" "$MOCK_HOME/.calls")" -eq 2 ]
+  [ "$(grep -c "kind=audit-protocol key=$FAKE_KEY budget=1 " "$MOCK_HOME/.calls")" -eq 2 ]
+  [ "$(grep -c "kind=audit-confirm-protocol key=$FAKE_KEY budget=0.25 " "$MOCK_HOME/.calls")" -eq 2 ]
   # 台帳: probe 1 + 2 line × (呼1・呼2・呼3 の 2 段)
   [ "$(wc -l < "$(ledger)" | tr -d ' ')" -eq 9 ]
   [ "$(grep -c '"call": "audit"' "$(ledger)")" -eq 2 ]
@@ -585,4 +596,66 @@ assert_unchecked_stop_notified() {
   grep -q 'report lint hard fail (ctl-016)' "$(log_file)"
   if grep -q 'unexpected exit' "$(log_file)"; then cat "$(log_file)" >&2; return 1; fi
   if grep -q 'Daily Research Error' "$MOCK_HOME/.notify_log"; then cat "$MOCK_HOME/.notify_log" >&2; return 1; fi
+}
+
+# === credential = "ant" (Console の ant ログイン、plan docs/plans/keyless-console-login.md) ===
+
+ANT_BILLING_BLOCK='[billing]
+mode = "api"
+credential = "ant"
+ant_profile = "dr"
+monthly_cap_usd = 190
+daily_cap_usd = 15
+call1_max_usd = 4
+call2_max_usd = 1.5'
+
+@test "credential ant: every claude call gets a fresh ant token, no API key, and the dedicated config dir" {
+  write_config "$ANT_BILLING_BLOCK"
+  printf -v ANTHROPIC_AUTH_TOKEN '%s' "inherited-token"; export ANTHROPIC_AUTH_TOKEN
+  CLAUDE_CONFIG_DIR="$MOCK_HOME/inherited-cfg" run_script
+  # probe と各 line の呼1 で、key は無く、トークンは呼び出しごとに ant から取り直した値
+  grep -q "kind=probe key=unset budget=none auth=tok-1 cfg=$P/state/claude-config" "$MOCK_HOME/.calls"
+  [ "$(grep -c "kind=repo-research-protocol key=unset" "$MOCK_HOME/.calls")" -ge 1 ]
+  refute_grep -q "auth=inherited-token\|auth=unset\|cfg=$MOCK_HOME/inherited-cfg" "$MOCK_HOME/.calls"
+  [ "$(grep -o 'auth=tok-[0-9]*' "$MOCK_HOME/.calls" | sort -u | wc -l)" -eq "$(wc -l < "$MOCK_HOME/.calls")" ]
+  grep -q -- "--profile dr auth print-credentials --access-token" "$MOCK_HOME/.ant_args"
+  [ -d "$P/state/claude-config" ]
+  grep -q "Billing: api (ant login, profile dr, config dir $P/state/claude-config" "$(log_file)"
+  # トークンの値は log に出さない。支出は api mode と同じく台帳に残る
+  refute_grep -q "tok-1" "$(log_file)"
+  grep -q '"call": "probe"' "$(ledger)"
+}
+
+@test "credential ant: no token from ant stops the run before any model call and says how to log in" {
+  write_config "$ANT_BILLING_BLOCK"
+  touch "$MOCK_HOME/.ant_fail"
+  run run_script
+  [ "$status" -eq 1 ]
+  [ ! -e "$MOCK_HOME/.calls" ]
+  grep -q "billing setup failed — ant のトークンを取れない (profile dr)" "$(log_file)"
+  grep -q "ant auth login --profile dr" "$MOCK_HOME/.notify_log"
+}
+
+@test "credential ant: a 401 probe notifies with the ant re-login hint, not the API key one" {
+  write_config "$ANT_BILLING_BLOCK"
+  echo "probe-401" > "$MOCK_HOME/.scenario"
+  run run_script
+  [ "$status" -eq 1 ]
+  grep -q "ant auth login --profile dr" "$MOCK_HOME/.notify_log"
+  refute_grep -q "API key" "$MOCK_HOME/.notify_log"
+}
+
+@test "credential env_file: an inherited auth token and config dir are dropped" {
+  printf -v ANTHROPIC_AUTH_TOKEN '%s' "inherited-token"; export ANTHROPIC_AUTH_TOKEN
+  CLAUDE_CONFIG_DIR="$MOCK_HOME/inherited-cfg" run_script
+  grep -q "kind=probe key=$FAKE_KEY budget=none auth=unset cfg=unset" "$MOCK_HOME/.calls"
+  [ ! -e "$MOCK_HOME/.ant_args" ]
+}
+
+@test "check-auth.sh (credential ant): probes with the ant token and names the credential" {
+  write_config "$ANT_BILLING_BLOCK"
+  run env HOME="$MOCK_HOME" bash "$P/scripts/check-auth.sh"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "Billing mode: api (credential: ant)"
+  grep -q "kind=probe key=unset budget=none auth=tok-1" "$MOCK_HOME/.calls"
 }

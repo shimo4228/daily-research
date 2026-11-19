@@ -53,6 +53,10 @@ def _write(tmp_path, name, text):
         ('mode = "apikey"', "mode"),
         ("unknown_key = 1", "unknown_key"),
         ("daily_cap_usd = 5\ncall1_max_usd = 4\ncall2_max_usd = 2", "daily_cap_usd"),
+        ('credential = "keychain"', "credential"),
+        ('ant_profile = "../x"', "ant_profile"),
+        ('ant_profile = ""', "ant_profile"),
+        ('ant_profile = "--help"', "ant_profile"),
     ],
     ids=[
         "quoted-number",
@@ -63,6 +67,10 @@ def _write(tmp_path, name, text):
         "bad-mode",
         "unknown-key",
         "reserve-over-daily",
+        "bad-credential",
+        "path-like-ant-profile",
+        "empty-ant-profile",
+        "option-like-ant-profile",
     ],
 )
 def test_billing_config_rejects_and_names_the_key(monkeypatch, capsys, tmp_path, body, named):
@@ -87,7 +95,19 @@ def test_billing_config_accepts_equal_caps(monkeypatch, capsys, tmp_path):
     )
     rc, out, err = run_cmd(monkeypatch, capsys, ["billing-config", cfg])
     assert rc == 0, err
-    assert out.rstrip("\n") == "api\t/x/env\t5\t5\t3.5\t1.5\t1\t0.25\t5\t2.25"
+    assert out.rstrip("\n") == "api\t/x/env\t5\t5\t3.5\t1.5\t1\t0.25\t5\t2.25\tenv_file\tdefault"
+
+
+@pytest.mark.unit
+def test_billing_config_emits_ant_credential_and_profile(monkeypatch, capsys, tmp_path):
+    cfg = _write(
+        tmp_path,
+        "c.toml",
+        '[billing]\nmode = "api"\ncredential = "ant"\nant_profile = "dr-1"\n',
+    )
+    rc, out, err = run_cmd(monkeypatch, capsys, ["billing-config", cfg])
+    assert rc == 0, err
+    assert out.rstrip("\n").split("\t")[-2:] == ["ant", "dr-1"]
 
 
 # === billing: env-key ===

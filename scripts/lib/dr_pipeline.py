@@ -1978,7 +1978,11 @@ def cmd_expect_check(argv: list[str]) -> int:
 #
 # [billing] の契約:
 #   mode            "api" | "subscription" (既定 subscription = Max plan の OAuth)
-#   env_file        ANTHROPIC_API_KEY を持つ env ファイル (repo の外。~ 展開あり)
+#   env_file        ANTHROPIC_API_KEY を持つ env ファイル (repo の外。~ 展開あり。credential = "env_file" のとき)
+#   credential      "env_file" | "ant" (既定 env_file)。ant = Console の `ant auth login` のトークンを
+#                   呼び出しごとに取り、専用の空の CLAUDE_CONFIG_DIR で渡す (plan docs/plans/keyless-console-login.md)。
+#                   mode = "api" のときだけ意味を持つ
+#   ant_profile     credential = "ant" のときの ant の profile 名 (既定 default)
 #   monthly_cap_usd 月の API 支出上限。超えそうなら残りの line を止める
 #   daily_cap_usd   1 日の API 支出上限 (暴走の止め)
 #   call1_max_usd   呼1 1 回の --max-budget-usd
@@ -1991,9 +1995,12 @@ def cmd_expect_check(argv: list[str]) -> int:
 # call1_max + call2_max、[audit] enabled なら呼3 の予約額 (audit_max + AUDIT_MAX_CONFIRM × audit_confirm_max)
 # を足す。--max-budget-usd が各呼び出しを抑えるので、上限の超過は最後の 1 turn 分に収まる。
 BILLING_MODES = ("api", "subscription")
+BILLING_CREDENTIALS = ("env_file", "ant")
 _BILLING_DEFAULTS = {
     "mode": "subscription",
     "env_file": "~/.config/daily-research/env",
+    "credential": "env_file",
+    "ant_profile": "default",
     "monthly_cap_usd": 100.0,
     "daily_cap_usd": 10.0,
     "call1_max_usd": 4.0,
@@ -2026,6 +2033,17 @@ def _billing(cfg: dict[str, object]) -> dict[str, str | float]:
         raise ValueError(f"[billing].mode must be one of {BILLING_MODES}, got {b['mode']!r}")
     if not isinstance(b["env_file"], str) or not b["env_file"]:
         raise ValueError("[billing].env_file must be a non-empty string")
+    if b["credential"] not in BILLING_CREDENTIALS:
+        raise ValueError(
+            f"[billing].credential must be one of {BILLING_CREDENTIALS}, got {b['credential']!r}"
+        )
+    # profile 名は ant の --profile に渡る。ファイル名に使える語だけ許し、先頭の - (option と読まれる) を拒む
+    if not isinstance(b["ant_profile"], str) or not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9_-]*", b["ant_profile"]
+    ):
+        raise ValueError(
+            f"[billing].ant_profile must match [A-Za-z0-9][A-Za-z0-9_-]*, got {b['ant_profile']!r}"
+        )
     for k in _BILLING_USD_KEYS:
         v = b[k]
         if isinstance(v, bool) or not isinstance(v, (int, float)) or v <= 0:
@@ -2047,7 +2065,7 @@ def _billing(cfg: dict[str, object]) -> dict[str, str | float]:
 
 # --- billing-config <config_path>: [billing] (と予約額に効く [audit]) を検証して 1 行 TSV で出力 ---
 # mode \t env_file \t monthly_cap \t daily_cap \t call1_max \t call2_max \t audit_max \t audit_confirm_max
-# \t line_reserve \t audit_reserve。予約額は _billing の invariant の注記。不正は rc 2。
+# \t line_reserve \t audit_reserve \t credential \t ant_profile。予約額は _billing の invariant の注記。不正は rc 2。
 def cmd_billing_config(argv: list[str]) -> int:
     if not argv:
         print("usage: billing-config <config_path>", file=sys.stderr)
@@ -2062,6 +2080,7 @@ def cmd_billing_config(argv: list[str]) -> int:
         "\t".join(
             [b["mode"], b["env_file"]]
             + [f"{b[k]:g}" for k in (*_BILLING_USD_KEYS, "line_reserve", "audit_reserve")]
+            + [b["credential"], b["ant_profile"]]
         )
     )
     return 0

@@ -59,7 +59,7 @@ launchctl start com.yourname.daily-research   # the Label in your plist
 ```
 daily-research.sh (05:00)
 ├── Lock acquisition (check and mkdir inside a flock mutex)
-├── Billing setup ([billing]: api = ANTHROPIC_API_KEY from env_file, subscription = OAuth)
+├── Billing setup ([billing]: api = ANTHROPIC_API_KEY from env_file or the ant login (credential), subscription = OAuth)
 ├── Auth probe (one real Haiku call on that billing path, with --safe-mode like both calls)
 ├── Config schema check (`dr_pipeline.py tracks`: the legacy pre-ADR-0008 schema and malformed line
 │   definitions — e.g. `repos` written as a single table, or an entry without `key` / `target_repo` — fail fast)
@@ -162,7 +162,7 @@ launchctl list | grep daily-research
 | Message | Meaning |
 |---------|---------|
 | `Billing: api (key from …; caps …)` / `Billing: subscription (Max plan OAuth)` | The billing path `[billing] mode` selected |
-| `ERROR: billing setup failed — …` | `[billing]` is invalid or (api mode) `env_file` has no `ANTHROPIC_API_KEY`; the run stops before any call (exit 1) |
+| `ERROR: billing setup failed — …` | `[billing]` is invalid, or in api mode `env_file` has no `ANTHROPIC_API_KEY` (`credential = "env_file"`) or `ant` gave no token (`credential = "ant"`: run `ant auth login --profile <ant_profile>`); the run stops before any call (exit 1) |
 | `Auth probe passed` | The real auth probe succeeded |
 | `ERROR: Auth probe failed (<mode>) — status=… result=…` | The probe failed (expired OAuth, or in api mode a rejected key / low credit / 429); the run stops before any line (exit 1) |
 | `WARN: API spend gate stopped the run (month $… / $…, day $… / $…, need $… per line) — stopping remaining lines` | api mode: the remaining budget can't cover one more line; the rest are skipped and named in `Lines not started: …` (notification: `API 支出の上限に達したため、…`) |
@@ -293,13 +293,13 @@ rm -rf .daily-research.lock
 **Symptoms**: `ERROR: Auth probe failed (api) — …`, `hit a billing/rate-limit error`, `API spend gate stopped the run`, or `API spend gate could not check the caps` in the log, with a macOS notification.
 
 **Causes and fixes**:
-- `status=401` / `403`: the key in `env_file` is wrong or revoked. Replace it there (never in the repo), then run `./scripts/check-auth.sh`.
+- `status=401` / `403`: with `credential = "env_file"` the key in `env_file` is wrong, expired or revoked — replace it there (never in the repo). With `credential = "ant"` the Console login could not be refreshed — run `ant auth login --profile <ant_profile>`. Then run `./scripts/check-auth.sh`.
 - `Your credit balance is too low`: add credit on platform.claude.com.
 - `status=429`: rate limit. The run stops on purpose instead of backing off (a burst of rate limits is a policy signal). Re-run later by hand.
 - `API spend gate stopped the run`: the day's or month's remaining budget is below one line's reserve (`call1_max_usd + call2_max_usd`, plus `audit_max_usd + 5 × audit_confirm_max_usd` when `[audit] enabled`; the log's `Billing: api` line shows it as `line reserve`). Check `state/api-spend.jsonl`; raise the caps in `[billing]` only if the credit covers it.
 - `API spend gate could not check the caps` right after `ERROR: API spend gate failed (rc …): …` or `ERROR: API spend ledger could not be written …`: the caps could not be checked, so the gate stopped before the next line: every remaining line stays unstarted (all of them when this happens before the first line), and lines that already finished keep their results. The rc 2 message names the first five unreadable ledger lines with their reasons, plus `and N more`; fix or remove those lines in `state/api-spend.jsonl` (or make the file writable again), then re-run.
 
-The billing path never changes on its own: in subscription mode an `ANTHROPIC_API_KEY` exported in your shell is dropped, and in api mode only the key in `env_file` is used.
+The billing path never changes on its own: in subscription mode an `ANTHROPIC_API_KEY` exported in your shell is dropped, and in api mode only the credential `[billing] credential` names is used (an inherited `ANTHROPIC_AUTH_TOKEN` or `CLAUDE_CONFIG_DIR` is dropped too).
 
 ### 6. Reports Not Reaching the Notes Folder or Its Remote
 
@@ -426,7 +426,7 @@ Each morning the `lines_per_day` lines of the rotation window plus every `daily 
 | mode | Auth | Billing | Limits |
 |---|---|---|---|
 | `subscription` (default) | Claude Code login (OAuth) | No per-token charge on a Max plan; counts against the plan's usage limits | The plan's own limits. Any `ANTHROPIC_API_KEY` in the environment is dropped |
-| `api` | `ANTHROPIC_API_KEY` read from `env_file`, a file outside the repo that the model is denied from reading | Every call is billed to the Claude API | `--max-budget-usd` per call (`call1_max_usd`, `call2_max_usd`, `audit_max_usd`, `audit_confirm_max_usd`); a line starts only if the day's and the month's remaining budget both cover call1 + call2 (+ the audit's reserve when `[audit] enabled`) (`daily_cap_usd`, `monthly_cap_usd`). Otherwise the remaining lines are skipped with a notification; a day where no line started ends as `E_BUDGET` (exit 1) |
+| `api` | `credential = "env_file"`: `ANTHROPIC_API_KEY` read from `env_file`, a file outside the repo that the model is denied from reading. `credential = "ant"`: the access token of the Console login from `ant auth login` (fetched before each call; `~/.config/anthropic` is denied to the model), with claude run on the dedicated `state/claude-config` (it never holds a claude.ai login) | Every call is billed to the Claude API | `--max-budget-usd` per call (`call1_max_usd`, `call2_max_usd`, `audit_max_usd`, `audit_confirm_max_usd`); a line starts only if the day's and the month's remaining budget both cover call1 + call2 (+ the audit's reserve when `[audit] enabled`) (`daily_cap_usd`, `monthly_cap_usd`). Otherwise the remaining lines are skipped with a notification; a day where no line started ends as `E_BUDGET` (exit 1) |
 
 In `api` mode every call's cost (the `total_cost_usd` Claude Code reports, including the auth probe) is appended to `state/api-spend.jsonl`; the caps read that file, and the day's and month's totals are logged as `API spend: today … month …`. A 429, a too-low credit balance or a rejected key stops the remaining lines without a retry (`E_BILLING` / `E_AUTH`).
 
