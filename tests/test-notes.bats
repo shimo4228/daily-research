@@ -11,6 +11,9 @@ setup() {
   source "$LIB_DIR/log.sh"; log_init
   notify() { echo "NOTIFY: $2: $1" >> "$LOG_FILE"; }
   source "$LIB_DIR/notes.sh"
+  # Slack には出さない: 既定は webhook 無し。送る試験は webhook ファイルを置き、POST を記録で差し替える
+  export DR_SLACK_WEBHOOK_FILE="$TMP/no-webhook"
+  _notes_slack_post() { cat > "$TMP/slack.json"; echo "$1" > "$TMP/slack.url"; echo 200; }
   export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
   export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 }
@@ -170,4 +173,62 @@ subject() { git -C "$TMP/notes" log -1 --format=%s; }
   [ "$status" -eq 0 ]
   echo "$output" | grep -q REACHED_END
   refute_grep -qi "unexpected" "$LOG_FILE"
+}
+
+# origin の fetch URL は github.com、push 先は手元の bare (リンクは fetch URL から作る)
+github_origin() {
+  git -C "$TMP/notes" remote set-url origin https://github.com/owner/notes.git
+  git -C "$TMP/notes" remote set-url --push origin "$TMP/remote.git"
+  echo https://hooks.example.invalid/x > "$TMP/webhook"
+  export DR_SLACK_WEBHOOK_FILE="$TMP/webhook"
+}
+
+@test "notes_publish posts GitHub links to this run's new .md notes after the push" {
+  notes_repo
+  github_origin
+  echo new > "$TMP/notes/daily-research/2026-11-15_wide_ノート.md"
+  echo x > "$TMP/notes/daily-research/memo.txt"
+  notes_publish "$TMP/notes" 2026-11-15 daily-research 1
+  grep -q "Notes links: sent to Slack" "$LOG_FILE"
+  [ "$(cat "$TMP/slack.url")" = "https://hooks.example.invalid/x" ]
+  text=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["text"])' "$TMP/slack.json")
+  echo "$text" | grep -qF "*Daily Research 2026-11-15*"
+  echo "$text" | grep -qF "<https://github.com/owner/notes/blob/main/daily-research/2026-11-15_wide_%E3%83%8E%E3%83%BC%E3%83%88.md|2026-11-15_wide_ノート>"
+  refute_grep -q "memo.txt" <<< "$text"
+  refute_grep -q "a.md" <<< "$text"
+}
+
+@test "notes_publish posts nothing when the push fails" {
+  notes_repo
+  github_origin
+  git -C "$TMP/notes" remote set-url --push origin "$TMP/does-not-exist.git"
+  echo new > "$TMP/notes/daily-research/b.md"
+  notes_publish "$TMP/notes" 2026-11-15 daily-research 1
+  [ ! -e "$TMP/slack.json" ]
+}
+
+@test "notes_publish posts nothing when no note was committed in this run" {
+  notes_repo
+  github_origin
+  notes_publish "$TMP/notes" 2026-11-15 daily-research 1
+  [ ! -e "$TMP/slack.json" ]
+}
+
+@test "notes_link_digest skips without a webhook file, and for a non-GitHub origin" {
+  notes_repo
+  notes_link_digest "$TMP/notes" 2026-11-15 daily-research/b.md
+  grep -q "Notes links: skipped (no Slack webhook" "$LOG_FILE"
+  echo https://hooks.example.invalid/x > "$TMP/webhook"
+  DR_SLACK_WEBHOOK_FILE="$TMP/webhook" notes_link_digest "$TMP/notes" 2026-11-15 daily-research/b.md
+  grep -q "origin is not a github.com repo" "$LOG_FILE"
+  [ ! -e "$TMP/slack.json" ]
+}
+
+@test "notes_link_digest returns 0 and warns when the Slack post fails" {
+  notes_repo
+  github_origin
+  _notes_slack_post() { cat > /dev/null; echo 500; }
+  run notes_link_digest "$TMP/notes" 2026-11-15 daily-research/b.md
+  [ "$status" -eq 0 ]
+  grep -q "WARN: notes links — Slack post failed (http=500" "$LOG_FILE"
 }
