@@ -171,12 +171,13 @@ echo "$*" >> "$H/.notify_log"
 STUB
   chmod +x "$MOCK_HOME/.claude/local/osascript"
   # mock ant: print-credentials --access-token のたびに新しいトークン (tok-1, tok-2, …) を出す。
-  # 引数は .ant_args に残す。seam .ant_fail があれば失敗する
+  # 引数は .ant_args に残す。seam .ant_fail があれば失敗し、.ant_hang があれば返らない
   cat > "$MOCK_HOME/.claude/local/ant" <<'STUB'
 #!/bin/bash
 H="$(dirname "$(dirname "$(dirname "$0")")")"
 echo "$*" >> "$H/.ant_args"
 [ -e "$H/.ant_fail" ] && { echo "not logged in" >&2; exit 1; }
+[ -e "$H/.ant_hang" ] && exec sleep 600
 n=$(( $(cat "$H/.ant_n" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$H/.ant_n"
 echo "tok-$n"
 STUB
@@ -608,6 +609,15 @@ monthly_cap_usd = 190
 daily_cap_usd = 15
 call1_max_usd = 4
 call2_max_usd = 1.5'
+
+@test "credential ant: an ant that never returns is cut off and the run stops as a billing error" {
+  write_config "$ANT_BILLING_BLOCK"
+  touch "$MOCK_HOME/.ant_hang"
+  BILLING_ANT_TIMEOUT=1 run timeout 60 bash -c "HOME='$MOCK_HOME' bash '$P/scripts/daily-research.sh' 2>&1"
+  [ "$status" -ne 124 ]
+  grep -q "ant のトークンを取れない" "$(log_file)"
+  [ ! -e "$MOCK_HOME/.calls" ]
+}
 
 @test "credential ant: every claude call gets a fresh ant token, no API key, and the dedicated config dir" {
   write_config "$ANT_BILLING_BLOCK"

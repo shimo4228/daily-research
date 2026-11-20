@@ -71,7 +71,9 @@ billing_load() {
 billing_refresh_token() {
   [ "${BILLING_CREDENTIAL:-}" = "ant" ] || return 0
   local tok
-  tok=$("${ANT_CMD:-ant}" --profile "$BILLING_ANT_PROFILE" auth print-credentials --access-token < /dev/null 2>/dev/null) || tok=""
+  # 時間の上限を付ける。2026-11-21 に macOS の Gatekeeper が ant の起動を保留し、上限の無い呼び出しが 5:00 の
+  # run を 3 時間止めた (ant は何も返さず、終了もしない)。切れたら「取れない」と同じ扱いにする
+  tok=$(timeout -k 5 "${BILLING_ANT_TIMEOUT:-30}" "${ANT_CMD:-ant}" --profile "$BILLING_ANT_PROFILE" auth print-credentials --access-token < /dev/null 2>/dev/null) || tok=""
   tok=$(printf '%s' "$tok" | tr -d '[:space:]')
   if [ -z "$tok" ]; then
     _billing_log "WARN: ant auth print-credentials returned no token (profile $BILLING_ANT_PROFILE)"
