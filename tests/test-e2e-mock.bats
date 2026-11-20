@@ -935,6 +935,98 @@ PY
   refute_grep -qF "subject of a denied change" "$MOCK_HOME/.prompt_$PICKED"
 }
 
+# === Test: 接地 repo の早送り ([[tracks.<x>.repos]].sync_before_run) — 指定のある repo だけ、呼1 の前に ===
+# 指定 repo の repos entry の target_repo の直後に sync_before_run = true を差し込む
+add_sync_before_run() {
+  python3 - "$MOCK_PROJECT/config.toml" "$1" << 'PY'
+import sys
+p, repo = sys.argv[1:3]
+anchor = f'target_repo = "{repo}"\n'
+s = open(p).read()
+assert anchor in s
+open(p, "w").write(s.replace(anchor, anchor + "sync_before_run = true\n", 1))
+PY
+}
+
+# 接地 repo を一時の bare remote の clone に置き換え、別の clone から 1 commit を push しておく (手元は 1 commit 遅れ)
+make_behind_clone() {
+  local repo="$1" remote="$MOCK_HOME/remote.git" other="$MOCK_HOME/other"
+  isolate_git_env
+  git init -q --bare -b main "$remote"
+  git clone -q "$remote" "$other" 2> /dev/null
+  git -C "$other" checkout -q -b main
+  git -C "$other" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m "first upstream commit"
+  git -C "$other" push -q origin main
+  rm -rf "$repo"
+  git clone -q "$remote" "$repo"
+  git -C "$other" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m "subject pushed elsewhere"
+  git -C "$other" push -q origin main
+}
+
+@test "E2E sync: only a line with sync_before_run logs SYNC, and the fast-forward lands before call 1" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  add_daily_line
+  local repo="$MOCK_HOME/mock-repos/authorship-strategy"
+  make_behind_clone "$repo"
+  add_sync_before_run "$repo"
+
+  run run_script
+  [ "$status" -eq 0 ]
+
+  get_log | grep -qE "SYNC $PICKED: ff: [0-9a-f]+\.\.[0-9a-f]+ \(1 commits\)$"
+  [ "$(git -C "$repo" rev-parse HEAD)" = "$(git -C "$MOCK_HOME/other" rev-parse HEAD)" ]
+  # 呼1 に渡す commit 件名は早送りの後の repo から取る
+  grep -qx -- "- subject pushed elsewhere" "$MOCK_HOME/.prompt_$PICKED"
+  # 指定の無い line (同じ run の daily line) は log に何も足さない
+  [ -f "$MOCK_HOME/.prompt_desire" ]
+  refute_grep -qF "SYNC desire" "$MOCK_PROJECT/logs/$DR_DATE.log"
+  [ "$(get_log | grep -c "SYNC ")" -eq 1 ]
+}
+
+@test "E2E sync: without any sync_before_run no SYNC line is logged" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -eq 0 ]
+
+  [ -f "$MOCK_HOME/.prompt_$PICKED" ]
+  refute_grep -qF "SYNC " "$MOCK_PROJECT/logs/$DR_DATE.log"
+}
+
+@test "E2E sync: a failing repo-sync is a WARN and call 1 still runs" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  add_sync_before_run "$MOCK_HOME/mock-repos/authorship-strategy"
+  # mock の lib の写しの repo-sync を rc 1 にする
+  python3 - "$MOCK_PROJECT/scripts/lib/dr_pipeline.py" << 'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = '    "repo-sync": cmd_repo_sync,\n'
+assert old in s
+s = s.replace(old, '    "repo-sync": lambda argv: 1,\n', 1)
+open(p, "w").write(s)
+PY
+
+  run run_script
+  [ "$status" -eq 0 ]
+
+  get_log | grep -qF "WARN: Line $PICKED repo-sync failed"
+  refute_grep -qF "SYNC " "$MOCK_PROJECT/logs/$DR_DATE.log"
+  [ -f "$MOCK_HOME/.prompt_$PICKED" ]
+}
+
+@test "E2E sync: a repo that cannot be fast-forwarded is a skip line and call 1 still runs" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  # 接地 repo は git の作業ツリーでない (setup の空 dir)
+  add_sync_before_run "$MOCK_HOME/mock-repos/authorship-strategy"
+
+  run run_script
+  [ "$status" -eq 0 ]
+
+  get_log | grep -qF "SYNC $PICKED: skip: not a git work tree"
+  [ -f "$MOCK_HOME/.prompt_$PICKED" ]
+}
+
 # === Test: ctl-015 は run スコープ — 同日の先行ノートでは gate が通らない ===
 @test "E2E gate: a pre-existing same-day report does not satisfy the gate for a run that wrote nothing" {
   echo "noreport" > "$MOCK_HOME/.mock_scenario"

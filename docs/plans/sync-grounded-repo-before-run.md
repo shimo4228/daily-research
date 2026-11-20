@@ -45,6 +45,9 @@ origin より 50 commit 遅れていた（`git status -sb` が `behind 50`）。
 早送りで入ってきた新しい置き場は、`read_deny` の列挙に無ければ読める。ADR-0021 の Review-when（列挙の足し忘れ）と
 同じ条件で、早送りはその入口を 1 つ増やす。
 
+呼1 は接地 repo を cwd にして走り、cwd の `.claude/settings.json` は safe mode でも効くので、早送りは origin の内容で無人 run の
+許可を広げる道になる。`.claude/`・`.mcp.json`・`.gitattributes`・`.gitmodules`・`.lfsconfig` に触れる早送りはせず（`skip: protected path changed`）、運用者が読んで手で pull する。
+
 ## 実行者の決定
 
 実装は `Agent(model: "opus")` に委譲する。主ループは plan・config・検収を持ち、Code Review（effort medium）と

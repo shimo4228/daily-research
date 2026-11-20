@@ -606,6 +606,21 @@ PENDING_BEFORE=""     # pending-stats の呼1 前の値 (cwd が無い line は�
 if [ ! -d "$LINE_CWD" ]; then
   log "WARN: $LINE_CWD_MISSING: $LINE_CWD — line $TRACK を skip"
 else
+  # 接地 repo の早送り。repo line だけ、line-brief・repo-activity より前に 1 回。dr_pipeline repo-sync が
+  # sync_before_run = true の repo だけを git fetch + merge --ff-only で upstream の先頭へ進め、repo ごとに
+  # 固定の語と sha・件数だけの 1 行を出す (指定の無い line は何も出さない)。汚れ・upstream 無し・分岐・通信の
+  # 失敗・時間切れは pull せずに手元の写しのまま走る — 昨日までと同じ状態で、read_deny は写しの新旧に関係なく効く。
+  # 早送りはモデルでなくこの script が行う (モデルの repo は read-only のまま)。
+  if [ "$LINE_MODE" = "repo" ]; then
+    if _sync=$(python3 "$DR_PY" repo-sync "$PROJECT_DIR/config.toml" "$TRACK" 2>> "$LOG_FILE"); then
+      while IFS= read -r _sync_line; do
+        if [ -n "$_sync_line" ]; then log "SYNC $TRACK: $_sync_line"; fi
+      done <<< "$_sync"
+    else
+      log "WARN: Line $TRACK repo-sync failed (the reason is on the line above) — running on the local copy as it is"
+    fi
+  fi
+
   # 過去の問い履歴 (line ごとに再計算)。他 line の全履歴は毎 request 読まれる土台を太らせるだけなので
   # 当該 line に絞る。ecosystem line (広域) は同じ出来事を同日に重ねないよう他 line の直近の題も見る。
   PAST_THEMES_ARGS=(--line "$TRACK")

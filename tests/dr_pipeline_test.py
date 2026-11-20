@@ -3203,3 +3203,409 @@ def test_repo_activity_unreadable_config_prints_nothing(monkeypatch, capsys, tmp
     assert rc == 0
     assert out == ""
     assert "config unreadable" in err
+
+
+# === repo-sync: 指定した接地 repo を run の前に早送りする (plan sync-grounded-repo-before-run) ===
+# 一時の bare remote (remote.git) と、手元の写し (local、run が読む側) と、upstream に push する別の写し
+# (other、変更が別の場所で起きる側) を作る。通信は file の path だけ (ネットワークに出ない)。
+
+
+def _sync_git(repo, *a):
+    import os
+    import subprocess
+
+    env = {
+        # 呼び出し元の GIT_* を落とし、運用者の global / system 設定を効かせない (_git_repo と同じ理由)
+        **{k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.invalid",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.invalid",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
+    proc = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "commit.gpgsign=false",
+            *a,
+        ],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    return proc.stdout.strip()
+
+
+def _sync_commit(repo, name, push=True):
+    (repo / name).parent.mkdir(parents=True, exist_ok=True)
+    with open(repo / name, "a") as f:
+        f.write(f"{name}\n")
+    _sync_git(repo, "add", name)
+    _sync_git(repo, "commit", "-q", "-m", name)
+    if push:
+        _sync_git(repo, "push", "-q", "origin", "main")
+
+
+def _sync_repos(tmp_path, monkeypatch):
+    # repo-sync は呼び出し元の GIT_* を落とすので、運用者の global 設定は HOME の差し替えで外す
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "home" / ".config"))
+    remote, local, other = tmp_path / "remote.git", tmp_path / "local", tmp_path / "other"
+    _sync_git(tmp_path, "init", "-q", "--bare", "-b", "main", str(remote))
+    _sync_git(tmp_path, "clone", "-q", str(remote), str(other))
+    _sync_git(other, "checkout", "-q", "-b", "main")
+    _sync_commit(other, "c0")
+    _sync_git(tmp_path, "clone", "-q", str(remote), str(local))
+    return remote, local, other
+
+
+def _sync_cfg(tmp_path, repos):
+    """repos: (target_repo, sync_before_run の TOML 表記 or None) の列。"""
+    cfg = tmp_path / "sync.toml"
+    body = '[tracks.a]\nname = "A"\nfocus = "A focus"\n'
+    for i, (repo, sync_toml) in enumerate(repos):
+        body += f'[[tracks.a.repos]]\nkey = "a{i}"\ntarget_repo = "{repo}"\n'
+        if sync_toml is not None:
+            body += f"sync_before_run = {sync_toml}\n"
+    cfg.write_text(body)
+    return str(cfg)
+
+
+def _head(repo):
+    return _sync_git(repo, "rev-parse", "HEAD")
+
+
+@pytest.mark.unit
+def test_repo_sync_fast_forwards_to_upstream(monkeypatch, capsys, tmp_path):
+    _, local, other = _sync_repos(tmp_path, monkeypatch)
+    old = _sync_git(local, "rev-parse", "--short", "HEAD")
+    _sync_commit(other, "c1")
+    _sync_commit(other, "c2")
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["repo-sync", _sync_cfg(tmp_path, [(local, "true")]), "a"]
+    )
+    assert rc == 0
+    assert _head(local) == _head(other)
+    new = _sync_git(local, "rev-parse", "--short", "HEAD")
+    assert out == f"ff: {old}..{new} (2 commits)\n"
+
+
+@pytest.mark.unit
+def test_repo_sync_up_to_date(monkeypatch, capsys, tmp_path):
+    _, local, _ = _sync_repos(tmp_path, monkeypatch)
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["repo-sync", _sync_cfg(tmp_path, [(local, "true")]), "a"]
+    )
+    assert rc == 0
+    assert out == "up-to-date\n"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("dirt", ["tracked", "untracked"])
+def test_repo_sync_skips_dirty_tree(monkeypatch, capsys, tmp_path, dirt):
+    _, local, other = _sync_repos(tmp_path, monkeypatch)
+    _sync_commit(other, "c1")
+    before = _head(local)
+    (local / ("c0" if dirt == "tracked" else "new.md")).write_text("local edit\n")
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["repo-sync", _sync_cfg(tmp_path, [(local, "true")]), "a"]
+    )
+    assert rc == 0
+    assert out == "skip: dirty\n"
+    assert _head(local) == before
+
+
+@pytest.mark.unit
+def test_repo_sync_skips_diverged_branch(monkeypatch, capsys, tmp_path):
+    _, local, other = _sync_repos(tmp_path, monkeypatch)
+    _sync_commit(other, "c1")
+    _sync_commit(local, "local-only", push=False)
+    before = _head(local)
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["repo-sync", _sync_cfg(tmp_path, [(local, "true")]), "a"]
+    )
+    assert rc == 0
+    assert out == "skip: diverged\n"
+    assert _head(local) == before
+
+
+@pytest.mark.unit
+def test_repo_sync_skips_branch_without_upstream(monkeypatch, capsys, tmp_path):
+    _, local, other = _sync_repos(tmp_path, monkeypatch)
+    _sync_git(local, "branch", "--unset-upstream")
+    _sync_commit(other, "c1")
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["repo-sync", _sync_cfg(tmp_path, [(local, "true")]), "a"]
+    )
+    assert rc == 0
+    assert out == "skip: no upstream\n"
+
+
+@pytest.mark.unit
+def test_repo_sync_skips_detached_head(monkeypatch, capsys, tmp_path):
+    _, local, other = _sync_repos(tmp_path, monkeypatch)
+    _sync_git(local, "checkout", "-q", "--detach")
+    _sync_commit(other, "c1")
+    before = _head(local)
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["repo-sync", _sync_cfg(tmp_path, [(local, "true")]), "a"]
+    )
+    assert rc == 0
+    assert out == "skip: detached HEAD\n"
+    assert _head(local) == before
+
+
+@pytest.mark.unit
+def test_repo_sync_skips_dir_that_is_not_a_git_work_tree(monkeypatch, capsys, tmp_path):
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    rc, out, _ = run_cmd(
+        monkeypatch,
+        capsys,
+        ["repo-sync", _sync_cfg(tmp_path, [(plain, "true"), (tmp_path / "missing", "true")]), "a"],
+    )
+    assert rc == 0
+    assert out == "skip: not a git work tree\nskip: not a git work tree\n"
+
+
+@pytest.mark.unit
+def test_repo_sync_skips_subdir_of_a_work_tree(monkeypatch, capsys, tmp_path):
+    # target_repo が作業ツリーの root でなければ、外側の repo を動かさない
+    _, local, other = _sync_repos(tmp_path, monkeypatch)
+    (local / "sub").mkdir()
+    _sync_commit(other, "c1")
+    before = _head(local)
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["repo-sync", _sync_cfg(tmp_path, [(local / "sub", "true")]), "a"]
+    )
+    assert rc == 0
+    assert out == "skip: not the work tree root\n"
+    assert _head(local) == before
+
+
+@pytest.mark.unit
+def test_repo_sync_fetch_failure_is_a_skip_line(monkeypatch, capsys, tmp_path):
+    import shutil
+
+    remote, local, _ = _sync_repos(tmp_path, monkeypatch)
+    shutil.rmtree(remote)
+    before = _head(local)
+    rc, out, err = run_cmd(
+        monkeypatch, capsys, ["repo-sync", _sync_cfg(tmp_path, [(local, "true")]), "a"]
+    )
+    assert rc == 0
+    # git の stderr (remote の path を含む) は出力に載せない
+    assert out == "skip: fetch failed\n"
+    assert err == ""
+    assert _head(local) == before
+
+
+@pytest.mark.unit
+def test_repo_sync_timeout_is_a_skip_line(monkeypatch, capsys, tmp_path):
+    import subprocess
+
+    def hang(cmd, **kw):
+        raise subprocess.TimeoutExpired(cmd, kw.get("timeout"))
+
+    monkeypatch.setattr(subprocess, "run", hang)
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["repo-sync", _sync_cfg(tmp_path, [(tmp_path, "true")]), "a"]
+    )
+    assert rc == 0
+    assert out == "skip: timeout\n"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("sync_toml", [None, "false"])
+def test_repo_sync_leaves_repos_without_the_flag(monkeypatch, capsys, tmp_path, sync_toml):
+    _, local, other = _sync_repos(tmp_path, monkeypatch)
+    _sync_commit(other, "c1")
+    before = _head(local)
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["repo-sync", _sync_cfg(tmp_path, [(local, sync_toml)]), "a"]
+    )
+    assert rc == 0
+    assert out == ""
+    assert _head(local) == before
+
+
+@pytest.mark.unit
+def test_repo_sync_only_flagged_repos_of_the_line(monkeypatch, capsys, tmp_path):
+    _, local, other = _sync_repos(tmp_path, monkeypatch)
+    _sync_commit(other, "c1")
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    rc, out, _ = run_cmd(
+        monkeypatch,
+        capsys,
+        ["repo-sync", _sync_cfg(tmp_path, [(plain, "false"), (local, "true")]), "a"],
+    )
+    assert rc == 0
+    assert len(out.splitlines()) == 1 and out.startswith("ff: ")
+
+
+@pytest.mark.unit
+def test_repo_sync_ignores_inherited_git_env_and_repo_hooks(monkeypatch, capsys, tmp_path):
+    # git hook の中で走ると GIT_DIR が export されている — 残ると操作が別の repo に当たる。
+    # repo 側の hook (post-merge) も走らせない
+    _, local, other = _sync_repos(tmp_path, monkeypatch)
+    _sync_commit(other, "c1")
+    other_head = _head(other)
+    _sync_commit(other, "c2", push=False)
+    marker = tmp_path / "hook-ran"
+    hook = local / ".git" / "hooks" / "post-merge"
+    hook.write_text(f"#!/bin/sh\ntouch '{marker}'\n")
+    hook.chmod(0o755)
+    monkeypatch.setenv("GIT_DIR", str(other / ".git"))
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["repo-sync", _sync_cfg(tmp_path, [(local, "true")]), "a"]
+    )
+    assert rc == 0
+    assert out.startswith("ff: ") and out.endswith("(1 commits)\n")
+    monkeypatch.delenv("GIT_DIR")
+    assert _head(local) == other_head
+    assert not marker.exists()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("cmd", ["tracks", "repo-sync"])
+def test_sync_before_run_must_be_boolean(monkeypatch, capsys, tmp_path, cmd):
+    # sync_before_run = "false" は bool("false") is True の事故になるため schema check で落とす
+    cfg = _sync_cfg(tmp_path, [("/nonexistent/a", '"false"')])
+    rc, _, err = run_cmd(monkeypatch, capsys, [cmd, cfg] + (["a"] if cmd == "repo-sync" else []))
+    assert rc == 1
+    assert "sync_before_run must be a boolean" in err
+
+
+@pytest.mark.unit
+def test_repo_sync_usage_unknown_track_or_missing_config(monkeypatch, capsys, tmp_path):
+    cfg = _sync_cfg(tmp_path, [("/nonexistent/a", "true")])
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["repo-sync", cfg])
+    assert (rc, out) == (64, "")
+    rc, out, err = run_cmd(monkeypatch, capsys, ["repo-sync", cfg, "nope"])
+    assert (rc, out) == (1, "")
+    assert "unknown track" in err
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["repo-sync", str(tmp_path / "none.toml"), "a"])
+    assert (rc, out) == (1, "")
+
+
+def _sync_status(repo):
+    return _sync_git(repo, "status", "--porcelain", "--ignored")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "path",
+    [".claude/settings.json", "sub/.claude/x", ".mcp.json", ".gitattributes", ".gitmodules"],
+)
+def test_repo_sync_skips_fast_forward_touching_config_surface(monkeypatch, capsys, tmp_path, path):
+    # cwd の .claude/settings.json は safe mode でも効くので、origin の内容で無人 run の許可を広げさせない
+    _, local, other = _sync_repos(tmp_path, monkeypatch)
+    _sync_commit(other, "open.md")
+    _sync_commit(other, path)
+    before = _head(local)
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["repo-sync", _sync_cfg(tmp_path, [(local, "true")]), "a"]
+    )
+    assert rc == 0
+    assert out == "skip: protected path changed\n"
+    assert _head(local) == before
+    assert _sync_status(local) == ""
+    assert not (local / path).exists() and not (local / "open.md").exists()
+
+
+@pytest.mark.unit
+def test_repo_sync_skips_fast_forward_changing_existing_claude_settings(
+    monkeypatch, capsys, tmp_path
+):
+    _, local, other = _sync_repos(tmp_path, monkeypatch)
+    _sync_commit(other, ".claude/settings.json")
+    _sync_git(local, "fetch", "-q", "origin")
+    _sync_git(local, "merge", "-q", "--ff-only", "@{u}")
+    settings = (local / ".claude" / "settings.json").read_text()
+    _sync_commit(other, ".claude/settings.json")
+    before = _head(local)
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["repo-sync", _sync_cfg(tmp_path, [(local, "true")]), "a"]
+    )
+    assert rc == 0
+    assert out == "skip: protected path changed\n"
+    assert _head(local) == before
+    assert (local / ".claude" / "settings.json").read_text() == settings
+
+
+@pytest.mark.unit
+def test_repo_sync_fast_forwards_paths_that_only_look_like_config(monkeypatch, capsys, tmp_path):
+    # セグメントが .claude と一致するときだけ保護する (.claude-notes/・claude.md は進む)
+    _, local, other = _sync_repos(tmp_path, monkeypatch)
+    _sync_commit(other, ".claude-notes/x.md")
+    _sync_commit(other, "docs/claude.md")
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["repo-sync", _sync_cfg(tmp_path, [(local, "true")]), "a"]
+    )
+    assert rc == 0
+    assert out.startswith("ff: ") and out.endswith("(2 commits)\n")
+    assert _head(local) == _head(other)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name", ["-oops", ".dot"])
+def test_repo_sync_rejects_remote_name_before_fetch(monkeypatch, capsys, tmp_path, name):
+    import subprocess
+
+    _, local, other = _sync_repos(tmp_path, monkeypatch)
+    _sync_commit(other, "c1")
+    # remote の名前だけを差し替える (url は一時の bare repo のまま。コマンドを伴う定義は置かない)
+    config = local / ".git" / "config"
+    text = config.read_text()
+    assert '[remote "origin"]' in text and "remote = origin" in text
+    config.write_text(
+        text.replace('[remote "origin"]', f'[remote "{name}"]').replace(
+            "remote = origin", f"remote = {name}"
+        )
+    )
+    calls = []
+    real_run = subprocess.run
+
+    def spy(cmd, **kw):
+        calls.append(cmd)
+        return real_run(cmd, **kw)
+
+    monkeypatch.setattr(subprocess, "run", spy)
+    before = _head(local)
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["repo-sync", _sync_cfg(tmp_path, [(local, "true")]), "a"]
+    )
+    monkeypatch.setattr(subprocess, "run", real_run)
+    assert rc == 0
+    assert out == "skip: unsupported remote name\n"
+    assert calls and not any("fetch" in c for c in calls)
+    assert _head(local) == before
+
+
+@pytest.mark.unit
+def test_repo_sync_does_not_run_the_repo_fsmonitor(monkeypatch, capsys, tmp_path):
+    _, local, other = _sync_repos(tmp_path, monkeypatch)
+    _sync_commit(other, "c1")
+    marker = tmp_path / "fsmonitor-ran"
+    hook = tmp_path / "fsmonitor.sh"
+    hook.write_text(f"#!/bin/sh\ntouch '{marker}'\n")
+    hook.chmod(0o755)
+    _sync_git(local, "config", "core.fsmonitor", str(hook))
+    # 対照: 素の git status は repo の config の fsmonitor を実行する
+    _sync_git(local, "status", "--porcelain")
+    assert marker.exists()
+    marker.unlink()
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["repo-sync", _sync_cfg(tmp_path, [(local, "true")]), "a"]
+    )
+    assert rc == 0
+    assert out.startswith("ff: ")
+    assert not marker.exists()

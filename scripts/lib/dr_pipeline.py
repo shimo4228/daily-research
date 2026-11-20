@@ -181,6 +181,12 @@ def _load_tracks(config_path: str) -> tuple[dict[str, object], dict[str, object]
                             f"[[tracks.{name}.repos]] entry {i} must set {key} to a non-empty "
                             f"string, got {r.get(key)!r}"
                         )
+                # sync_before_run は bool 限定 (daily と同じ理由 — "false" の文字列が真になる事故を防ぐ)。
+                if "sync_before_run" in r and not isinstance(r["sync_before_run"], bool):
+                    raise ValueError(
+                        f"[[tracks.{name}.repos]] entry {i} sync_before_run must be a boolean "
+                        f"(true/false), got {r['sync_before_run']!r}"
+                    )
         # read_deny は repos の検証の後 (target_repo を規則に埋めるので、その形も見る)。
         if isinstance(v, dict) and "read_deny" in v:
             _check_read_deny(name, v)
@@ -936,6 +942,154 @@ def cmd_repo_activity(argv: list[str]) -> int:
         total += len(line) + 1
     if out:
         print("\n".join(out))
+    return 0
+
+
+# --- repo-sync <config_path> <track>: 指定した接地 repo を run の前に早送りする ---
+# その line の [[tracks.<x>.repos]] のうち sync_before_run = true の repo だけを、記述順に
+# git fetch <upstream の remote> + git merge --ff-only @{u} で upstream の先頭へ進め、repo ごとに 1 行を出す:
+#   ff: <旧短sha>..<新短sha> (<n> commits) / up-to-date / skip: <理由>
+# 進むのは target_repo が作業ツリーの root で、HEAD が branch を指し、その branch に upstream があり、作業ツリーが
+# clean なときだけ。rebase・stash・reset・checkout はしない (早送りできなければ手元の写しのまま run が走る)。
+# repo 側の hook と fsmonitor を走らせず (core.hooksPath=/dev/null・core.fsmonitor=false — status が repo の
+# config のコマンドを実行しない)、資格情報の入力を待たず (GIT_TERMINAL_PROMPT=0)、呼び出しごとに時間の上限を
+# 付ける (merge は途中で殺すと作業ツリーが半端に残るので長め)。呼び出し元の GIT_* (git hook が export する
+# GIT_DIR・GIT_INDEX_FILE 等) は落とす — 残ると操作が target_repo でない repo に当たる。
+# remote 名は _SYNC_REMOTE_RE に合うものだけを --end-of-options の後に渡す (option として読ませない)。
+# merge は --no-overwrite-ignore (ignored の手元ファイルを黙って上書きしない)。
+# 設定面に触れる早送りはしない: 早送りで変わるパスのどこかのセグメントが .claude か、basename が
+# _SYNC_PROTECTED_NAMES のどれかなら skip: protected path changed (運用者が手で pull する)。呼1 は接地 repo を
+# cwd にして走り、cwd の .claude/settings.json は safe mode でも project settings として効く (permissions は
+# safe mode の対象外) — origin の内容が人の目を通らずに無人 run の許可を広げる道を作らない。.mcp.json は同じ
+# 設定面、.gitattributes・.gitmodules・.lfsconfig は filter・submodule の入口。パス名は出力に載せない。
+# 出力は log に入り人と LLM が読むので、repo 由来の文字列 (branch 名・remote の出力・stderr) を載せない。
+# 載せるのは固定の語と sha・件数だけ。rc は常に 0 (usage と config が読めないとき・未知の line だけ非 0)。
+REPO_SYNC_FETCH_TIMEOUT = 60
+REPO_SYNC_LOCAL_TIMEOUT = 30
+REPO_SYNC_MERGE_TIMEOUT = 300
+_SYNC_REMOTE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+_SYNC_PROTECTED_DIR = ".claude"
+_SYNC_PROTECTED_NAMES = (".mcp.json", ".gitattributes", ".gitmodules", ".lfsconfig")
+
+
+def _sync_protected(path: str) -> bool:
+    """早送りで変わる repo 相対パスが設定面 (.claude/ 配下・_SYNC_PROTECTED_NAMES) に当たるか。"""
+    segments = path.split("/")
+    return _SYNC_PROTECTED_DIR in segments or segments[-1] in _SYNC_PROTECTED_NAMES
+
+
+class _SyncSkip(Exception):
+    """早送りしない理由 (固定の語。repo 由来の文字列を持たない)。"""
+
+
+def _repo_sync_one(repo: str) -> str:
+    import os
+    import subprocess
+
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env["GIT_TERMINAL_PROMPT"] = "0"
+
+    def git(
+        *args: str, fail: str, timeout: int = REPO_SYNC_LOCAL_TIMEOUT, raw: bool = False
+    ) -> str:
+        try:
+            proc = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    repo,
+                    "-c",
+                    "core.hooksPath=/dev/null",
+                    "-c",
+                    "core.fsmonitor=false",
+                    *args,
+                ],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                errors="replace",
+                env=env,
+                timeout=timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            raise _SyncSkip("timeout") from None
+        except OSError:
+            raise _SyncSkip("git unavailable") from None
+        if proc.returncode != 0:
+            raise _SyncSkip(fail)
+        return proc.stdout if raw else proc.stdout.strip()
+
+    try:
+        top = git("rev-parse", "--show-toplevel", fail="not a git work tree")
+        if os.path.realpath(top) != os.path.realpath(repo):
+            raise _SyncSkip("not the work tree root")
+        ref = git("symbolic-ref", "-q", "HEAD", fail="detached HEAD")
+        remote = git("for-each-ref", "--format=%(upstream:remotename)", ref, fail="no upstream")
+        if not remote:
+            raise _SyncSkip("no upstream")
+        if not _SYNC_REMOTE_RE.fullmatch(remote):
+            raise _SyncSkip("unsupported remote name")
+        if git("status", "--porcelain", fail="status failed"):
+            raise _SyncSkip("dirty")
+        git(
+            "fetch",
+            "--quiet",
+            "--end-of-options",
+            remote,
+            fail="fetch failed",
+            timeout=REPO_SYNC_FETCH_TIMEOUT,
+        )
+        old = git("rev-parse", "--short", "HEAD", fail="no commits")
+        behind = int(git("rev-list", "--count", "HEAD..@{u}", fail="no upstream"))
+        if behind == 0:
+            return "up-to-date"
+        # 分岐していれば diff が手元側の変更も拾うので、先に早送りの範囲かを確かめる
+        git("merge-base", "--is-ancestor", "HEAD", "@{u}", fail="diverged")
+        changed = git(
+            "diff",
+            "--name-only",
+            "-z",
+            "--no-renames",
+            "HEAD",
+            "@{u}",
+            fail="diff failed",
+            raw=True,
+        )
+        if any(_sync_protected(p) for p in changed.split("\0") if p):
+            raise _SyncSkip("protected path changed")
+        git(
+            "merge",
+            "--ff-only",
+            "--quiet",
+            "--no-overwrite-ignore",
+            "@{u}",
+            fail="diverged",
+            timeout=REPO_SYNC_MERGE_TIMEOUT,
+        )
+        new = git("rev-parse", "--short", "HEAD", fail="no commits")
+    except _SyncSkip as e:
+        return f"skip: {e}"
+    return f"ff: {old}..{new} ({behind} commits)"
+
+
+def cmd_repo_sync(argv: list[str]) -> int:
+    if len(argv) < 2:
+        print("usage: repo-sync <config_path> <track>", file=sys.stderr)
+        return 64
+    config_path, track = argv[:2]
+    try:
+        _, tracks = _load_tracks(config_path)
+    except (OSError, ValueError) as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    v = tracks.get(track)
+    if not isinstance(v, dict):
+        print(f"unknown track: {track}", file=sys.stderr)
+        return 1
+    for r in _track_repos(v):
+        if r.get("sync_before_run") is True:
+            print(_repo_sync_one(r["target_repo"]), flush=True)
     return 0
 
 
@@ -3710,6 +3864,7 @@ COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "past-themes": cmd_past_themes,
     "past-topics-append": cmd_past_topics_append,
     "repo-activity": cmd_repo_activity,
+    "repo-sync": cmd_repo_sync,
     "line-brief": cmd_line_brief,
     "read-deny": cmd_read_deny,
     "receipt-read": cmd_receipt_read,

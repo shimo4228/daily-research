@@ -66,6 +66,8 @@ daily-research.sh (05:00)
 ├── rotation-pick — 当日担当ラインを決定論選択: 輪番 window（開始 = date.toordinal() × K
 │   mod N、そこから連続 K 本。K = [general] lines_per_day、ADR-0010 / ADR-0017）
 │   + `daily = true` の全ライン（毎日実行、ADR-0011）
+├── repo-sync（sync_before_run = true の repos entry だけ）: target_repo を upstream へ早送り
+│   （clean な branch で fetch + merge --ff-only、repo の hook なし。できなければ手元の写しのまま走る）、SYNC を log に出す
 ├── 呼1: claude -p, cwd = 担当ラインの target_repo (Opus, --effort は [effort].call1, --max-turns 55,
 │   25 分タイムアウト, transient 失敗時リトライ 1 回; 401 は中止)
 │   [api モード: ラインの前に支出ゲート（日・月の上限）、呼び出しごとに --max-budget-usd、
@@ -170,6 +172,8 @@ launchctl list | grep daily-research
 | `Rotation pick: a, b, c (ADR-0010/0017)` | 当日担当ラインの輪番 window 選択結果 |
 | `Today's lines: N` | 当日実行するライン数（`lines_per_day` + daily ライン） |
 | `=== Line: <track> (<repo パス>) ===` | その repo を cwd にしたライン run の開始（ecosystem ラインは repo を持たず `no target repo` と出る） |
+| `SYNC <track>: ff: <old>..<new> (<n> commits)` / `SYNC <track>: up-to-date` / `SYNC <track>: skip: <reason>` | `sync_before_run = true` の repos entry だけ、呼1 の前に出る: `dr_pipeline.py repo-sync` が repo を upstream へ早送りした・既に最新だった・手を付けなかった。理由は固定の語: `not a git work tree`・`not the work tree root`・`detached HEAD`・`no upstream`・`dirty`・`fetch failed`・`timeout`・`diverged`・`unsupported remote name`・`protected path changed`（ほかに `status failed`・`diff failed`・`no commits`・`git unavailable`）。`protected path changed` は早送りが `.claude/`（どの階層でも）・`.mcp.json`・`.gitattributes`・`.gitmodules`・`.lfsconfig` に触れること。無人では取り込まない（run の cwd はその repo で、`.claude/settings.json` は safe mode でも効く）ので、運用者が中身を読んで手で pull する。どの場合もラインは走る。キーの無いラインは何も出さない |
+| `WARN: Line <track> repo-sync failed (the reason is on the line above) — running on the local copy as it is` | `repo-sync` 自体が失敗した（config が読めない・未知のライン）。ラインは手元の写しのまま走る |
 | `Line <track> mode: ecosystem (cwd = state/<track>)` | `mode = "ecosystem"` のライン。state ディレクトリを cwd に、ecosystem プロトコルで走る（ADR-0018）。`--safe-mode` は全ラインに付く（ADR-0019） |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | ライン run の実行統計（コスト、ターン数、所要時間、トークン数） |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | transient 失敗。1 回きりのリトライを開始 |

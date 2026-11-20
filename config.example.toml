@@ -113,6 +113,19 @@ audit_confirm_max_usd = 0.25  # audit stage 2, per candidate
 # commas, parentheses, whitespace or control characters; with read_deny set,
 # target_repo must be a normalized absolute path without those characters or glob
 # characters ([ ] * ? { }). The startup schema check rejects anything else.
+# sync_before_run: optional per-repos-entry bool (default false; a non-boolean fails the
+# startup schema check). With true, the script fast-forwards that repo to its upstream
+# before the line's call 1 (git fetch + git merge --ff-only @{u}, repo hooks off, no
+# credential prompt, time-limited) and logs one "SYNC <line>: ..." line per repo. A dirty
+# tree, a detached HEAD, a branch without upstream, a diverged branch, a fetch failure or
+# a timeout is logged as "skip: <reason>" and the line runs on the local copy as it is.
+# A fast-forward that touches .claude/ (at any depth), .mcp.json, .gitattributes,
+# .gitmodules or .lfsconfig is not made ("skip: protected path changed"): the run's cwd
+# is the repo and its .claude/settings.json applies even in safe mode, so the operator
+# pulls such changes by hand after reading them.
+# Leave it off for a repo you work on locally; it is for a repo whose changes happen
+# elsewhere and are pushed to origin. A new path that arrives with the fast-forward is
+# readable unless read_deny lists it.
 
 [tracks.example_line]
 name = "Example Line 前進"
@@ -131,6 +144,7 @@ sources = [
 key = "example"
 target_repo = "/Users/YOUR_USERNAME/path/to/example-repo"
 target_doi = "10.5281/zenodo.XXXXXXX"  # optional; informational — not read by scripts
+# sync_before_run = true  # fast-forward this repo before the run (see above)
 
 # === Ecosystem line (mode = "ecosystem", ADR-0018) ===
 # mode: "repo" (default, may be omitted) or "ecosystem". An ecosystem line has NO target

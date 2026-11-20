@@ -66,6 +66,8 @@ daily-research.sh (05:00)
 ├── rotation-pick — deterministic selection of today's lines: a rotation window
 │   (start = date.toordinal() × K mod N, then K consecutive lines, K = [general]
 │   lines_per_day — proleptic Gregorian ordinal, ADR-0010 / ADR-0017) + every `daily = true` line (ADR-0011)
+├── repo-sync (only repos entries with sync_before_run = true): fast-forward the target_repo to its upstream
+│   (fetch + merge --ff-only on a clean branch, repo hooks off; otherwise run on the local copy), logs SYNC
 ├── Call 1: claude -p, cwd = the picked line's target_repo (Opus, --effort from [effort].call1, --max-turns 55,
 │   25-min timeout, one retry on transient failure; 401 aborts)
 │   [api mode: a spend gate before each line (day / month caps), --max-budget-usd per call,
@@ -182,6 +184,8 @@ launchctl list | grep daily-research
 | `Rotation pick: a, b, c (ADR-0010/0017)` | The rotation window picked for today |
 | `Today's lines: N` | How many lines run today (`lines_per_day` + any daily lines) |
 | `=== Line: <track> (<repo path>) ===` | Per-line run starting with that repo as cwd (an ecosystem line has no repo and logs `no target repo`) |
+| `SYNC <track>: ff: <old>..<new> (<n> commits)` / `SYNC <track>: up-to-date` / `SYNC <track>: skip: <reason>` | Only for a repos entry with `sync_before_run = true`, before call 1: `dr_pipeline.py repo-sync` fast-forwarded the repo to its upstream, found it current, or left it as it is. The reasons are fixed words: `not a git work tree`, `not the work tree root`, `detached HEAD`, `no upstream`, `dirty`, `fetch failed`, `timeout`, `diverged`, `unsupported remote name`, `protected path changed` (plus `status failed`, `diff failed`, `no commits`, `git unavailable`). `protected path changed` means the fast-forward would touch `.claude/` (at any depth), `.mcp.json`, `.gitattributes`, `.gitmodules` or `.lfsconfig`; such a change is not pulled unattended (the run's cwd is the repo and its `.claude/settings.json` applies even in safe mode), so read it and pull by hand. The line runs either way; a line without the key logs nothing |
+| `WARN: Line <track> repo-sync failed (the reason is on the line above) — running on the local copy as it is` | `repo-sync` itself failed (config unreadable or the line unknown). The line runs on the local copy |
 | `Line <track> mode: ecosystem (cwd = state/<track>)` | The line is `mode = "ecosystem"`: it runs from its state directory under the ecosystem protocol (ADR-0018). Every line runs with `--safe-mode` (ADR-0019) |
 | `SUMMARY Run(<track>): cost=... turns=... duration=...` | Per-line run statistics (cost, turns, duration, tokens) |
 | `WARN: Line <track> failed (..., exit N) — retrying once` | Transient failure; the single retry is starting |

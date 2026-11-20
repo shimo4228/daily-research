@@ -58,6 +58,10 @@ DR_DATE=YYYY-MM-DD ./scripts/daily-research.sh      # 輪番とレポート名�
   資格情報の置き場は `DISALLOWED_TOOLS` の Read deny で塞ぐ。safe mode でも permissions は効く
 - **repo は read-only。** 呼1 の書き込みは vault のレポート dir と line の state の一部だけ。note は読み物で、
   repo への取り込みは運用者が repo セッションで行う
+- repos entry に `sync_before_run = true` を付けた接地 repo だけ、呼1 の前に script（`dr_pipeline.py repo-sync`）が
+  clean な branch を upstream へ早送りする（`fetch` + `merge --ff-only`、hook なし。できなければ手元の写しのまま走る）。
+  `.claude/`・`.mcp.json`・`.gitattributes`・`.gitmodules`・`.lfsconfig` に触れる早送りはせず、運用者が手で pull する
+  （cwd の `.claude/settings.json` は safe mode でも効く）
 - 接地 repo のうちモデルに読ませない場所は `[tracks.<x>].read_deny`（repo 相対 glob）に書く。`dr_pipeline.py read-deny`
   が全 line の分を `Read(//abs/glob)` に描き（その repo の `.git/**` も足す）、起動時に全 line 共通の `DISALLOWED_TOOLS`
   に入る — 呼1・呼2 は絶対パスで HOME 全体を読めるので、どの line の run でも塞ぐ。描けなければ run 全体を止める。
