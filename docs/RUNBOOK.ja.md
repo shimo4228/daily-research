@@ -163,7 +163,8 @@ launchctl list | grep daily-research
 | `ERROR: Another instance is running. Skipping.` | ロックディレクトリ `.daily-research.lock/` を生存中の `daily-research.sh` の process が保持している |
 | `ERROR: Could not verify the lock (…). Skipping.` | ロックを確かめられなかったので run を始めなかった（通知は `ロックを確かめられず実行しませんでした`）。括弧の中が理由: mutex を 10 秒で取れない・`python3` の失敗・mutex のファイルかロックディレクトリを作れない |
 | `Config schema check passed` | `config.toml` が現行 (ADR-0008) schema に適合 |
-| `ERROR: config.toml schema check failed (the reason is on the line above; see config.example.toml)` | `dr_pipeline.py tracks` が `config.toml` を拒否した（旧 schema、line 名の形、`daily` / `template` / `mode` の型、`mode` の未知の値、`mode = "ecosystem"` の line に書いた `repos` / `context_files`、壊れた `repos`、`lines_per_day` の値）。理由は直前に log された行にある。どのラインも始めずに停止（exit 1） |
+| `ERROR: config.toml schema check failed (the reason is on the line above; see config.example.toml)` | `dr_pipeline.py tracks` が `config.toml` を拒否した（旧 schema、line 名の形、`daily` / `template` / `mode` の型、`mode` の未知の値、`mode = "ecosystem"` の line に書いた `repos` / `context_files` / `read_deny`、壊れた `repos` や `read_deny`、`lines_per_day` の値）。理由は直前に log された行にある。どのラインも始めずに停止（exit 1） |
+| `ERROR: read_deny could not be rendered (the reason is on the line above) — no line runs without it` | schema check の後で `dr_pipeline.py read-deny` が失敗し、`read_deny` の deny を作れなかった。deny 無しで走らせず、どのラインも始めずに停止（exit 1） |
 | `Effort: call1 <level> (model opus), call2 <level> (model <model>) — passed as --effort` | 各呼び出しに渡す `--effort`（`[effort]`、既定はコード）。同じ組を `metrics.jsonl` の `effort` に記録する。実際に走る level はこれより低いことがある（`maxEffortLevel`・組織の上限・model が受けない level） |
 | `ERROR: [effort] in config.toml is invalid (the reason is on the line above; see config.example.toml)` | `[effort]` に未知の key か、`low` / `medium` / `high` / `xhigh` / `max` 以外の値がある。理由は直前に log された行にある。どのラインも始めずに停止（exit 1） |
 | `Rotation pick: a, b, c (ADR-0010/0017)` | 当日担当ラインの輪番 window 選択結果 |

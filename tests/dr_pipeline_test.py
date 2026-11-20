@@ -2901,8 +2901,13 @@ def _git_repo(tmp_path, subjects):
         )
 
     git("init", "-q")
-    for i, subj in enumerate(subjects):
-        (repo / f"f{i}").write_text(str(i))
+    for i, entry in enumerate(subjects):
+        # entry は件名だけ (ファイル f{i} を足す) か、(件名, [触れる repo 相対パス]) の組
+        subj, paths = entry if isinstance(entry, tuple) else (entry, [f"f{i}"])
+        for p in paths:
+            (repo / p).parent.mkdir(parents=True, exist_ok=True)
+            with open(repo / p, "a") as f:
+                f.write(f"{subj}\n")
         git("add", ".")
         git("commit", "-q", "-m", subj)
     return repo
@@ -2941,3 +2946,260 @@ def test_repo_activity_missing_repo_is_empty(monkeypatch, capsys, tmp_path):
     rc, out, _ = run_cmd(monkeypatch, capsys, ["repo-activity", str(tmp_path / "nope")])
     assert rc == 0
     assert out == ""
+
+
+# === read_deny: 接地 repo の読ませない場所。全 line の run に効く (plan learn-line-read-deny) ===
+
+
+def _read_deny_cfg(tmp_path, read_deny_toml, repos=('"/tmp/example-repo"',), extra=""):
+    cfg = tmp_path / "read-deny.toml"
+    body = '[tracks.a]\nname = "A"\nfocus = "A focus"\n'
+    if read_deny_toml is not None:
+        body += f"read_deny = {read_deny_toml}\n"
+    for i, repo in enumerate(repos):
+        body += f'[[tracks.a.repos]]\nkey = "a{i}"\ntarget_repo = {repo}\n'
+    cfg.write_text(body + extra)
+    return str(cfg)
+
+
+_LINE_B = '[tracks.b]\nname = "B"\n[[tracks.b.repos]]\nkey = "b"\ntarget_repo = "/tmp/b-repo"\n'
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "value,needle",
+    [
+        ('"lectures/**"', "array of strings"),
+        ("{ a = 1 }", "array of strings"),
+        ("[1]", "non-empty strings"),
+        ('[""]', "non-empty strings"),
+        ('["/abs/**"]', "repo-relative"),
+        ('["~/x/**"]', "repo-relative"),
+        ('["../other/**"]', "'..'"),
+        ('["a/../../b"]', "'..'"),
+        ('["./x/**"]', "'.' or empty"),
+        ('["a/./b"]', "'.' or empty"),
+        ('["x//y"]', "'.' or empty"),
+        ('["private/"]', "'.' or empty"),
+        ('["."]', "'.' or empty"),
+        ('["a,Bash"]', "commas"),
+        ('["a)"]', "parentheses"),
+        ('["a(b"]', "parentheses"),
+        ('["a b"]', "whitespace"),
+        ('["a\\tb"]', "whitespace"),
+        ('["a\\u0007b"]', "control"),
+    ],
+)
+def test_read_deny_rejects_invalid_entries(monkeypatch, capsys, tmp_path, value, needle):
+    rc, _, err = run_cmd(monkeypatch, capsys, ["tracks", _read_deny_cfg(tmp_path, value)])
+    assert rc == 1
+    assert "[tracks.a].read_deny" in err and needle in err
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "repo",
+    [
+        '"relative/repo"',
+        '"/tmp/my repo"',
+        '"/tmp/a,b"',
+        '"/tmp/a(b)"',
+        '"/tmp/./repo"',
+        '"/tmp/x/../repo"',
+        '"/tmp//repo"',
+        '"/tmp/repo*"',
+        '"/tmp/repo?"',
+        '"/tmp/[repo]"',
+        '"/tmp/{a}"',
+        '"/"',
+    ],
+)
+def test_read_deny_requires_rule_safe_target_repo(monkeypatch, capsys, tmp_path, repo):
+    cfg = _read_deny_cfg(tmp_path, '["private/**"]', repos=(repo,))
+    rc, _, err = run_cmd(monkeypatch, capsys, ["tracks", cfg])
+    assert rc == 1
+    assert "sets read_deny" in err and "target_repo" in err
+
+
+@pytest.mark.unit
+def test_read_deny_empty_does_not_constrain_target_repo(monkeypatch, capsys, tmp_path):
+    cfg = _read_deny_cfg(tmp_path, "[]", repos=('"/tmp/my repo"',))
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["read-deny", cfg])
+    assert rc == 0
+    assert out == "\n"
+
+
+@pytest.mark.unit
+def test_read_deny_rejected_on_ecosystem_line(monkeypatch, capsys, tmp_path):
+    rc, _, err = run_cmd(
+        monkeypatch, capsys, ["tracks", _eco_cfg(tmp_path, 'read_deny = ["x/**"]\n')]
+    )
+    assert rc == 1
+    assert "ecosystem" in err and "read_deny" in err
+
+
+@pytest.mark.unit
+def test_read_deny_renders_repo_times_glob_plus_git_dir(monkeypatch, capsys, tmp_path):
+    cfg = _read_deny_cfg(
+        tmp_path,
+        '["lectures/**", "logs/*.md"]',
+        repos=('"/tmp/example-repo/"', '"/tmp/second-repo"'),
+    )
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["read-deny", cfg])
+    assert rc == 0
+    assert out == (
+        "Read(//tmp/example-repo/lectures/**),Read(//tmp/example-repo/logs/*.md),"
+        "Read(//tmp/example-repo/.git/**),"
+        "Read(//tmp/second-repo/lectures/**),Read(//tmp/second-repo/logs/*.md),"
+        "Read(//tmp/second-repo/.git/**)\n"
+    )
+
+
+@pytest.mark.unit
+def test_read_deny_renders_every_line_and_dedupes_shared_repo(monkeypatch, capsys, tmp_path):
+    # line b は read_deny を持たない repo と、line a と同じ repo の 2 つを持つ。描画は全 line の和で、
+    # read_deny を持たない repo は出ず、同じ repo の glob と .git/** は 1 回だけ出る
+    extra = (
+        '[tracks.b]\nname = "B"\nread_deny = ["logs/**", "notes/**"]\n'
+        '[[tracks.b.repos]]\nkey = "b"\ntarget_repo = "/tmp/example-repo"\n'
+        '[tracks.c]\nname = "C"\n'
+        '[[tracks.c.repos]]\nkey = "c"\ntarget_repo = "/tmp/c-repo"\n'
+    )
+    cfg = _read_deny_cfg(tmp_path, '["private/**", "logs/**"]', extra=extra)
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["read-deny", cfg])
+    assert rc == 0
+    assert out == (
+        "Read(//tmp/example-repo/private/**),Read(//tmp/example-repo/logs/**),"
+        "Read(//tmp/example-repo/notes/**),Read(//tmp/example-repo/.git/**)\n"
+    )
+
+
+@pytest.mark.unit
+def test_read_deny_absent_renders_empty_line(monkeypatch, capsys):
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["read-deny", CONFIG])
+    assert rc == 0
+    assert out == "\n"
+
+
+@pytest.mark.unit
+def test_read_deny_ecosystem_config_renders_empty(monkeypatch, capsys):
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["read-deny", CONFIG_ECO])
+    assert rc == 0
+    assert out == "\n"
+
+
+@pytest.mark.unit
+def test_read_deny_usage(monkeypatch, capsys):
+    rc, _, err = run_cmd(monkeypatch, capsys, ["read-deny"])
+    assert rc == 64
+    assert "usage: read-deny <config_path>" in err
+
+
+@pytest.mark.unit
+def test_read_deny_invalid_config_fails(monkeypatch, capsys, tmp_path):
+    rc, out, err = run_cmd(monkeypatch, capsys, ["read-deny", _read_deny_cfg(tmp_path, '["../x"]')])
+    assert rc == 1
+    assert out == ""
+    assert "read_deny" in err
+
+
+@pytest.mark.unit
+def test_line_brief_lists_only_own_read_deny(monkeypatch, capsys, tmp_path):
+    extra = _LINE_B.replace('name = "B"\n', 'name = "B"\nread_deny = ["other/**"]\n')
+    cfg = _read_deny_cfg(tmp_path, '["lectures/**", "logs/**"]', extra=extra)
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["line-brief", cfg, "a"])
+    assert rc == 0
+    assert "- 読めない場所 (接地 repo 相対): lectures/**, logs/**（Read は拒否される）\n" in out
+    assert "other/**" not in out
+
+
+@pytest.mark.unit
+def test_line_brief_without_read_deny_is_byte_identical(monkeypatch, capsys, tmp_path):
+    rc, without, _ = run_cmd(
+        monkeypatch, capsys, ["line-brief", _read_deny_cfg(tmp_path, None), "a"]
+    )
+    assert rc == 0
+    rc, empty, _ = run_cmd(monkeypatch, capsys, ["line-brief", _read_deny_cfg(tmp_path, "[]"), "a"])
+    assert rc == 0
+    assert empty == without
+    assert "読めない場所" not in without
+
+
+# --- repo-activity --config: 塞いだ場所だけに触れた commit の件名を出さない ---
+
+_ACTIVITY_COMMITS = [
+    ("only private", ["private/deep/x.md"]),
+    ("only open", ["open.md"]),
+    ("private and open", ["private/y.md", "open.md"]),
+    ("logs md", ["logs/a.md"]),
+    ("logs txt", ["logs/a.txt"]),
+    ("nested logs md", ["sub/logs/a.md"]),
+]
+
+
+def _activity_cfg(tmp_path, repo, read_deny_toml):
+    cfg = tmp_path / "activity.toml"
+    body = '[tracks.a]\nname = "A"\n'
+    if read_deny_toml is not None:
+        body += f"read_deny = {read_deny_toml}\n"
+    cfg.write_text(body + f'[[tracks.a.repos]]\nkey = "a"\ntarget_repo = "{repo}"\n')
+    return str(cfg)
+
+
+@pytest.mark.unit
+def test_repo_activity_excludes_commits_touching_only_denied_paths(monkeypatch, capsys, tmp_path):
+    repo = _git_repo(tmp_path, _ACTIVITY_COMMITS)
+    cfg = _activity_cfg(tmp_path, repo, '["private/**", "logs/*.md"]')
+    rc, out, _ = run_cmd(monkeypatch, capsys, ["repo-activity", str(repo), "--config", cfg])
+    assert rc == 0
+    # ** は深い階層まで外し、logs/*.md は repo 直下の logs/ だけに効く (sub/logs/a.md は出る)
+    assert out.splitlines() == [
+        "- nested logs md",
+        "- logs txt",
+        "- private and open",
+        "- only open",
+    ]
+
+
+@pytest.mark.unit
+def test_repo_activity_read_deny_of_another_line_on_same_repo_applies(
+    monkeypatch, capsys, tmp_path
+):
+    repo = _git_repo(tmp_path, _ACTIVITY_COMMITS)
+    cfg = tmp_path / "two-lines.toml"
+    cfg.write_text(
+        f'[tracks.a]\nname = "A"\n[[tracks.a.repos]]\nkey = "a"\ntarget_repo = "{repo}"\n'
+        f'[tracks.b]\nname = "B"\nread_deny = ["private/**"]\n'
+        f'[[tracks.b.repos]]\nkey = "b"\ntarget_repo = "{repo}"\n'
+    )
+    rc, out, _ = run_cmd(
+        monkeypatch, capsys, ["repo-activity", str(repo), "--days", "14", "--config", str(cfg)]
+    )
+    assert rc == 0
+    assert "- only private" not in out.splitlines()
+    assert "- private and open" in out.splitlines()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("read_deny_toml", [None, "[]"])
+def test_repo_activity_without_read_deny_is_unchanged(
+    monkeypatch, capsys, tmp_path, read_deny_toml
+):
+    repo = _git_repo(tmp_path, _ACTIVITY_COMMITS)
+    rc, plain, _ = run_cmd(monkeypatch, capsys, ["repo-activity", str(repo)])
+    assert rc == 0
+    cfg = _activity_cfg(tmp_path, repo, read_deny_toml)
+    rc, with_cfg, _ = run_cmd(monkeypatch, capsys, ["repo-activity", str(repo), "--config", cfg])
+    assert rc == 0
+    assert with_cfg == plain
+    assert len(plain.splitlines()) == len(_ACTIVITY_COMMITS)
+
+
+@pytest.mark.unit
+def test_repo_activity_unreadable_config_prints_nothing(monkeypatch, capsys, tmp_path):
+    repo = _git_repo(tmp_path, _ACTIVITY_COMMITS)
+    cfg = _activity_cfg(tmp_path, repo, '["../x"]')
+    rc, out, err = run_cmd(monkeypatch, capsys, ["repo-activity", str(repo), "--config", cfg])
+    assert rc == 0
+    assert out == ""
+    assert "config unreadable" in err

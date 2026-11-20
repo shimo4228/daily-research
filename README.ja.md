@@ -92,7 +92,7 @@ launchctl load ~/Library/LaunchAgents/com.daily-research.plist
 
 - **4 つの内容状態** — どの実行も `article`（解説ノート。本文 3,000 字以内で、材料が薄ければ短く）、`brief`（短報。300〜600 字）、`quiet`、`hold` のいずれかで終わり、実行記録に記録されます。レポートのゲートはこの実行記録を読みます: 実行記録が無い・壊れているラインは失敗、`article` / `brief` はノートのファイルを要求、`quiet` / `hold` はファイル無しで成功（全ライン quiet の日も成功）。取得失敗が疑われる quiet / hold は metrics で別に数えます。
 - **ノートの形** — 既定のテンプレートでは**固定見出しを置かない**自由形式の散文で（内容に合わせた見出しは本文に 2 個まで）、前提知識ゼロの読者向けに書かれます。冒頭は外部の出来事から始め、すべての主張に日付を付け、出典の主張・推論・含意を分けて書きます。末尾に機械検査対象の固定 2 節: 「機会メモ」（日付付き締切を持つ機会のみ: 何を / どこで / 失効日 / 判定の出典 / 更新条件）と「ソース」。提案・承認要求は書きません。
-- **repo は read-only** — マッピングされた repo は編集しない決まりで、三層で守ります: 方針（プロトコルの文言）+ 実行（書き込み先は vault のレポートの置き場と、ラインの `pending.md`・`runs/` のみ。ecosystem ラインは監視リストと、表から外した行の置き場も書く）+ 権限の層（各呼び出しは `--permission-mode default` で走るので、設定の既定が auto mode でも `--allowedTools` のパスの外への編集は拒否される。`--disallowedTools` の拒否の層は Bash と、Claude Code の設定・資格情報のフォルダの読み取りを止める）。両方の呼び出しは `--safe-mode` で走り、あなた自身の CLAUDE.md・skill・plugin・hook は読み込まれません（[ADR-0019](docs/decision-history/0019-wide-line-safe-mode-static-state.md)）。
+- **repo は read-only** — マッピングされた repo は編集しない決まりで、三層で守ります: 方針（プロトコルの文言）+ 実行（書き込み先は vault のレポートの置き場と、ラインの `pending.md`・`runs/` のみ。ecosystem ラインは監視リストと、表から外した行の置き場も書く）+ 権限の層（各呼び出しは `--permission-mode default` で走るので、設定の既定が auto mode でも `--allowedTools` のパスの外への編集は拒否される。`--disallowedTools` の拒否の層は Bash と、Claude Code の設定・資格情報のフォルダの読み取りと、どれかのラインが `read_deny` に挙げた repo のパスとその repo の `.git` の読み取りを、どのラインの run でも止める）。両方の呼び出しは `--safe-mode` で走り、あなた自身の CLAUDE.md・skill・plugin・hook は読み込まれません（[ADR-0019](docs/decision-history/0019-wide-line-safe-mode-static-state.md)）。
 
 設計判断とその理由は [ADR](docs/decision-history/README.md) にあります。フラグ・書き込み先・拒否の規則の正確な値は `scripts/daily-research.sh` にあります。
 

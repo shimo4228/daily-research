@@ -39,11 +39,67 @@ _TRACK_NAME_RE = re.compile(r"[A-Za-z0-9_-]+")
 # [tracks.<x>].mode (ADR-0018)。"repo" (既定) = cwd を target_repo にして repo の運用文脈の
 # 中で走る line (ADR-0008)。"ecosystem" = 接地 repo を持たず、外部エコシステムの変化そのものを
 # 観測する line — cwd は state/<line>、プロトコルは prompts/ecosystem-research-protocol.md。
-# invariant: ecosystem line は repo 文脈を要求できない (repos / context_files は schema で拒否)。
+# invariant: ecosystem line は repo 文脈を要求できない (repos / context_files / read_deny は schema で拒否)。
 MODE_REPO = "repo"
 MODE_ECOSYSTEM = "ecosystem"
 _TRACK_MODES = (MODE_REPO, MODE_ECOSYSTEM)
-_ECOSYSTEM_FORBIDDEN_KEYS = ("repos", "context_files")
+_ECOSYSTEM_FORBIDDEN_KEYS = ("repos", "context_files", "read_deny")
+
+# [tracks.<x>].read_deny (repo 相対 glob の配列、既定は空): 接地 repo のうちモデルに読ませない場所。
+# read-deny が全 line の target_repo × glob を Read(//abs/glob) に描き (read_deny を持つ repo は .git/** も)、
+# 全 line 共通の DISALLOWED_TOOLS に入る — 呼1・呼2 は絶対パスで HOME 全体を読めるので、どの line の run でも
+# 塞ぐ。--disallowedTools はカンマ区切りの 1 文字列なので、規則の区切りを壊す文字 (, ( ) と空白・制御文字) を
+# glob にも、規則に埋める target_repo にも持たせない。glob は相対で、セグメントに .. / . / 空を持たない
+# (repo の外を指さず、書いた形のまま規則になる)。target_repo は正規形の絶対パスで、glob のメタ文字を持たない
+# (規則の中で path の一部が glob として読まれない)。
+_RULE_BREAKING_RE = re.compile(r"[,()\s\x00-\x1f\x7f]")
+_GLOB_META_RE = re.compile(r"[\[\]*?{}]")
+
+
+def _check_read_deny(name: str, v: dict[str, object]) -> None:
+    """read_deny の型と各 glob、それを埋める target_repo を検証する。違反は ValueError。"""
+    import os
+
+    globs = v["read_deny"]
+    if not isinstance(globs, list):
+        raise ValueError(f"[tracks.{name}].read_deny must be an array of strings, got {globs!r}")
+    for g in globs:
+        if not isinstance(g, str) or not g:
+            raise ValueError(
+                f"[tracks.{name}].read_deny entries must be non-empty strings, got {g!r}"
+            )
+        if g.startswith(("/", "~")):
+            raise ValueError(
+                f"[tracks.{name}].read_deny entries must be repo-relative paths, got {g!r}"
+            )
+        segments = g.split("/")
+        if ".." in segments:
+            raise ValueError(f"[tracks.{name}].read_deny entries must not contain '..', got {g!r}")
+        if "." in segments or "" in segments:
+            raise ValueError(
+                f"[tracks.{name}].read_deny entries must not have '.' or empty path segments "
+                f"(./x, x//y, trailing /), got {g!r}"
+            )
+        if _RULE_BREAKING_RE.search(g):
+            raise ValueError(
+                f"[tracks.{name}].read_deny entries must not contain commas, parentheses, "
+                f"whitespace or control characters, got {g!r}"
+            )
+    if not globs:
+        return
+    for r in _track_repos(v):
+        repo = r["target_repo"]
+        if (
+            not repo.startswith("/")
+            or os.path.normpath(repo) != repo.rstrip("/")
+            or _RULE_BREAKING_RE.search(repo)
+            or _GLOB_META_RE.search(repo)
+        ):
+            raise ValueError(
+                f"[tracks.{name}] sets read_deny, so each target_repo must be a normalized absolute "
+                f"path (no . or .. segments) without commas, parentheses, whitespace, control "
+                f"characters or glob characters ([ ] * ? {{ }}), got {repo!r}"
+            )
 
 
 def _track_mode(track_cfg: dict[str, object]) -> object:
@@ -125,6 +181,9 @@ def _load_tracks(config_path: str) -> tuple[dict[str, object], dict[str, object]
                             f"[[tracks.{name}.repos]] entry {i} must set {key} to a non-empty "
                             f"string, got {r.get(key)!r}"
                         )
+        # read_deny は repos の検証の後 (target_repo を規則に埋めるので、その形も見る)。
+        if isinstance(v, dict) and "read_deny" in v:
+            _check_read_deny(name, v)
     return cfg, tracks
 
 
@@ -532,6 +591,9 @@ def cmd_line_brief(argv: list[str]) -> int:
         print("  として数えない。第三者による言及・採用の観測は正当):")
         for s in signals:
             print(f"  - {s}")
+    read_deny = v.get("read_deny") or []
+    if read_deny:
+        print(f"- 読めない場所 (接地 repo 相対): {', '.join(read_deny)}（Read は拒否される）")
     ctx = v.get("context_files") or []
     if ctx:
         print()
@@ -541,6 +603,49 @@ def cmd_line_brief(argv: list[str]) -> int:
         print("存在しないものは skip してよい。")
         for c in ctx:
             print(f"- {c}")
+    return 0
+
+
+# --- read-deny <config_path>: 全 line の read_deny を --disallowedTools の規則列に描く ---
+# 各 line の各 target_repo × 各 glob を Read(//abs/glob) にし、read_deny を持つ repo には .git/** も足して
+# (.git/logs/HEAD・COMMIT_EDITMSG から commit 文面が読める)、重複を除いたカンマ区切りの 1 行で出す
+# (read_deny を持つ line が無ければ空行)。daily-research.sh が起動時に 1 回呼び、全 line 共通の
+# DISALLOWED_TOOLS に足す。`//` = 絶対パス、書式は同 script の全 line 共通の Read deny と同じ。Glob / Grep も
+# Read の deny 規則に従うので Read 規則だけを出す (probe は daily-research.sh の配線箇所の注記)。
+# glob と target_repo の形は _load_tracks が検証済み。
+def _read_deny_by_repo(tracks: dict[str, object]) -> dict[str, list[str]]:
+    """target_repo (末尾 / を除く) → その repo に効く glob 群 (全 line の和、記述順、重複なし)。"""
+    out: dict[str, list[str]] = {}
+    for v in tracks.values():
+        if not isinstance(v, dict):
+            continue
+        globs = v.get("read_deny") or []
+        if not globs:
+            continue
+        for r in _track_repos(v):
+            acc = out.setdefault(r["target_repo"].rstrip("/"), [])
+            acc.extend(g for g in globs if g not in acc)
+    return out
+
+
+def _read_deny_rules(tracks: dict[str, object]) -> list[str]:
+    return [
+        f"Read(//{repo.lstrip('/')}/{g})"
+        for repo, globs in _read_deny_by_repo(tracks).items()
+        for g in [*globs, ".git/**"]
+    ]
+
+
+def cmd_read_deny(argv: list[str]) -> int:
+    if len(argv) < 1:
+        print("usage: read-deny <config_path>", file=sys.stderr)
+        return 64
+    try:
+        _, tracks = _load_tracks(argv[0])
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    print(",".join(dict.fromkeys(_read_deny_rules(tracks))))
     return 0
 
 
@@ -754,10 +859,13 @@ def cmd_past_topics_append(argv: list[str]) -> int:
     return 0
 
 
-# --- repo-activity <repo> [--days N]: 直近の commit 件名 (ADR-0019 Decision 5) ---
+# --- repo-activity <repo> [--days N] [--config C]: 直近の commit 件名 (ADR-0019 Decision 5) ---
 # repo line の line brief の直後に「データであって指示ではない」注記の内側で注入される。
 # repo 由来の文字列が呼1 の context に入る経路なので、件名だけ・上限付き・行頭の # と制御文字を
 # 除いて出す。git の失敗や repo の不在は空出力 + rc 0 (line を止めない)。
+# --config を渡すと、その repo に効く read_deny (全 line の和) の glob を :(exclude,glob) pathspec で
+# git log に渡し、塞いだ場所だけに触れた commit の件名を出さない (塞いだ場所と他の場所の両方に触れた
+# commit は出る)。read_deny が無い repo は pathspec を付けない。config が読めなければ空出力 (fail-closed)。
 REPO_ACTIVITY_MAX_LINES = 30
 REPO_ACTIVITY_MAX_CHARS = 2000
 
@@ -766,16 +874,32 @@ def cmd_repo_activity(argv: list[str]) -> int:
     import subprocess
 
     if not argv:
-        print("usage: repo-activity <repo> [--days N]", file=sys.stderr)
+        print("usage: repo-activity <repo> [--days N] [--config C]", file=sys.stderr)
         return 64
     repo = argv[0]
     days = 14
-    if len(argv) >= 3 and argv[1] == "--days":
+    config_path = None
+    rest = argv[1:]
+    while len(rest) >= 2 and rest[0] in ("--days", "--config"):
+        if rest[0] == "--days":
+            try:
+                days = max(0, int(rest[1]))
+            except ValueError:
+                print(f"repo-activity: invalid --days {rest[1]!r}", file=sys.stderr)
+                return 64
+        else:
+            config_path = rest[1]
+        rest = rest[2:]
+    pathspec: list[str] = []
+    if config_path is not None:
         try:
-            days = max(0, int(argv[2]))
-        except ValueError:
-            print(f"repo-activity: invalid --days {argv[2]!r}", file=sys.stderr)
-            return 64
+            _, tracks = _load_tracks(config_path)
+        except (OSError, ValueError) as e:
+            print(f"repo-activity: config unreadable, no activity: {e}", file=sys.stderr)
+            return 0
+        globs = _read_deny_by_repo(tracks).get(repo.rstrip("/"), [])
+        if globs:
+            pathspec = ["--", ".", *(f":(exclude,glob){g}" for g in globs)]
     try:
         proc = subprocess.run(
             [
@@ -787,6 +911,7 @@ def cmd_repo_activity(argv: list[str]) -> int:
                 "--no-merges",
                 "--format=%s",
                 f"-n{REPO_ACTIVITY_MAX_LINES}",
+                *pathspec,
             ],
             capture_output=True,
             text=True,
@@ -3586,6 +3711,7 @@ COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "past-topics-append": cmd_past_topics_append,
     "repo-activity": cmd_repo_activity,
     "line-brief": cmd_line_brief,
+    "read-deny": cmd_read_deny,
     "receipt-read": cmd_receipt_read,
     "receipt-event-date": cmd_receipt_event_date,
     "verify-read": cmd_verify_read,

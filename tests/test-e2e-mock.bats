@@ -814,6 +814,127 @@ PYEOF
   grep -qE '(^|,)Bash(,|$)' "$MOCK_HOME/.disallowed_clarity"
 }
 
+# === Test: Read deny ([tracks.<x>].read_deny) — 全 line の分がどの line の呼1・呼2 にも入る ===
+# 指定 line の [tracks.<x>] 節の見出しの直後に read_deny を差し込む
+add_read_deny() {
+  python3 - "$MOCK_PROJECT/config.toml" "$1" << 'PY'
+import sys
+p, track = sys.argv[1:3]
+anchor = f"[tracks.{track}]\n"
+s = open(p).read().replace(anchor, anchor + 'read_deny = ["private/**", "logs/*.md"]\n', 1)
+open(p, "w").write(s)
+PY
+}
+
+# 呼1・呼2 の --disallowedTools に repo の read_deny と .git/** が入り、空要素を作らない
+assert_read_deny_in_both_calls() {
+  local repo="$1" f
+  for f in "$MOCK_HOME/.disallowed_$PICKED" "$MOCK_HOME/.disallowed_clarity"; do
+    grep -qF "Read(//${repo#/}/private/**)" "$f"
+    grep -qF "Read(//${repo#/}/logs/*.md)" "$f"
+    grep -qF "Read(//${repo#/}/.git/**)" "$f"
+    refute_grep -qE ',,|,$' "$f"
+  done
+}
+
+@test "E2E security: read_deny of the run line is rendered into call 1 and call 2 --disallowedTools" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  add_read_deny "$PICKED"
+
+  run run_script
+  [ "$status" -eq 0 ]
+
+  assert_read_deny_in_both_calls "$MOCK_HOME/mock-repos/authorship-strategy"
+  grep -qF -- "- 読めない場所 (接地 repo 相対): private/**, logs/*.md（Read は拒否される）" "$MOCK_HOME/.prompt_$PICKED"
+}
+
+@test "E2E security: another line's read_deny is denied in the run line's calls too" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  add_read_deny "$OTHER"
+
+  run run_script
+  [ "$status" -eq 0 ]
+
+  # 呼1・呼2 は絶対パスで HOME 全体を読めるので、当日走らない line の repo の場所も塞ぐ
+  assert_read_deny_in_both_calls "$MOCK_HOME/mock-repos/agent-knowledge-cycle"
+  refute_grep -qF "mock-repos/authorship-strategy/.git" "$MOCK_HOME/.disallowed_$PICKED"
+  # line brief の「読めない場所」は自分の line の分だけ
+  refute_grep -qF "読めない場所" "$MOCK_HOME/.prompt_$PICKED"
+}
+
+@test "E2E security: without any read_deny the calls get no repo Read deny" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+
+  run run_script
+  [ "$status" -eq 0 ]
+
+  for f in "$MOCK_HOME/.disallowed_$PICKED" "$MOCK_HOME/.disallowed_clarity"; do
+    [ -s "$f" ]
+    refute_grep -qF "mock-repos/" "$f"
+    refute_grep -qE ',,|,$' "$f"
+  done
+}
+
+@test "E2E security: an invalid read_deny stops before any line run (fail-fast)" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  python3 - "$MOCK_PROJECT/config.toml" << 'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read().replace('focus = "AKC line focus"\n', 'focus = "AKC line focus"\nread_deny = ["a,Bash"]\n', 1)
+open(p, "w").write(s)
+PY
+
+  run run_script
+  [ "$status" -ne 0 ]
+  get_log | grep -q "config.toml schema check failed"
+  get_log | grep -qF "[tracks.akc].read_deny entries must not contain commas"
+  [ ! -f "$MOCK_HOME/.prompt_authorship" ]
+}
+
+@test "E2E security: if read-deny cannot be rendered, no line runs" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  add_read_deny "$OTHER"
+  # 起動時の schema check は通り、描画だけが落ちる状態を作る (mock の lib の写しの read-deny を rc 1 にする)
+  python3 - "$MOCK_PROJECT/scripts/lib/dr_pipeline.py" << 'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = '    "read-deny": cmd_read_deny,\n'
+assert old in s
+s = s.replace(old, '    "read-deny": lambda argv: 1,\n', 1)
+open(p, "w").write(s)
+PY
+
+  run run_script
+  [ "$status" -ne 0 ]
+  get_log | grep -q "Config schema check passed"
+  get_log | grep -qF "ERROR: read_deny could not be rendered"
+  [ ! -f "$MOCK_HOME/.prompt_$PICKED" ]
+  [ ! -f "$MOCK_HOME/.prompt_$OTHER" ]
+  notified "config.toml の read_deny を deny に描けず"
+}
+
+@test "E2E security: repo activity leaves out commits that touch only read_deny paths" {
+  echo "normal" > "$MOCK_HOME/.mock_scenario"
+  add_read_deny "$PICKED"
+  local repo="$MOCK_HOME/mock-repos/authorship-strategy"
+  isolate_git_env
+  git -C "$repo" init -q
+  mkdir -p "$repo/private"
+  echo x > "$repo/private/x.md"
+  git -C "$repo" add private/x.md
+  git -C "$repo" -c user.name=t -c user.email=t@example.com commit -q -m "subject of a denied change"
+  echo y > "$repo/open.md"
+  git -C "$repo" add open.md
+  git -C "$repo" -c user.name=t -c user.email=t@example.com commit -q -m "subject of an open change"
+
+  run run_script
+  [ "$status" -eq 0 ]
+
+  grep -qx -- "- subject of an open change" "$MOCK_HOME/.prompt_$PICKED"
+  refute_grep -qF "subject of a denied change" "$MOCK_HOME/.prompt_$PICKED"
+}
+
 # === Test: ctl-015 は run スコープ — 同日の先行ノートでは gate が通らない ===
 @test "E2E gate: a pre-existing same-day report does not satisfy the gate for a run that wrote nothing" {
   echo "noreport" > "$MOCK_HOME/.mock_scenario"

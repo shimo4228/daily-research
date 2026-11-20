@@ -101,6 +101,18 @@ audit_confirm_max_usd = 0.25  # audit stage 2, per candidate
 # template: optional project-relative path to a per-line report template
 # (section structure). Defaults to templates/report-template.md when omitted;
 # an unreadable path falls back to the default at runtime (ADR-0015).
+# read_deny: optional repo-relative globs the model may not Read (default: none).
+# Each target_repo × glob becomes a Read(//abs/glob) deny, and the repo's .git/** is
+# denied too (commit messages are readable there). The denies of every line go into
+# every line's run (calls can read any absolute path, so another line's run is
+# covered as well); Glob / Grep follow Read denies. The repo's recent commit subjects
+# given to call 1 leave out commits that touch only these paths. The list is a deny
+# list, so also list helper files that hold a copy of private content (for example
+# the inputs of a generator script). Use dir/** for a whole directory. Entries must be
+# relative, with no "..", "." or empty segments (./x, x//y, a trailing /) and no
+# commas, parentheses, whitespace or control characters; with read_deny set,
+# target_repo must be a normalized absolute path without those characters or glob
+# characters ([ ] * ? { }). The startup schema check rejects anything else.
 
 [tracks.example_line]
 name = "Example Line 前進"
@@ -109,6 +121,7 @@ name = "Example Line 前進"
 focus = "example-repo が扱う主題 (例: agent の知識循環) の外部動向"
 aliases = []
 context_files = [".notes/TASKS.md", "docs/manifesto.md"]
+# read_deny = ["private/**", "logs/*.md"]  # repo paths the model may not read
 sources = [
   "arXiv / Semantic Scholar (your domain keywords)",
   "関連 venue / registry / standard の新規開設・仕様変更",
@@ -129,8 +142,8 @@ target_doi = "10.5281/zenodo.XXXXXXX"  # optional; informational — not read by
 # --disallowedTools. Ecosystem lines add denies for writing .claude/ / CLAUDE.md /
 # .mcp.json into state/<line>/ (the cwd is model-writable). The receipt gate, the four content
 # states, and the verification call are identical to repo lines; the write targets are the repo
-# line's plus the two watchlist files below. `repos` and `context_files` are rejected by the
-# schema for this mode.
+# line's plus the two watchlist files below. `repos`, `context_files` and `read_deny` are
+# rejected by the schema for this mode.
 # The watchlist lives in state/<line>/watched-sources.md (format and row cap: see the
 # protocol); rows taken off the table move to state/<line>/watched-archive.md;
 # duplicates are judged by "what changed since the last report", not by topic name.

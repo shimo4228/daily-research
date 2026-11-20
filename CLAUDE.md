@@ -58,6 +58,10 @@ DR_DATE=YYYY-MM-DD ./scripts/daily-research.sh      # 輪番とレポート名�
   資格情報の置き場は `DISALLOWED_TOOLS` の Read deny で塞ぐ。safe mode でも permissions は効く
 - **repo は read-only。** 呼1 の書き込みは vault のレポート dir と line の state の一部だけ。note は読み物で、
   repo への取り込みは運用者が repo セッションで行う
+- 接地 repo のうちモデルに読ませない場所は `[tracks.<x>].read_deny`（repo 相対 glob）に書く。`dr_pipeline.py read-deny`
+  が全 line の分を `Read(//abs/glob)` に描き（その repo の `.git/**` も足す）、起動時に全 line 共通の `DISALLOWED_TOOLS`
+  に入る — 呼1・呼2 は絶対パスで HOME 全体を読めるので、どの line の run でも塞ぐ。描けなければ run 全体を止める。
+  Glob / Grep も Read の deny に従う。commit 件名の注入（`repo-activity --config`）も塞いだ場所だけに触れた commit を外す
 - 呼3（照合監査、ADR-0020）のモデルは書き込みの道具も Read も WebSearch も持たない。候補の URL はノートに書かれた
   URL に限り、prompt に埋めるノート由来の文字列は呼び出しごとの乱数の区切りで挟む。ノートの置き換えは両段が確定し、
   第 2 段が置き換え文を訂正と認めた候補だけを `dr_pipeline.py audit-apply` が規則で行う。script だけが書く state の
